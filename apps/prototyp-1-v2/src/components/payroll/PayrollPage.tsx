@@ -1,0 +1,1073 @@
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { supabase } from '@asklepios/backend';
+import { useAuth } from '@/contexts/AuthContext';
+import {
+  calculatePayroll, FAK_RATES, fmt, fmtPct, type PayrollResult
+} from '@asklepios/backend';
+import { generatePayslipPdf } from '@asklepios/backend';
+import { generateTimesheetPdf } from '@asklepios/backend';
+import {
+  Calculator, FileText, ChevronLeft, ChevronRight, Users,
+  ShieldCheck, Clock, Eye, Download, Pencil, Save, X,
+  ChevronDown, TrendingUp, Banknote, ArrowRight, ArrowLeft
+} from 'lucide-react';
+import { toast } from 'sonner';
+import type { Assistant } from '@asklepios/backend';
+
+// ─── Types ───
+interface MonthlyHours {
+  totalHours: number;
+  nightHours: number;
+  entryCount: number;
+  entries: {
+    id: string;
+    date: string;
+    start_time: string;
+    end_time: string;
+    is_night: boolean;
+    category?: string;
+    hours: number;
+  }[];
+}
+
+// ─── Helpers ───
+const MONTH_NAMES = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+
+function parseHours(start: string, end: string): number {
+  const parts1 = start.split(':').map(Number);
+  const parts2 = end.split(':').map(Number);
+  const sh = parts1[0] ?? 0, sm = parts1[1] ?? 0;
+  const eh = parts2[0] ?? 0, em = parts2[1] ?? 0;
+  return Math.max(0, (eh * 60 + em - sh * 60 - sm) / 60);
+}
+
+function monthKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function monthLabel(key: string): string {
+  const parts = key.split('-');
+  const y = parts[0] ?? '';
+  const m = parts[1] ?? '01';
+  return `${MONTH_NAMES[parseInt(m, 10) - 1]} ${y}`;
+}
+
+// ─── Flow Steps (2-step linear flow) ───
+type FlowStep = 'stunden' | 'abrechnung';
+
+export function PayrollPage() {
+  const { employerAccess, employer } = useAuth();
+  const [assistants, setAssistants] = useState<Assistant[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Current month navigation
+  const [currentMonth, setCurrentMonth] = useState(() => monthKey(new Date()));
+
+  // Expanded card & flow step
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [flowStep, setFlowStep] = useState<FlowStep>('stunden');
+  const [confirmedMap, setConfirmedMap] = useState<Record<string, boolean>>({});
+
+  // Time entries for the month
+  const [timeEntries, setTimeEntries] = useState<Record<string, MonthlyHours>>({});
+
+  // Editing state
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+  const [editStart, setEditStart] = useState('');
+  const [editEnd, setEditEnd] = useState('');
+
+  // Ref for scroll-into-view
+  const expandedRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (employerAccess?.employer_id) {
+      loadData();
+    }
+  }, [employerAccess, currentMonth]);
+
+  // Scroll expanded card into view
+  useEffect(() => {
+    if (expandedId && expandedRef.current) {
+      setTimeout(() => {
+        expandedRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    }
+  }, [expandedId]);
+
+  const loadData = async () => {
+    setLoading(true);
+    const eid = employerAccess!.employer_id;
+
+    const { data: aData } = await supabase
+      .from('assistant')
+      .select('*')
+      .eq('employer_id', eid)
+      .eq('is_active', true);
+
+    if (aData) setAssistants(aData);
+
+    const parts = currentMonth.split('-').map(Number);
+    const year = parts[0] ?? 2026;
+    const month = parts[1] ?? 1;
+    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+    const endDate = month === 12
+      ? `${year + 1}-01-01`
+      : `${year}-${String(month + 1).padStart(2, '0')}-01`;
+
+    const { data: entries } = await supabase
+      .from('time_entry')
+      .select('*')
+      .gte('date', startDate)
+      .lt('date', endDate)
+      .in('assistant_id', (aData || []).map(a => a.id));
+
+    const grouped: Record<string, MonthlyHours> = {};
+    for (const a of (aData || [])) {
+      grouped[a.id] = { totalHours: 0, nightHours: 0, entryCount: 0, entries: [] };
+    }
+
+    for (const e of (entries || [])) {
+      if (!grouped[e.assistant_id]) continue;
+      const hours = parseHours(e.start_time || '00:00', e.end_time || '00:00');
+      const g = grouped[e.assistant_id];
+      if (!g) continue;
+      g.totalHours += hours;
+      if (e.is_night) g.nightHours += hours;
+      g.entryCount++;
+      g.entries.push({
+        id: e.id, date: e.date, start_time: e.start_time,
+        end_time: e.end_time, is_night: e.is_night,
+        category: e.category, hours,
+      });
+    }
+
+    setTimeEntries(grouped);
+    setLoading(false);
+  };
+
+  const shiftMonth = (dir: number) => {
+    const parts = currentMonth.split('-').map(Number);
+    const y = parts[0] ?? 2026, m = parts[1] ?? 1;
+    const d = new Date(y, m - 1 + dir, 1);
+    setCurrentMonth(monthKey(d));
+    setExpandedId(null);
+    setFlowStep('stunden');
+  };
+
+  const toggleExpand = (id: string) => {
+    if (expandedId === id) {
+      setExpandedId(null);
+      setFlowStep('stunden');
+    } else {
+      setExpandedId(id);
+      setFlowStep('stunden');
+    }
+  };
+
+  // Generate payslip for an assistant
+  const generatePayslip = (assistant: Assistant, hours: MonthlyHours): PayrollResult | null => {
+    const cd = assistant.contract_data as any;
+    const stundenlohn = assistant.hourly_rate || (cd?.hourly_rate ? parseFloat(cd.hourly_rate) : 0);
+    if (!stundenlohn || hours.totalHours === 0) return null;
+
+    const kanton = cd?.canton || employer?.canton || 'ZH';
+    const vacWeeks = assistant.vacation_weeks || 4;
+    const ferienzuschlag = vacWeeks === 5 ? 0.1064 : vacWeeks === 6 ? 0.1304 : 0.0833;
+
+    return calculatePayroll({
+      stundenlohn,
+      anzahlStunden: hours.totalHours,
+      kanton,
+      abrechnungsverfahren: cd?.billing_method === 'standard' ? 'ordentlich' : 'vereinfacht',
+      ferienzuschlag,
+      nbuAN: cd?.nbu_employee ? parseFloat(cd.nbu_employee) / 100 : undefined,
+      agName: employer?.name,
+      anName: assistant.name,
+    });
+  };
+
+  const handleConfirm = async (assistantId: string, name: string) => {
+    const parts = currentMonth.split('-').map(Number);
+    const year = parts[0] ?? 2026;
+    const month = parts[1] ?? 1;
+
+    await supabase.from('payroll_confirmation').upsert({
+      assistant_id: assistantId,
+      month: `${year}-${String(month).padStart(2, '0')}-01`,
+      confirmed: true,
+      confirmed_at: new Date().toISOString(),
+    }, { onConflict: 'assistant_id,month' });
+
+    setConfirmedMap(prev => ({ ...prev, [`${assistantId}-${currentMonth}`]: true }));
+    toast.success(`Lohnabrechnung für ${name} bestätigt!`);
+  };
+
+  // Edit entry
+  const startEditing = (entry: { id: string; start_time: string; end_time: string }) => {
+    setEditingEntryId(entry.id);
+    setEditStart(entry.start_time);
+    setEditEnd(entry.end_time);
+  };
+
+  const cancelEditing = () => {
+    setEditingEntryId(null);
+    setEditStart('');
+    setEditEnd('');
+  };
+
+  const saveEdit = async (entryId: string) => {
+    const { error } = await supabase
+      .from('time_entry')
+      .update({ start_time: editStart, end_time: editEnd })
+      .eq('id', entryId);
+
+    if (error) {
+      toast.error('Fehler: ' + error.message);
+    } else {
+      toast.success('Eintrag aktualisiert');
+      cancelEditing();
+      loadData();
+    }
+  };
+
+  // Helper: get AG/AN address data
+  const getEmployerAddress = () => {
+    const cd = employer?.contact_data as any;
+    return {
+      name: employer?.name || '–',
+      street: cd?.street || '',
+      plzCity: cd?.plz && cd?.city ? `${cd.plz} ${cd.city}` : (cd?.city || ''),
+    };
+  };
+
+  const getEmployeeAddress = (assistant: Assistant) => {
+    const cd = assistant.contract_data as any;
+    return {
+      name: assistant.name || '–',
+      street: cd?.street || '',
+      plzCity: cd?.plz && cd?.city ? `${cd.plz} ${cd.city}` : (cd?.city || ''),
+    };
+  };
+
+  // PDF handlers
+  const downloadPayslipPdf = (assistant: Assistant, result: PayrollResult, hours: MonthlyHours) => {
+    const cd = assistant.contract_data as any;
+    const kanton = cd?.canton || employer?.canton || 'ZH';
+    const kantonName = FAK_RATES[kanton]?.name || kanton;
+    const stundenlohn = assistant.hourly_rate || 0;
+    const verfahren = cd?.billing_method === 'standard' ? 'Ordentlich' : 'Vereinfacht';
+
+    const doc = generatePayslipPdf({
+      month: monthLabel(currentMonth),
+      employer: getEmployerAddress(),
+      employee: getEmployeeAddress(assistant),
+      grundlagen: { kanton: `${kantonName} (${kanton})`, verfahren, stundenlohn, stunden: hours.totalHours },
+      result,
+    });
+
+    doc.save(`Lohnabrechnung_${assistant.name.replace(/\s/g, '_')}_${currentMonth}.pdf`);
+    toast.success('Lohnabrechnung PDF heruntergeladen');
+  };
+
+  const downloadTimesheetPdf = (assistant: Assistant, hours: MonthlyHours) => {
+    const doc = generateTimesheetPdf({
+      month: monthLabel(currentMonth),
+      employer: getEmployerAddress(),
+      employee: getEmployeeAddress(assistant),
+      entries: hours.entries,
+      totalHours: hours.totalHours,
+      nightHours: hours.nightHours,
+    });
+
+    doc.save(`Stundenzettel_${assistant.name.replace(/\s/g, '_')}_${currentMonth}.pdf`);
+    toast.success('Stundenzettel PDF heruntergeladen');
+  };
+
+  // Stats
+  const totalHoursAll = Object.values(timeEntries).reduce((s, h) => s + h.totalHours, 0);
+  const confirmedCount = assistants.filter(a => confirmedMap[`${a.id}-${currentMonth}`]).length;
+
+  const payrollResults = useMemo(() => {
+    const results: Record<string, PayrollResult | null> = {};
+    for (const a of assistants) {
+      const hours = timeEntries[a.id];
+      if (hours) {
+        results[a.id] = generatePayslip(a, hours);
+      } else {
+        results[a.id] = null;
+      }
+    }
+    return results;
+  }, [assistants, timeEntries, currentMonth, employer]);
+
+  const totalNettoAll = assistants.reduce((s, a) => {
+    return s + (payrollResults[a.id]?.nettolohn.perYear || 0);
+  }, 0);
+
+  return (
+    <div style={{ maxWidth: 900, margin: '0 auto' }}>
+      {/* ── HERO HEADER ── */}
+      <div style={{
+        background: 'linear-gradient(135deg, #1e293b 0%, #334155 50%, #475569 100%)',
+        borderRadius: 20,
+        padding: '32px 36px 28px',
+        marginBottom: 28,
+        position: 'relative',
+        overflow: 'hidden',
+      }}>
+        {/* Decorative circles */}
+        <div style={{
+          position: 'absolute', top: -40, right: -40,
+          width: 160, height: 160, borderRadius: '50%',
+          background: 'rgba(255,255,255,0.04)',
+        }} />
+        <div style={{
+          position: 'absolute', bottom: -20, right: 80,
+          width: 100, height: 100, borderRadius: '50%',
+          background: 'rgba(255,255,255,0.03)',
+        }} />
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'relative', zIndex: 1 }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: 10,
+                background: 'linear-gradient(135deg, #3b82f6, #6366f1)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <Calculator style={{ width: 20, height: 20, color: '#fff' }} />
+              </div>
+              <h1 style={{ fontSize: 22, fontWeight: 800, color: '#fff', margin: 0, letterSpacing: '-0.02em' }}>
+                Lohnabrechnung
+              </h1>
+            </div>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.55)', margin: 0 }}>
+              Automatisch berechnet aus Vertragsdaten und erfassten Stunden
+            </p>
+          </div>
+
+          {/* Month selector */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            background: 'rgba(255,255,255,0.08)',
+            borderRadius: 12, padding: '6px 6px',
+            backdropFilter: 'blur(10px)',
+          }}>
+            <button
+              onClick={() => shiftMonth(-1)}
+              style={{
+                width: 34, height: 34, borderRadius: 8, border: 'none',
+                background: 'rgba(255,255,255,0.08)', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: 'rgba(255,255,255,0.7)', transition: 'all 0.2s',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.15)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.08)')}
+            >
+              <ChevronLeft style={{ width: 18, height: 18 }} />
+            </button>
+            <span style={{
+              fontSize: 14, fontWeight: 700, color: '#fff',
+              minWidth: 140, textAlign: 'center',
+              letterSpacing: '-0.01em',
+            }}>
+              {monthLabel(currentMonth)}
+            </span>
+            <button
+              onClick={() => shiftMonth(1)}
+              style={{
+                width: 34, height: 34, borderRadius: 8, border: 'none',
+                background: 'rgba(255,255,255,0.08)', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: 'rgba(255,255,255,0.7)', transition: 'all 0.2s',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.15)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.08)')}
+            >
+              <ChevronRight style={{ width: 18, height: 18 }} />
+            </button>
+          </div>
+        </div>
+
+        {/* Stats row */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginTop: 24, position: 'relative', zIndex: 1 }}>
+          <StatCard icon={<Users style={{ width: 16, height: 16 }} />} label="Personen" value={String(assistants.length)} />
+          <StatCard icon={<Clock style={{ width: 16, height: 16 }} />} label="Stunden" value={fmt(totalHoursAll)} />
+          <StatCard icon={<ShieldCheck style={{ width: 16, height: 16 }} />} label="Bestätigt" value={`${confirmedCount}/${assistants.length}`} />
+        </div>
+      </div>
+
+      {/* ── ASSISTANT CARDS (Flow) ── */}
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '60px 0', color: '#94a3b8' }}>
+          <div style={{
+            width: 32, height: 32, border: '3px solid #e2e8f0', borderTopColor: '#3b82f6',
+            borderRadius: '50%', margin: '0 auto 12px',
+            animation: 'spin 0.8s linear infinite',
+          }} />
+          Lade Daten...
+        </div>
+      ) : assistants.length === 0 ? (
+        <div style={{
+          background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0',
+          padding: '48px 32px', textAlign: 'center',
+        }}>
+          <Users style={{ width: 40, height: 40, color: '#cbd5e1', margin: '0 auto 12px', display: 'block' }} />
+          <p style={{ color: '#94a3b8', fontSize: 15 }}>Noch keine Assistenzpersonen erfasst.</p>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {assistants.map(a => {
+            const hours = timeEntries[a.id] || { totalHours: 0, nightHours: 0, entryCount: 0, entries: [] };
+            const result = payrollResults[a.id];
+            const confirmed = confirmedMap[`${a.id}-${currentMonth}`] || false;
+            const isExpanded = expandedId === a.id;
+
+            return (
+              <div
+                key={a.id}
+                ref={isExpanded ? expandedRef : undefined}
+                style={{
+                  background: '#fff',
+                  borderRadius: 16,
+                  border: isExpanded ? '2px solid #3b82f6' : '1px solid #e2e8f0',
+                  overflow: 'hidden',
+                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  boxShadow: isExpanded
+                    ? '0 8px 30px rgba(59, 130, 246, 0.12), 0 2px 8px rgba(0,0,0,0.04)'
+                    : '0 1px 3px rgba(0,0,0,0.04)',
+                }}
+              >
+                {/* ── Card header (always visible) ── */}
+                <button
+                  onClick={() => toggleExpand(a.id)}
+                  style={{
+                    width: '100%', border: 'none', background: 'transparent',
+                    cursor: 'pointer', padding: '18px 22px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    transition: 'background 0.15s',
+                  }}
+                  onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.background = '#f8fafc'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                    <div style={{
+                      width: 44, height: 44, borderRadius: 12,
+                      background: confirmed
+                        ? 'linear-gradient(135deg, #d1fae5, #a7f3d0)'
+                        : 'linear-gradient(135deg, #eff6ff, #dbeafe)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      flexShrink: 0,
+                    }}>
+                      {confirmed
+                        ? <ShieldCheck style={{ width: 22, height: 22, color: '#059669' }} />
+                        : <span style={{ fontSize: 18, fontWeight: 700, color: '#3b82f6' }}>{a.name.charAt(0)}</span>
+                      }
+                    </div>
+                    <div style={{ textAlign: 'left' }}>
+                      <p style={{ fontSize: 15, fontWeight: 600, color: '#0f172a', margin: 0 }}>{a.name}</p>
+                      <p style={{ fontSize: 12, color: '#94a3b8', margin: '2px 0 0' }}>
+                        {hours.entryCount} Einträge · {fmt(hours.totalHours)} Std
+                        {hours.nightHours > 0 && ` · ${fmt(hours.nightHours)} Nacht`}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                    {result ? (
+                      <div style={{ textAlign: 'right' }}>
+                        <p style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', margin: 0, fontVariantNumeric: 'tabular-nums' }}>
+                          CHF {fmt(result.nettolohn.perYear)}
+                        </p>
+                        <p style={{ fontSize: 11, color: '#94a3b8', margin: '1px 0 0' }}>
+                          Netto · AG: CHF {fmt(result.totalaufwandAG.perYear)}
+                        </p>
+                      </div>
+                    ) : (
+                      <p style={{ fontSize: 12, color: '#cbd5e1', fontStyle: 'italic' }}>Keine Stunden</p>
+                    )}
+                    <div style={{
+                      width: 30, height: 30, borderRadius: 8,
+                      background: isExpanded ? '#3b82f6' : '#f1f5f9',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      transition: 'all 0.3s',
+                    }}>
+                      <ChevronDown style={{
+                        width: 16, height: 16,
+                        color: isExpanded ? '#fff' : '#94a3b8',
+                        transition: 'transform 0.3s',
+                        transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                      }} />
+                    </div>
+                  </div>
+                </button>
+
+                {/* ── Expanded content ── */}
+                {isExpanded && (
+                  <div style={{
+                    borderTop: '1px solid #e2e8f0',
+                    animation: 'slideDown 0.3s ease-out',
+                  }}>
+                    {/* Step indicator */}
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 0, padding: '12px 22px',
+                      background: '#f8fafc', borderBottom: '1px solid #f1f5f9',
+                    }}>
+                      <button
+                        onClick={() => setFlowStep('stunden')}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 6,
+                          padding: '7px 14px', borderRadius: 8 ,
+                          border: 'none', cursor: 'pointer',
+                          fontSize: 12, fontWeight: flowStep === 'stunden' ? 600 : 500,
+                          background: flowStep === 'stunden' ? '#fff' : 'transparent',
+                          color: flowStep === 'stunden' ? '#1e293b' : '#94a3b8',
+                          boxShadow: flowStep === 'stunden' ? '0 1px 4px rgba(0,0,0,0.06)' : 'none',
+                          transition: 'all 0.2s',
+                        }}
+                      >
+                        <span style={{
+                          width: 18, height: 18, borderRadius: '50%', fontSize: 10, fontWeight: 700,
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          background: flowStep === 'stunden' ? '#1e293b' : '#cbd5e1',
+                          color: '#fff',
+                        }}>1</span>
+                        Stunden prüfen ({hours.entryCount})
+                      </button>
+                      <ArrowRight style={{ width: 14, height: 14, color: '#cbd5e1', margin: '0 4px', flexShrink: 0 }} />
+                      <button
+                        onClick={() => setFlowStep('abrechnung')}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 6,
+                          padding: '7px 14px', borderRadius: 8,
+                          border: 'none', cursor: 'pointer',
+                          fontSize: 12, fontWeight: flowStep === 'abrechnung' ? 600 : 500,
+                          background: flowStep === 'abrechnung' ? '#fff' : 'transparent',
+                          color: flowStep === 'abrechnung' ? '#1e293b' : '#94a3b8',
+                          boxShadow: flowStep === 'abrechnung' ? '0 1px 4px rgba(0,0,0,0.06)' : 'none',
+                          transition: 'all 0.2s',
+                        }}
+                      >
+                        <span style={{
+                          width: 18, height: 18, borderRadius: '50%', fontSize: 10, fontWeight: 700,
+                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                          background: flowStep === 'abrechnung' ? '#1e293b' : '#cbd5e1',
+                          color: '#fff',
+                        }}>2</span>
+                        Lohnabrechnung
+                      </button>
+                    </div>
+
+                    <div style={{ padding: '20px 22px 22px' }}>
+
+                      {/* ── STEP 1: Stunden prüfen ── */}
+                      {flowStep === 'stunden' && (
+                        <div>
+                          {/* Quick summary row */}
+                          {result && (
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 16 }}>
+                              <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', border: '1px solid #e2e8f0' }}>
+                                <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b', margin: '0 0 4px' }}>Bruttolohn</p>
+                                <p style={{ fontSize: 17, fontWeight: 800, color: '#1e293b', margin: 0, fontVariantNumeric: 'tabular-nums' }}>CHF {fmt(result.bruttolohn.perYear)}</p>
+                                <p style={{ fontSize: 11, color: '#94a3b8', margin: '2px 0 0' }}>{fmt(hours.totalHours)} Std × CHF {fmt(a.hourly_rate || 0)}</p>
+                              </div>
+                              <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', border: '1px solid #e2e8f0' }}>
+                                <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b', margin: '0 0 4px' }}>Nettolohn</p>
+                                <p style={{ fontSize: 17, fontWeight: 800, color: '#1e293b', margin: 0, fontVariantNumeric: 'tabular-nums' }}>CHF {fmt(result.nettolohn.perYear)}</p>
+                                <p style={{ fontSize: 11, color: '#94a3b8', margin: '2px 0 0' }}>CHF {fmt(result.nettolohn.perHour)}/Std</p>
+                              </div>
+                              <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', border: '1px solid #e2e8f0' }}>
+                                <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b', margin: '0 0 4px' }}>Status</p>
+                                <p style={{ fontSize: 17, fontWeight: 800, color: '#1e293b', margin: 0 }}>{confirmed ? '✓ Bestätigt' : 'Offen'}</p>
+                                <p style={{ fontSize: 11, color: '#94a3b8', margin: '2px 0 0' }}>AG: CHF {fmt(result.totalaufwandAG.perYear)}</p>
+                              </div>
+                            </div>
+                          )}
+
+                          {hours.entries.length === 0 ? (
+                            <div style={{
+                              padding: '32px 20px', textAlign: 'center',
+                              background: '#f8fafc', borderRadius: 12,
+                            }}>
+                              <Clock style={{ width: 32, height: 32, color: '#cbd5e1', margin: '0 auto 8px', display: 'block' }} />
+                              <p style={{ color: '#94a3b8', fontSize: 14 }}>Keine Einträge für {monthLabel(currentMonth)}.</p>
+                            </div>
+                          ) : (
+                            <>
+                              <div style={{
+                                borderRadius: 12, border: '1px solid #e2e8f0',
+                                overflow: 'hidden', marginBottom: 14,
+                              }}>
+                                {hours.entries
+                                  .sort((a, b) => a.date.localeCompare(b.date))
+                                  .map((e, idx) => {
+                                    const d = new Date(e.date + 'T00:00:00');
+                                    const dayName = d.toLocaleDateString('de-CH', { weekday: 'short' });
+                                    const dayNum = d.getDate();
+                                    const isEditing = editingEntryId === e.id;
+
+                                    return (
+                                      <div key={e.id} style={{
+                                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                        padding: '10px 16px',
+                                        borderBottom: idx < hours.entries.length - 1 ? '1px solid #f1f5f9' : 'none',
+                                        background: isEditing ? '#f8fafc' : 'transparent',
+                                        transition: 'background 0.15s',
+                                      }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                                          <div style={{
+                                            width: 38, height: 38, borderRadius: 8,
+                                            background: '#f1f5f9',
+                                            display: 'flex', flexDirection: 'column',
+                                            alignItems: 'center', justifyContent: 'center',
+                                          }}>
+                                            <span style={{ fontSize: 9, textTransform: 'uppercase', color: '#94a3b8', fontWeight: 700, lineHeight: 1 }}>{dayName}</span>
+                                            <span style={{ fontSize: 14, fontWeight: 700, color: '#334155', lineHeight: 1 }}>{dayNum}</span>
+                                          </div>
+                                          <div>
+                                            {isEditing ? (
+                                              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                                <input
+                                                  type="time"
+                                                  value={editStart}
+                                                  onChange={ev => setEditStart(ev.target.value)}
+                                                  style={{
+                                                    padding: '3px 8px', border: '1px solid #cbd5e1',
+                                                    borderRadius: 6, fontSize: 13, width: 85,
+                                                  }}
+                                                />
+                                                <span style={{ color: '#94a3b8', fontSize: 13 }}>–</span>
+                                                <input
+                                                  type="time"
+                                                  value={editEnd}
+                                                  onChange={ev => setEditEnd(ev.target.value)}
+                                                  style={{
+                                                    padding: '3px 8px', border: '1px solid #cbd5e1',
+                                                    borderRadius: 6, fontSize: 13, width: 85,
+                                                  }}
+                                                />
+                                              </div>
+                                            ) : (
+                                              <p style={{ fontSize: 13, fontWeight: 500, color: '#1e293b', margin: 0 }}>{e.start_time} – {e.end_time}</p>
+                                            )}
+                                            <p style={{ fontSize: 11, color: '#94a3b8', margin: '1px 0 0' }}>
+                                              {e.category || 'Ohne Kategorie'}{e.is_night && ' 🌙'}
+                                            </p>
+                                          </div>
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                          <span style={{ fontSize: 13, fontWeight: 700, color: '#334155', fontVariantNumeric: 'tabular-nums' }}>
+                                            {isEditing ? fmt(parseHours(editStart, editEnd)) : fmt(e.hours)} Std
+                                          </span>
+                                          {isEditing ? (
+                                            <div style={{ display: 'flex', gap: 4 }}>
+                                              <button
+                                                onClick={() => saveEdit(e.id)}
+                                                style={{
+                                                  width: 28, height: 28, borderRadius: 6, border: 'none',
+                                                  background: '#e2e8f0', color: '#334155', cursor: 'pointer',
+                                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                }}
+                                              >
+                                                <Save style={{ width: 14, height: 14 }} />
+                                              </button>
+                                              <button
+                                                onClick={cancelEditing}
+                                                style={{
+                                                  width: 28, height: 28, borderRadius: 6, border: 'none',
+                                                  background: '#f1f5f9', color: '#64748b', cursor: 'pointer',
+                                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                }}
+                                              >
+                                                <X style={{ width: 14, height: 14 }} />
+                                              </button>
+                                            </div>
+                                          ) : (
+                                            <button
+                                              onClick={() => startEditing(e)}
+                                              style={{
+                                                width: 28, height: 28, borderRadius: 6, border: 'none',
+                                                background: 'transparent', color: '#94a3b8', cursor: 'pointer',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                transition: 'all 0.15s',
+                                              }}
+                                              onMouseEnter={ev => { ev.currentTarget.style.background = '#f1f5f9'; ev.currentTarget.style.color = '#475569'; }}
+                                              onMouseLeave={ev => { ev.currentTarget.style.background = 'transparent'; ev.currentTarget.style.color = '#94a3b8'; }}
+                                            >
+                                              <Pencil style={{ width: 13, height: 13 }} />
+                                            </button>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                              </div>
+
+                              {/* Total */}
+                              <div style={{
+                                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                padding: '12px 16px', background: '#f8fafc', borderRadius: 10,
+                                marginBottom: 14,
+                              }}>
+                                <span style={{ fontSize: 13, fontWeight: 600, color: '#475569' }}>Total</span>
+                                <span style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>
+                                  {fmt(hours.totalHours)} Std
+                                </span>
+                              </div>
+                            </>
+                          )}
+
+                          {/* Navigation buttons */}
+                          <div style={{ display: 'flex', gap: 8 }}>
+                            {result && (
+                              <ActionButton
+                                onClick={() => setFlowStep('abrechnung')}
+                                icon={<ArrowRight style={{ width: 15, height: 15 }} />}
+                                label="Weiter zur Lohnabrechnung"
+                                variant="primary"
+                              />
+                            )}
+                            <ActionButton
+                              onClick={() => downloadTimesheetPdf(a, hours)}
+                              icon={<Download style={{ width: 15, height: 15 }} />}
+                              label="Stundenzettel PDF"
+                              variant="outline"
+                              disabled={hours.totalHours === 0}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ── STEP 2: Lohnabrechnung erstellen ── */}
+                      {flowStep === 'abrechnung' && (
+                        <div>
+                          {result ? (
+                            <>
+                              {/* Grundlagen */}
+                              {(() => {
+                                const cd = a.contract_data as any;
+                                const kanton = cd?.canton || employer?.canton || 'ZH';
+                                const kantonName = FAK_RATES[kanton]?.name || kanton;
+                                const stundenlohn = a.hourly_rate || 0;
+                                const verfahren = cd?.billing_method === 'standard' ? 'Ordentlich' : 'Vereinfacht';
+                                return (
+                                  <div style={{
+                                    borderRadius: 10, border: '1px solid #e2e8f0',
+                                    overflow: 'hidden', marginBottom: 16,
+                                  }}>
+                                    <div style={{ background: '#f8fafc', padding: '8px 14px', borderBottom: '1px solid #e2e8f0' }}>
+                                      <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748b', margin: 0 }}>
+                                        Grundlagen
+                                      </p>
+                                    </div>
+                                    <div style={{ fontSize: 13 }}>
+                                      <InfoRow label="Kanton" value={`${kantonName} (${kanton})`} />
+                                      <InfoRow label="Verfahren" value={verfahren} alt />
+                                      <InfoRow label="Stundenlohn" value={`Fr. ${fmt(stundenlohn)}`} />
+                                      <InfoRow label="Stunden" value={fmt(hours.totalHours)} alt />
+                                    </div>
+                                  </div>
+                                );
+                              })()}
+
+                              {/* Lohn table */}
+                              <PaySection title="Lohn">
+                                <PayRow label="Arbeitslohn" perH={result.arbeitslohn.perHour} perM={result.arbeitslohn.perYear} />
+                                {result.ferienzuschlag.perYear > 0 && (
+                                  <PayRow label="Ferienzuschlag" rate={result.ferienzuschlag.rate} perH={result.ferienzuschlag.perHour} perM={result.ferienzuschlag.perYear} />
+                                )}
+                                <PayRow label="Bruttolohn AN" perH={result.bruttolohn.perHour} perM={result.bruttolohn.perYear} bold />
+                              </PaySection>
+
+                              {/* AG Beiträge */}
+                              <PaySection title="Beiträge AG">
+                                {result.agLines.map((l, i) => (
+                                  <PayRow key={i} label={l.label} rate={l.rate} perH={l.perHour} perM={l.perYear} />
+                                ))}
+                                <PayRow label="Total AG" rate={result.totalAG.rate} perH={result.totalAG.perHour} perM={result.totalAG.perYear} bold />
+                                <PayRow label="Totalaufwand AG" perH={result.totalaufwandAG.perHour} perM={result.totalaufwandAG.perYear} bold highlight />
+                              </PaySection>
+
+                              {/* AN Beiträge */}
+                              <PaySection title="Beiträge AN">
+                                {result.anLines.map((l, i) => (
+                                  <PayRow key={i} label={l.label} rate={l.rate} perH={l.perHour} perM={l.perYear} />
+                                ))}
+                                <PayRow label="Total AN" rate={result.totalAN.rate} perH={result.totalAN.perHour} perM={result.totalAN.perYear} bold />
+                                <PayRow label="Nettolohn AN" perH={result.nettolohn.perHour} perM={result.nettolohn.perYear} bold highlight />
+                              </PaySection>
+
+                              {/* Adressaten */}
+                              <div style={{
+                                borderRadius: 10, border: '1px solid #e2e8f0',
+                                overflow: 'hidden', marginBottom: 16,
+                              }}>
+                                <div style={{ background: '#f8fafc', padding: '8px 14px', borderBottom: '1px solid #e2e8f0' }}>
+                                  <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748b', margin: 0 }}>
+                                    Leistungen nach Adressaten
+                                  </p>
+                                </div>
+                                {result.adressaten.map((ad, i) => (
+                                  <div key={i} style={{
+                                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                    padding: '8px 14px',
+                                    borderBottom: i < result.adressaten.length - 1 ? '1px solid #f1f5f9' : 'none',
+                                    fontSize: 13,
+                                  }}>
+                                    <div>
+                                      <span style={{ color: '#334155' }}>{ad.label}</span>
+                                      <span style={{ color: '#94a3b8', fontSize: 11, marginLeft: 6 }}>({ad.details})</span>
+                                    </div>
+                                    <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: '#1e293b' }}>
+                                      Fr. {fmt(ad.perYear)}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {/* Action buttons */}
+                              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                                <ActionButton
+                                  onClick={() => downloadPayslipPdf(a, result, hours)}
+                                  icon={<Download style={{ width: 15, height: 15 }} />}
+                                  label="Lohnabrechnung PDF"
+                                  variant="primary"
+                                />
+                                <ActionButton
+                                  onClick={() => downloadTimesheetPdf(a, hours)}
+                                  icon={<FileText style={{ width: 15, height: 15 }} />}
+                                  label="Stundenzettel PDF"
+                                  variant="outline"
+                                />
+                                <ActionButton
+                                  onClick={() => setFlowStep('stunden')}
+                                  icon={<ArrowLeft style={{ width: 15, height: 15 }} />}
+                                  label="Zurück"
+                                  variant="outline"
+                                />
+                              </div>
+
+                              {/* Confirm */}
+                              {!confirmed ? (
+                                <button
+                                  onClick={() => handleConfirm(a.id, a.name)}
+                                  style={{
+                                    width: '100%', padding: '14px 20px', borderRadius: 12,
+                                    border: 'none', cursor: 'pointer',
+                                    background: 'linear-gradient(135deg, #059669, #047857)',
+                                    color: '#fff', fontWeight: 700, fontSize: 14,
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                                    transition: 'all 0.2s',
+                                    boxShadow: '0 2px 8px rgba(5, 150, 105, 0.3)',
+                                  }}
+                                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(5, 150, 105, 0.4)'; }}
+                                  onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(5, 150, 105, 0.3)'; }}
+                                >
+                                  <ShieldCheck style={{ width: 18, height: 18 }} />
+                                  Abrechnung bestätigen & freigeben
+                                </button>
+                              ) : (
+                                <div style={{
+                                  display: 'flex', alignItems: 'center', gap: 12,
+                                  padding: '14px 16px', borderRadius: 12,
+                                  background: 'linear-gradient(135deg, #ecfdf5, #d1fae5)',
+                                  border: '1px solid #a7f3d0',
+                                }}>
+                                  <ShieldCheck style={{ width: 20, height: 20, color: '#059669' }} />
+                                  <div>
+                                    <p style={{ fontSize: 14, fontWeight: 700, color: '#065f46', margin: 0 }}>✅ Abrechnung bestätigt</p>
+                                    <p style={{ fontSize: 12, color: '#059669', margin: '2px 0 0' }}>{a.name} sieht diese Abrechnung jetzt im Zugangslink.</p>
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          ) : (
+                            <div style={{
+                              padding: '32px 20px', textAlign: 'center',
+                              background: '#f8fafc', borderRadius: 12,
+                            }}>
+                              <Clock style={{ width: 32, height: 32, color: '#cbd5e1', margin: '0 auto 8px', display: 'block' }} />
+                              <p style={{ color: '#94a3b8', fontSize: 14 }}>
+                                Keine Stunden erfasst – kein Lohnbudget möglich.
+                              </p>
+                              <button
+                                onClick={() => setFlowStep('stunden')}
+                                style={{
+                                  marginTop: 12, padding: '8px 16px', borderRadius: 8,
+                                  border: '1px solid #e2e8f0', background: '#fff',
+                                  fontSize: 13, fontWeight: 500, color: '#3b82f6',
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                Zu den Stunden
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Animation keyframes */}
+      <style>{`
+        @keyframes slideDown {
+          from { opacity: 0; max-height: 0; }
+          to { opacity: 1; max-height: 2000px; }
+        }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+// ── Sub-components ──
+
+function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div style={{
+      background: 'rgba(255,255,255,0.07)',
+      borderRadius: 12, padding: '14px 16px',
+      backdropFilter: 'blur(8px)',
+      border: '1px solid rgba(255,255,255,0.06)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, color: 'rgba(255,255,255,0.45)' }}>
+        {icon}
+        <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
+      </div>
+      <p style={{ fontSize: 22, fontWeight: 800, color: '#fff', margin: 0, fontVariantNumeric: 'tabular-nums' }}>{value}</p>
+    </div>
+  );
+}
+
+function FlowTab({ active, onClick, icon, label }: {
+  active: boolean; onClick: () => void; icon: React.ReactNode; label: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        padding: '7px 14px', borderRadius: 8,
+        border: 'none', cursor: 'pointer',
+        fontSize: 12, fontWeight: active ? 600 : 500,
+        background: active ? '#fff' : 'transparent',
+        color: active ? '#1e293b' : '#94a3b8',
+        boxShadow: active ? '0 1px 4px rgba(0,0,0,0.06)' : 'none',
+        transition: 'all 0.2s',
+      }}
+    >
+      {icon} {label}
+    </button>
+  );
+}
+
+function SummaryBox({ label, value, sublabel, color, bg }: {
+  label: string; value: string; sublabel: string; color: string; bg: string;
+}) {
+  return (
+    <div style={{
+      background: bg, borderRadius: 12, padding: '14px 16px',
+    }}>
+      <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color, margin: '0 0 4px', opacity: 0.7 }}>{label}</p>
+      <p style={{ fontSize: 18, fontWeight: 800, color, margin: 0, fontVariantNumeric: 'tabular-nums' }}>{value}</p>
+      <p style={{ fontSize: 11, color, margin: '2px 0 0', opacity: 0.6 }}>{sublabel}</p>
+    </div>
+  );
+}
+
+function ActionButton({ onClick, icon, label, variant, disabled }: {
+  onClick: () => void; icon: React.ReactNode; label: string;
+  variant: 'primary' | 'outline'; disabled?: boolean;
+}) {
+  const isPrimary = variant === 'primary';
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        padding: '10px 16px', borderRadius: 10,
+        border: isPrimary ? 'none' : '1px solid #e2e8f0',
+        background: isPrimary ? 'linear-gradient(135deg, #3b82f6, #2563eb)' : '#fff',
+        color: isPrimary ? '#fff' : '#475569',
+        fontSize: 13, fontWeight: 600, cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.4 : 1,
+        transition: 'all 0.2s',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {icon} {label}
+    </button>
+  );
+}
+
+function InfoRow({ label, value, alt }: { label: string; value: string; alt?: boolean }) {
+  return (
+    <div style={{
+      display: 'flex', justifyContent: 'space-between',
+      padding: '6px 14px',
+      background: alt ? '#f8fafc' : 'transparent',
+    }}>
+      <span style={{ color: '#64748b' }}>{label}</span>
+      <span style={{ fontWeight: 500, fontVariantNumeric: 'tabular-nums', color: '#1e293b' }}>{value}</span>
+    </div>
+  );
+}
+
+function PaySection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div style={{
+      borderRadius: 10, border: '1px solid #e2e8f0',
+      overflow: 'hidden', marginBottom: 12,
+    }}>
+      <div style={{ background: '#f8fafc', padding: '8px 14px', borderBottom: '1px solid #e2e8f0' }}>
+        <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748b', margin: 0 }}>
+          {title}
+        </p>
+      </div>
+      <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
+        <thead>
+          <tr style={{ borderBottom: '1px solid #e2e8f0' }}>
+            <th style={{ textAlign: 'left', padding: '6px 14px', fontSize: 10, fontWeight: 600, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}></th>
+            <th style={{ textAlign: 'right', padding: '6px 14px', fontSize: 10, fontWeight: 600, color: '#94a3b8', width: 70 }}>Satz</th>
+            <th style={{ textAlign: 'right', padding: '6px 14px', fontSize: 10, fontWeight: 600, color: '#94a3b8', width: 95 }}>Pro Std</th>
+            <th style={{ textAlign: 'right', padding: '6px 14px', fontSize: 10, fontWeight: 600, color: '#94a3b8', width: 95 }}>Total</th>
+          </tr>
+        </thead>
+        <tbody>{children}</tbody>
+      </table>
+    </div>
+  );
+}
+
+function PayRow({ label, rate, perH, perM, bold, highlight }: {
+  label: string; rate?: number | null; perH?: number; perM: number;
+  bold?: boolean; highlight?: boolean;
+}) {
+  return (
+    <tr style={{
+      borderBottom: '1px solid #f1f5f9',
+      fontWeight: bold ? 600 : 400,
+      background: highlight ? '#eff6ff' : 'transparent',
+    }}>
+      <td style={{ padding: '6px 14px', color: '#334155' }}>{label}</td>
+      <td style={{ padding: '6px 14px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: '#64748b' }}>
+        {rate != null ? fmtPct(rate) : ''}
+      </td>
+      <td style={{ padding: '6px 14px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: '#475569' }}>
+        {perH != null ? `Fr. ${fmt(perH)}` : ''}
+      </td>
+      <td style={{ padding: '6px 14px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: bold ? '#0f172a' : '#475569' }}>
+        Fr. {fmt(perM)}
+      </td>
+    </tr>
+  );
+}

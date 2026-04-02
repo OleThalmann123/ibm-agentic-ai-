@@ -1,0 +1,12 @@
+{
+  "name": "@asklepios/backend",
+  "version": "1.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "dependencies": {
+    "@langchain/core": "^0.3.40",
+    "@langchain/openai": "^0.4.4",
+    "@supabase/supabase-js": "^2.39.3",
+    "pdfjs-dist": "^4.10.38"
+  }
+}
