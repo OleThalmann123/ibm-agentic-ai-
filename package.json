@@ -1,0 +1,15 @@
+{
+  "name": "asklepios-monorepo",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=apps/prototyp-1-v2",
+    "dev:v1": "npm run dev --workspace=apps/prototyp-1-v1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
