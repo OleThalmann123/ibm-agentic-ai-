@@ -1612,7 +1612,7 @@ export function PayrollPage() {
                               {result && (
                                 <DocCard
                                   title="Lohnabrechnung"
-                                  subtitle="PDF"
+                                    subtitle=""
                                   fileType="PDF"
                                   icon={<Download style={{ width: 18, height: 18 }} />}
                                   onClick={() => downloadPayslipPdf(a, result, hours)}
@@ -1620,7 +1620,7 @@ export function PayrollPage() {
                               )}
                               <DocCard
                                 title="Arbeits- und Einsatzrapport"
-                                subtitle="Lohnabrechnung + Einsatzrapport (PDF)"
+                                  subtitle=""
                                 fileType="PDF"
                                 icon={<Download style={{ width: 18, height: 18 }} />}
                                 disabled={hours.totalHours === 0}
@@ -1878,7 +1878,7 @@ function DocCard({
   onClick,
 }: {
   title: string;
-  subtitle: string;
+  subtitle?: string;
   fileType: 'PDF' | 'DOCX';
   badge?: string;
   icon: React.ReactNode;
@@ -1902,21 +1902,19 @@ function DocCard({
         cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.45 : 1,
         textAlign: 'left',
-        transition: 'transform 0.18s, box-shadow 0.18s, background 0.18s',
+        transition: 'box-shadow 0.18s, background 0.18s',
         boxShadow: '0 1px 2px rgba(15, 23, 42, 0.06)',
         display: 'flex',
         flexDirection: 'column',
         gap: 12,
-        minHeight: 170,
+        minHeight: 160,
       }}
       onMouseEnter={(e) => {
         if (disabled) return;
-        e.currentTarget.style.transform = 'translateY(-2px)';
         e.currentTarget.style.boxShadow = '0 14px 30px rgba(15, 23, 42, 0.10)';
         e.currentTarget.style.background = '#f8fafc';
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.transform = 'translateY(0)';
         e.currentTarget.style.boxShadow = '0 1px 2px rgba(15, 23, 42, 0.06)';
         e.currentTarget.style.background = '#fff';
       }}
@@ -1966,24 +1964,12 @@ function DocCard({
                 </span>
               )}
             </div>
-            <div style={{ fontSize: 12, color: '#64748b', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {subtitle}
-            </div>
+            {!!subtitle && (
+              <div style={{ fontSize: 12, color: '#64748b', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {subtitle}
+              </div>
+            )}
           </div>
-        </div>
-
-        <div style={{
-          width: 32,
-          height: 32,
-          borderRadius: 12,
-          background: '#eef2ff',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: isPrimary ? '#1d4ed8' : '#1d4ed8',
-          flexShrink: 0,
-        }}>
-          <ArrowRight style={{ width: 16, height: 16 }} />
         </div>
       </div>
 
