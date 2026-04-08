@@ -4,21 +4,21 @@ import { supabase } from '@asklepios/backend';
 import type { Assistant } from '@asklepios/backend';
 import {
   Clock, XCircle, ChevronLeft, ChevronRight, ChevronUp, ChevronDown,
-  CheckCircle2, List, Pencil, Trash2, Moon, FileText, ShieldCheck, AlertCircle
+  CheckCircle2, List, Pencil, Trash2, Moon, FileText, ShieldCheck, AlertCircle, Download,
 } from 'lucide-react';
-import { calculatePayroll, FAK_RATES, fmt, fmtPct, type PayrollInput } from '@asklepios/backend';
+import {
+  calculatePayslip,
+  generatePayslipPdf,
+  FAK_RATES,
+  fmt,
+  fmtPct,
+  getIvAssistanceActivityOptions,
+  type PayslipAccountingMethod,
+} from '@asklepios/backend';
+import { toast } from 'sonner';
 
-const ACTIVITY_OPTIONS: Array<{ value: string; label: string }> = [
-  // Hinweis: Die gespeicherten Codes bleiben (2–9), aber die UI-Nummerierung soll 1–8 sein.
-  { value: '2', label: '1) Alltägliche Lebensverrichtungen' },
-  { value: '3', label: '2) Haushaltsführung' },
-  { value: '4', label: '3) Gesellschaftliche Teilhabe und Freizeitgestaltung' },
-  { value: '5', label: '4) Erziehung und Kinderbetreuung' },
-  { value: '6', label: '5) Gemeinnützig/ehrenamtlich' },
-  { value: '7', label: '6) Berufliche Aus- und Weiterbildung' },
-  { value: '8', label: '7) Erwerbstätigkeit (1. Arbeitsmarkt)' },
-  { value: '9', label: '8) Überwachung während des Tages' },
-];
+/** Acht IV-Kategorien (Art. 39c IVG); gespeicherte Codes 2–9, Anzeige 1–8. */
+const ACTIVITY_OPTIONS = getIvAssistanceActivityOptions();
 
 interface TimeEntry {
   id: string;
@@ -71,11 +71,32 @@ function roundToStep(n: number, step: number, max: number): number {
   return Math.min(clamped, Math.floor(max / step) * step);
 }
 
+/** Arbeitgeber-Daten für Lohn-PDF (wie im AG-Dashboard / PayrollPage). */
+interface EmployerForPayslip {
+  name: string;
+  canton?: string | null;
+  contact_data?: Record<string, unknown> | null;
+}
+
+function monthFirstIsoFromDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+}
+
+function sanitizeFilenamePart(input: string): string {
+  return (input || '')
+    .trim()
+    .replace(/\s+/g, '_')
+    .replace(/[\/\\?%*:|"<>]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/_+/g, '_')
+    .replace(/^[-_]+|[-_]+$/g, '');
+}
+
 export function TokenLoginPage() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
   const [assistant, setAssistant] = useState<Assistant | null>(null);
-  const [employer, setEmployer] = useState<{ name: string } | null>(null);
+  const [employer, setEmployer] = useState<EmployerForPayslip | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -110,10 +131,10 @@ export function TokenLoginPage() {
   const lookupAssistant = async (tkn: string) => {
     try {
       let { data, error: err } = await supabase
-        .from('assistant').select('*, employer:employer_id(name)')
+        .from('assistant').select('*, employer:employer_id(name, canton, contact_data)')
         .eq('access_token', tkn).single();
       if (!data || err) {
-        const fb = await supabase.from('assistant').select('*, employer:employer_id(name)').eq('id', tkn).single();
+        const fb = await supabase.from('assistant').select('*, employer:employer_id(name, canton, contact_data)').eq('id', tkn).single();
         data = fb.data; err = fb.error;
       }
       if (!data || err) { setError('Ungültiger Login-Link.'); setLoading(false); return; }
@@ -614,55 +635,164 @@ export function TokenLoginPage() {
             </div>
           </>
         ) : tab === 'lohn' ? (
-          <LohnTab assistant={assistant} employerName={employer?.name || ''} entries={entries} />
+          <LohnTab
+            assistant={assistant}
+            employer={employer}
+            entries={entries}
+            lohnTabActive
+            loginToken={token ?? ''}
+          />
         ) : null}
       </div>
     </div>
   );
 }
 
-// ─── Lohn Tab Component ───
-function LohnTab({ assistant, employerName, entries }: { assistant: Assistant; employerName: string; entries: TimeEntry[] }) {
-  const cd = assistant.contract_data as any;
-  
-  // Demo: current month
+// ─── Lohn Tab Component (Freigabe + gleiche PDF-Logik wie PayrollPage) ───
+function LohnTab({
+  assistant,
+  employer,
+  entries,
+  lohnTabActive,
+  loginToken,
+}: {
+  assistant: Assistant;
+  employer: EmployerForPayslip | null;
+  entries: TimeEntry[];
+  lohnTabActive: boolean;
+  /** URL-Token (access_token oder Assistant-ID) zum Nachladen von contract_data inkl. payroll_freigaben. */
+  loginToken: string;
+}) {
+  const cd = assistant.contract_data as Record<string, unknown> | null | undefined;
+  const contract = (cd || {}) as Record<string, any>;
+  const employerName = employer?.name || '';
+
   const now = new Date();
   const monthNames = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
-  const currentMonth = `${monthNames[now.getMonth()]} ${now.getFullYear()}`;
+  const currentMonthLabel = `${monthNames[now.getMonth()]} ${now.getFullYear()}`;
+  const monthFirst = monthFirstIsoFromDate(now);
 
-  // Calculate actual logged hours for the current month
+  const [payrollConfirmed, setPayrollConfirmed] = useState(false);
+  const [confirmationLoading, setConfirmationLoading] = useState(true);
+
+  useEffect(() => {
+    if (!lohnTabActive) return;
+    let cancelled = false;
+    (async () => {
+      setConfirmationLoading(true);
+      const { data: pcRow } = await supabase
+        .from('payroll_confirmation')
+        .select('confirmed')
+        .eq('assistant_id', assistant.id)
+        .eq('month', monthFirst)
+        .maybeSingle();
+      const fromTable = !!pcRow?.confirmed;
+
+      let fromAssistantJson = false;
+      if (loginToken) {
+        let ac = await supabase.from('assistant').select('contract_data').eq('access_token', loginToken).maybeSingle();
+        if (!ac.data) {
+          ac = await supabase.from('assistant').select('contract_data').eq('id', loginToken).maybeSingle();
+        }
+        const fr = (ac.data?.contract_data as Record<string, unknown> | undefined)?.payroll_freigaben;
+        if (Array.isArray(fr)) {
+          fromAssistantJson = fr.some((m) => String(m).slice(0, 10) === monthFirst);
+        }
+      }
+
+      if (!cancelled) {
+        setPayrollConfirmed(fromTable || fromAssistantJson);
+        setConfirmationLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [assistant.id, monthFirst, lohnTabActive, loginToken, entries.length]);
+
   const currentMonthEntries = entries.filter(e => {
-    const d = new Date(e.date);
+    const d = new Date(e.date + 'T12:00:00');
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   });
 
   const trackedHours = currentMonthEntries.reduce((sum, e) => {
     return sum + diffHours(e.start_time, e.end_time);
   }, 0);
-  
-  // Build payroll from assistant's contract data
-  const stundenlohn = assistant.hourly_rate || (cd?.hourly_rate ? parseFloat(cd.hourly_rate) : 0);
+
+  const stundenlohn = assistant.hourly_rate || (contract?.hourly_rate ? parseFloat(String(contract.hourly_rate)) : 0);
   const stunden = Number(trackedHours.toFixed(2));
-  const kanton = cd?.canton || 'ZH';
+  const kanton = (employer?.canton || contract?.canton || 'ZH') as string;
   const vacWeeks = assistant.vacation_weeks || 4;
-  const ferienzuschlag = vacWeeks === 5 ? 0.1064 : vacWeeks === 6 ? 0.1304 : 0.0833;
-  
-  const result = calculatePayroll({
-    stundenlohn,
-    anzahlStunden: stunden,
-    kanton,
-    abrechnungsverfahren: 'ordentlich',
-    ferienzuschlag,
-    nbuAN: cd?.nbu_employee ? parseFloat(cd.nbu_employee) / 100 : undefined,
-    agName: employerName,
-    anName: assistant.name,
+  const ferienzuschlagRate = vacWeeks === 5 ? 0.1064 : vacWeeks === 6 ? 0.1304 : 0.0833;
+
+  const bm = String(contract?.billing_method || 'ordinary').toLowerCase();
+  const accountingMethod: PayslipAccountingMethod =
+    bm === 'simplified' || bm === 'vereinfacht' ? 'simplified'
+      : (bm === 'ordinary_with_withholding' || bm === 'ordinary_quellensteuer') ? 'ordinary_with_withholding'
+        : 'ordinary';
+
+  const ktvRateEmployee = contract?.ktv_employee ? (parseFloat(String(contract.ktv_employee)) / 100) : undefined;
+  const nbuRateEmployee = contract?.nbu_employee ? (parseFloat(String(contract.nbu_employee)) / 100) : undefined;
+  const withholdingTaxRate = contract?.withholding_tax_rate ? (parseFloat(String(contract.withholding_tax_rate)) / 100) : undefined;
+
+  const payslip = calculatePayslip({
+    canton: kanton,
+    accountingMethod,
+    hourlyRate: stundenlohn,
+    hours: stunden,
+    vacationSurchargeRate: ferienzuschlagRate,
+    ktvRateEmployee,
+    nbuRateEmployee,
+    withholdingTaxRate,
   });
 
-  // Wait, I already moved demo current month above to calculate trackedHours.
-  // I will just remove the old code for currentMonth here to avoid double declaration.
+  const agCd = employer?.contact_data as Record<string, any> | undefined;
+  const getEmployerAddress = () => ({
+    name: employer?.name || '–',
+    street: agCd?.street || '',
+    plzCity: agCd?.plz && agCd?.city ? `${agCd.plz} ${agCd.city}` : (agCd?.city || ''),
+  });
 
-  // Demo confirmation status (in production this would come from DB)
-  const [isConfirmed] = useState(false);
+  const getEmployeeAddress = () => ({
+    name: assistant.name || '–',
+    street: contract?.street || '',
+    plzCity: contract?.plz && contract?.city ? `${contract.plz} ${contract.city}` : (contract?.city || ''),
+  });
+
+  const formatPlaceDateLabel = () => {
+    const place = String(agCd?.city || '').trim();
+    const date = new Date().toLocaleDateString('de-CH');
+    return place ? `${place}, ${date}` : date;
+  };
+
+  const kantonName = FAK_RATES[kanton]?.name || kanton;
+  const ferienzuschlagLabel = vacWeeks === 5 ? '10.64%' : vacWeeks === 6 ? '13.04%' : '8.33%';
+  const accountingMethodLabel =
+    accountingMethod === 'simplified'
+      ? 'Vereinfachtes'
+      : accountingMethod === 'ordinary_with_withholding'
+        ? 'Ordentliches mit Quellensteuer'
+        : 'Ordentliches';
+
+  const downloadOfficialPayslipPdf = () => {
+    const payslipDoc = generatePayslipPdf({
+      monthYearLabel: currentMonthLabel,
+      placeDateLabel: formatPlaceDateLabel(),
+      employer: getEmployerAddress(),
+      employee: { ...getEmployeeAddress(), ahvNumber: String(contract?.ahv_number || '') },
+      grundlagen: {
+        cantonLabel: `${kantonName}`,
+        accountingMethodLabel,
+        hourlyRate: stundenlohn,
+        hours: stunden,
+        vacationSurchargeLabel: ferienzuschlagLabel,
+      },
+      accountingMethod,
+      result: payslip,
+    });
+    const datePart = sanitizeFilenamePart(monthFirst.slice(0, 7));
+    const namePart = sanitizeFilenamePart(assistant.name || 'Lohnabrechnung');
+    payslipDoc.save(`${datePart}_Lohnabrechnung_${namePart}.pdf`);
+    toast.success('Lohnabrechnung heruntergeladen');
+  };
 
   const Row = ({ label, rate, perHour, perYear, bold, minus }: {
     label: string;
@@ -684,6 +814,8 @@ function LohnTab({ assistant, employerName, entries }: { assistant: Assistant; e
     </div>
   );
 
+  const activeDeductions = payslip.deductionLines.filter((l) => l.enabled !== false);
+
   return (
     <>
       {entries.length === 0 ? (
@@ -698,25 +830,25 @@ function LohnTab({ assistant, employerName, entries }: { assistant: Assistant; e
         </div>
       ) : null}
 
-      {/* Month header */}
       <div className="bg-white rounded-2xl shadow-sm border p-4 text-center">
         <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold">Lohnabrechnung</p>
-        <p className="text-lg font-bold">{currentMonth}</p>
+        <p className="text-lg font-bold">{currentMonthLabel}</p>
         <p className="text-xs text-slate-500">{stunden} Stunden · CHF {fmt(stundenlohn)}/Std</p>
       </div>
 
-      {/* Confirmation status */}
       <div className={`rounded-xl border p-3 flex items-center gap-3 ${
-        isConfirmed 
-          ? 'bg-emerald-50 border-emerald-200' 
+        payrollConfirmed
+          ? 'bg-emerald-50 border-emerald-200'
           : 'bg-amber-50 border-amber-200'
       }`}>
-        {isConfirmed ? (
+        {confirmationLoading ? (
+          <p className="text-sm text-slate-600">Freigabe wird geladen…</p>
+        ) : payrollConfirmed ? (
           <>
             <ShieldCheck className="w-5 h-5 text-emerald-600 flex-shrink-0" />
-            <div>
-              <p className="text-sm font-semibold text-emerald-800">Bestätigt durch {employerName}</p>
-              <p className="text-xs text-emerald-600">Diese Abrechnung wurde vom Arbeitgeber freigegeben.</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-emerald-800">Bestätigt durch {employerName || 'deinen Arbeitgeber'}</p>
+              <p className="text-xs text-emerald-600">Diese Abrechnung wurde freigegeben. Du kannst dieselbe Lohnabrechnung wie im Arbeitgeber-Dashboard als PDF laden.</p>
             </div>
           </>
         ) : (
@@ -730,9 +862,18 @@ function LohnTab({ assistant, employerName, entries }: { assistant: Assistant; e
         )}
       </div>
 
-      {/* Payslip card */}
+      {payrollConfirmed && stunden > 0 && !confirmationLoading ? (
+        <button
+          type="button"
+          onClick={downloadOfficialPayslipPdf}
+          className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md transition-colors"
+        >
+          <Download className="w-5 h-5" />
+          Offizielle Lohnabrechnung (PDF)
+        </button>
+      ) : null}
+
       <div className="bg-white rounded-2xl shadow-sm border overflow-hidden">
-        {/* Header */}
         <div className="px-4 py-3 bg-slate-50 border-b">
           <div className="flex items-center justify-between text-[10px] uppercase tracking-widest text-slate-400 font-bold">
             <span>Position</span>
@@ -741,40 +882,50 @@ function LohnTab({ assistant, employerName, entries }: { assistant: Assistant; e
         </div>
 
         <div className="px-4 py-3 space-y-0.5">
-          {/* Lohn */}
           <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold pt-1 pb-1">Lohn</p>
-          <Row label="Arbeitslohn" perHour={result.arbeitslohn.perHour} perYear={result.arbeitslohn.perYear} />
-          {result.ferienzuschlag.perYear > 0 && (
-            <Row label="Ferienzuschlag" rate={result.ferienzuschlag.rate} perHour={result.ferienzuschlag.perHour} perYear={result.ferienzuschlag.perYear} />
+          <Row label="Arbeitslohn" perHour={payslip.wageLines.workWage.perHour} perYear={payslip.wageLines.workWage.perMonth} />
+          {payslip.wageLines.vacationSurcharge.perMonth > 0 && (
+            <Row
+              label="Ferienzuschlag"
+              rate={payslip.wageLines.vacationSurcharge.rate}
+              perHour={payslip.wageLines.vacationSurcharge.perHour}
+              perYear={payslip.wageLines.vacationSurcharge.perMonth}
+            />
           )}
           <div className="border-t my-1.5" />
-          <Row label="Bruttolohn" perHour={result.bruttolohn.perHour} perYear={result.bruttolohn.perYear} bold />
+          <Row label="Bruttolohn" perHour={payslip.wageLines.grossWage.perHour} perYear={payslip.wageLines.grossWage.perMonth} bold />
 
-          {/* AN deductions */}
           <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold pt-3 pb-1">Abzüge</p>
-          {result.anLines.map((l, i) => (
-            <Row key={i} label={l.label} rate={l.rate} perHour={l.perHour} perYear={l.perYear} minus />
+          {activeDeductions.map((l, i) => (
+            <Row key={i} label={l.label} rate={l.rate} perHour={l.perHour} perYear={l.perMonth} minus />
           ))}
           <div className="border-t my-1.5" />
-          <Row label="Total Abzüge" rate={result.totalAN.rate} perHour={result.totalAN.perHour} perYear={result.totalAN.perYear} bold minus />
+          <Row
+            label="Total Abzüge"
+            rate={payslip.totalDeductions.rate}
+            perHour={payslip.totalDeductions.perHour}
+            perYear={payslip.totalDeductions.perMonth}
+            bold
+            minus
+          />
         </div>
 
-        {/* Nettolohn highlight */}
         <div className="px-4 py-4 bg-emerald-50 border-t border-emerald-200">
           <div className="flex items-center justify-between">
             <span className="font-bold text-emerald-800">Nettolohn</span>
-            <span className="text-xl font-black tabular-nums text-emerald-700">CHF {fmt(result.nettolohn.perYear)}</span>
+            <span className="text-xl font-black tabular-nums text-emerald-700">CHF {fmt(payslip.netWage.perMonth)}</span>
           </div>
-          <p className="text-xs text-emerald-600 mt-0.5">CHF {fmt(result.nettolohn.perHour)} pro Stunde</p>
+          <p className="text-xs text-emerald-600 mt-0.5">CHF {fmt(payslip.netWage.perHour)} pro Stunde</p>
         </div>
       </div>
 
-      {/* Info */}
-      <div className="bg-blue-50 rounded-xl border border-blue-100 p-4 text-center">
-        <p className="text-sm text-blue-700 font-medium">
-          📄 Die offizielle Lohnabrechnung wird dir nach Bestätigung vom Arbeitgeber zugestellt.
-        </p>
-      </div>
+      {!payrollConfirmed ? (
+        <div className="bg-blue-50 rounded-xl border border-blue-100 p-4 text-center">
+          <p className="text-sm text-blue-700 font-medium">
+            📄 Die offizielle Lohnabrechnung zum Download steht bereit, sobald der Arbeitgeber die Abrechnung bestätigt hat.
+          </p>
+        </div>
+      ) : null}
     </>
   );
 }

@@ -58,7 +58,7 @@ export async function extractPdfContent(file: File): Promise<PdfExtractionResult
     // Render pages as images for vision model fallback
     const pageImages: string[] = [];
     
-    for (let i = 1; i <= Math.min(pageCount, 5); i++) { // Max 5 pages
+    for (let i = 1; i <= Math.min(pageCount, 10); i++) { // Max 10 pages
       const page = await pdf.getPage(i);
       const viewport = page.getViewport({ scale: 2.0 }); // 2x for quality
       

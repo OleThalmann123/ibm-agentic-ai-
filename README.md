@@ -24,8 +24,7 @@ Die Assistenzpersonen erhalten einen passwortfreien Zugangslink und tragen ihre 
 │   └── prototyp-1-v2/     # Frontend (React, TypeScript, Vite)
 ├── packages/
 │   └── shared-backend/    # Gemeinsame Logik: Agent, Payroll, PDF, Types, Supabase-Client
-├── Demo_Dateien/           # Muster-Arbeitsvertraege (PDF) fuer Demos
-└── screenshots_asklepios/  # UI-Screenshots
+└── Demo_Dateien/           # Muster-Arbeitsvertraege (PDF) fuer Demos
 ```
 
 ### Module

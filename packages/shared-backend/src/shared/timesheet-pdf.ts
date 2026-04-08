@@ -1,6 +1,8 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { fmt } from '../backend/payroll';
+import { formatIvCategoryForInlineDisplay } from './iv-assistance-categories';
+import { PDF_THEME } from './pdf-theme';
 
 interface TimesheetEntry {
   date: string;
@@ -27,17 +29,6 @@ interface TimesheetPdfData {
 const DAY_NAMES = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
 const DAY_NAMES_FULL = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
-const ACTIVITY_BY_DISPLAY_NUMBER: Record<number, string> = {
-  1: 'Alltägliche Lebensverrichtungen',
-  2: 'Haushaltsführung',
-  3: 'Gesellschaftliche Teilhabe und Freizeitgestaltung',
-  4: 'Erziehung und Kinderbetreuung',
-  5: 'Gemeinnützig/ehrenamtlich',
-  6: 'Berufliche Aus- und Weiterbildung',
-  7: 'Erwerbstätigkeit (1. Arbeitsmarkt)',
-  8: 'Überwachung während des Tages',
-};
-
 function formatActivity(category?: string): string {
   const raw = (category || '').trim();
   if (!raw) return '–';
@@ -45,21 +36,13 @@ function formatActivity(category?: string): string {
   // If already formatted (e.g. "2 · Haushaltsführung"), keep it.
   if (raw.includes('·')) return raw;
 
-  const n = Number(raw);
-  if (!Number.isFinite(n)) return raw;
-
-  // Stored codes are 2–9, but the displayed numbering is 1–8.
-  const display = n >= 2 && n <= 9 ? (n - 1) : (n >= 1 && n <= 8 ? n : null);
-  if (!display) return raw;
-
-  const label = ACTIVITY_BY_DISPLAY_NUMBER[display];
-  return label ? `${display} · ${label}` : String(display);
+  return formatIvCategoryForInlineDisplay(raw);
 }
 
 export function generateTimesheetPdf(data: TimesheetPdfData): jsPDF {
   const doc = new jsPDF('p', 'mm', 'a4');
-  const W = 190;
-  const LM = 10;
+  const W = PDF_THEME.INNER_W;
+  const LM = PDF_THEME.LM;
   let y = 15;
   const includeActivities = data.includeActivities !== false;
 
@@ -72,12 +55,13 @@ export function generateTimesheetPdf(data: TimesheetPdfData): jsPDF {
   doc.text(data.month, LM + W, y, { align: 'right' });
   y += 10;
 
-  // AG / AN boxes
-  const boxW = W / 2 - 3;
+  // AG / AN boxes (gleiche Gesamtbreite wie Tabellen: INNER_W)
+  const gap = 4;
+  const boxW = (W - gap) / 2;
 
-  doc.setFillColor(240, 245, 255);
+  doc.setFillColor(...PDF_THEME.accentRgb);
   doc.rect(LM, y, boxW, 22, 'F');
-  doc.setDrawColor(30, 64, 175);
+  doc.setDrawColor(...PDF_THEME.borderRgb);
   doc.rect(LM, y, boxW, 22, 'S');
   doc.setFontSize(8);
   doc.setFont('helvetica', 'bold');
@@ -88,10 +72,10 @@ export function generateTimesheetPdf(data: TimesheetPdfData): jsPDF {
   if (data.employer.street) doc.text(data.employer.street, LM + 3, y + 14.5);
   if (data.employer.plzCity) doc.text(data.employer.plzCity, LM + 3, y + 19);
 
-  const lm2 = LM + boxW + 6;
-  doc.setFillColor(240, 245, 255);
+  const lm2 = LM + boxW + gap;
+  doc.setFillColor(...PDF_THEME.accentRgb);
   doc.rect(lm2, y, boxW, 22, 'F');
-  doc.setDrawColor(30, 64, 175);
+  doc.setDrawColor(...PDF_THEME.borderRgb);
   doc.rect(lm2, y, boxW, 22, 'S');
   doc.setFontSize(8);
   doc.setFont('helvetica', 'bold');
@@ -149,32 +133,52 @@ export function generateTimesheetPdf(data: TimesheetPdfData): jsPDF {
     ...(includeActivities ? [''] : []),
   ]);
 
+  const colVon = 22;
+  const colBis = 22;
+  const colStd = 24;
+  const colNacht = 14;
+  const colTatMin = 56;
+  const colDateWithAct = W - colVon - colBis - colStd - colNacht - colTatMin;
+  const colDateNoAct = W - colVon - colBis - colStd - colNacht;
+  const colDate = includeActivities ? Math.max(40, colDateWithAct) : colDateNoAct;
+  const colTat = includeActivities ? W - colDate - colVon - colBis - colStd - colNacht : 0;
+  const columnStyles: Record<number, { cellWidth: number; halign?: 'left' | 'center' | 'right' }> = {
+    0: { cellWidth: colDate },
+    1: { cellWidth: colVon, halign: 'center' },
+    2: { cellWidth: colBis, halign: 'center' },
+    3: { cellWidth: colStd, halign: 'right' },
+    4: { cellWidth: colNacht, halign: 'center' },
+  };
+  if (includeActivities) {
+    columnStyles[5] = { cellWidth: colTat };
+  }
+
   autoTable(doc, {
     startY: y,
+    tableWidth: W,
     head: [[
       'Datum', 'Von', 'Bis', 'Stunden', 'Nacht',
       ...(includeActivities ? ['Tätigkeit'] : []),
     ]],
     body,
     theme: 'grid',
-    headStyles: { fillColor: [30, 64, 175], fontSize: 8, fontStyle: 'bold' },
-    bodyStyles: { fontSize: 9 },
-    columnStyles: {
-      0: { cellWidth: 40 },
-      1: { cellWidth: 20, halign: 'center' },
-      2: { cellWidth: 20, halign: 'center' },
-      3: { cellWidth: 22, halign: 'right' },
-      4: { cellWidth: 15, halign: 'center' },
-      ...(includeActivities ? { 5: { cellWidth: 60 } } : {}),
+    headStyles: {
+      fillColor: [...PDF_THEME.accentRgb],
+      textColor: PDF_THEME.textDark,
+      fontSize: 8,
+      fontStyle: 'bold',
     },
-    margin: { left: LM, right: LM },
+    bodyStyles: { fontSize: 9 },
+    columnStyles,
+    margin: { left: LM, right: PDF_THEME.RM },
+    styles: { lineColor: PDF_THEME.borderRgb, lineWidth: 0.1 },
   });
   y = (doc as any).lastAutoTable.finalY + 8;
 
   // Summary box
-  doc.setFillColor(245, 250, 255);
+  doc.setFillColor(...PDF_THEME.accentRgb);
   doc.rect(LM, y, W, 18, 'F');
-  doc.setDrawColor(30, 64, 175);
+  doc.setDrawColor(...PDF_THEME.borderRgb);
   doc.rect(LM, y, W, 18, 'S');
   doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
@@ -186,7 +190,7 @@ export function generateTimesheetPdf(data: TimesheetPdfData): jsPDF {
 
   // Footer
   doc.setFontSize(7);
-  doc.setTextColor(128);
+  doc.setTextColor(PDF_THEME.textMuted);
   doc.text('Erstellt mit Asklepios – IV-Assistenzbeitrag', LM, 287);
 
   return doc;

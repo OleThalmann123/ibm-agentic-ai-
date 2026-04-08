@@ -5,6 +5,19 @@ export type EnteredBy = 'assistant' | 'admin' | 'system';
 export type Canton = 'AG' | 'AI' | 'AR' | 'BE' | 'BL' | 'BS' | 'FR' | 'GE' | 'GL' | 'GR' | 'JU' | 'LU' | 'NE' | 'NW' | 'OW' | 'SG' | 'SH' | 'SO' | 'SZ' | 'TG' | 'TI' | 'UR' | 'VD' | 'VS' | 'ZG' | 'ZH';
 export type Representation = 'self' | 'spouse' | 'parent' | 'guardian';
 
+/**
+ * Zusatzfelder für IV-Rechnung (Empfängerblock Behörde, Fusszeile Rückfragen).
+ * Werden in `employer.contact_data` (JSON) mitgespeichert.
+ */
+export interface EmployerIvInvoiceLayoutFields {
+  iv_invoice_authority_name?: string;
+  iv_invoice_authority_plz?: string;
+  iv_invoice_authority_city?: string;
+  iv_invoice_inquiries_name?: string;
+  iv_invoice_inquiries_email?: string;
+  iv_invoice_inquiries_phone?: string;
+}
+
 export interface Employer {
   id: string;
   name: string;
@@ -19,13 +32,28 @@ export interface Employer {
     street?: string;
     plz?: string;
     city?: string;
+    phone?: string;
+    email?: string;
     // Supporter mode: affected person data
     affected_first_name?: string;
     affected_last_name?: string;
     affected_street?: string;
     affected_plz?: string;
     affected_city?: string;
-  };
+    insured_ahv_number?: string;
+    insured_street?: string;
+    insured_plz?: string;
+    insured_city?: string;
+    billing_gln?: string;
+    billing_reference_number?: string;
+    billing_iban?: string;
+    billing_account_holder_name?: string;
+    billing_account_holder_street?: string;
+    billing_account_holder_plz?: string;
+    billing_account_holder_city?: string;
+    bank_name?: string;
+    payment_terms_days?: number;
+  } & EmployerIvInvoiceLayoutFields;
 }
 
 export interface EmployerAccess {

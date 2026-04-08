@@ -254,7 +254,7 @@ export function EmployerOnboarding({ onComplete }: Props) {
         name,
         canton: detectedCanton?.code || 'ZH',
         representation: isSupporter ? 'guardian' : 'self',
-        iv_hours_day: 8, iv_hours_night: 0, iv_rate: 35.30,
+        iv_hours_day: 8, iv_hours_night: 0, iv_rate: 35.3,
         contact_data: {
           first_name: cFirst,
           last_name: cLast,
@@ -295,7 +295,7 @@ export function EmployerOnboarding({ onComplete }: Props) {
         name: 'Max Mustermann (Demo)',
         email: 'max@example.com',
         date_of_birth: '1990-01-15',
-        hourly_rate: 35.30,
+        hourly_rate: 35.3,
         vacation_weeks: 4,
         has_bvg: false,
         is_active: true,

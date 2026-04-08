@@ -1,6 +1,11 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { fmt } from '../backend/payroll';
+import { PDF_THEME, pdfValueColMm } from './pdf-theme';
+
+const TABLE_WIDTH_MM = PDF_THEME.INNER_W;
+const LABEL_COL_MM = PDF_THEME.labelColMm;
+const VALUE_COL_MM = pdfValueColMm();
 
 export type IvInvoiceLine = {
   assistantName: string;
@@ -42,6 +47,22 @@ export interface IvInvoicePdfData {
     bankName?: string;
   };
 
+  /**
+   * Empfängerblock (Behörde) – Datenmodell für künftiges Brief-Layout;
+   * aktuelles PDF nutzt die Felder noch nicht vollständig.
+   */
+  invoiceRecipient?: {
+    authorityName?: string;
+    plzCity?: string;
+  };
+
+  /** Zusätzliche Rückfragen-Zeile in der Fusszeile (neben Standard-Footer). */
+  invoiceInquiriesFooter?: {
+    name?: string;
+    email?: string;
+    phone?: string;
+  };
+
   lines: IvInvoiceLine[];
   totalCHF: number;
 }
@@ -53,14 +74,13 @@ function money(n: number): string {
 
 export function generateIvInvoicePdf(data: IvInvoicePdfData): jsPDF {
   const doc = new jsPDF('p', 'mm', 'a4');
-  const W = 190;
-  const LM = 10;
+  const W = PDF_THEME.INNER_W;
+  const LM = PDF_THEME.LM;
   let y = 15;
 
-  // Header (leicht andere Farbe, inkl. Logo)
-  doc.setFillColor(236, 253, 245); // sehr dezentes Asklepios-Grün
+  doc.setFillColor(...PDF_THEME.headerBandRgb);
   doc.rect(0, 0, 210, 32, 'F');
-  doc.setDrawColor(209, 250, 229);
+  doc.setDrawColor(...PDF_THEME.borderRgb);
   doc.line(0, 32, 210, 32);
 
   if (data.logoDataUrl) {
@@ -83,6 +103,7 @@ export function generateIvInvoicePdf(data: IvInvoicePdfData): jsPDF {
   // Boxes (insured + issuer)
   autoTable(doc, {
     startY: y,
+    tableWidth: TABLE_WIDTH_MM,
     head: [['Versicherte Person', '']],
     body: [
       ['Name, Vorname', data.insuredPerson.name || '–'],
@@ -91,15 +112,22 @@ export function generateIvInvoicePdf(data: IvInvoicePdfData): jsPDF {
       ['Postleitzahl, Ort', data.insuredPerson.plzCity || ''],
     ],
     theme: 'grid',
-    headStyles: { fillColor: [230, 252, 240], textColor: 20, fontSize: 9, fontStyle: 'bold' },
+    headStyles: {
+      fillColor: [...PDF_THEME.accentRgb],
+      textColor: PDF_THEME.textDark,
+      fontSize: 9,
+      fontStyle: 'bold',
+    },
     bodyStyles: { fontSize: 9 },
-    columnStyles: { 0: { cellWidth: 60 }, 1: { cellWidth: 120 } },
-    margin: { left: LM, right: LM },
+    columnStyles: { 0: { cellWidth: LABEL_COL_MM }, 1: { cellWidth: VALUE_COL_MM } },
+    margin: { left: LM, right: PDF_THEME.RM },
+    styles: { lineColor: PDF_THEME.borderRgb, lineWidth: 0.1 },
   });
   y = (doc as any).lastAutoTable.finalY + 6;
 
   autoTable(doc, {
     startY: y,
+    tableWidth: TABLE_WIDTH_MM,
     head: [['Rechnungssteller', '']],
     body: [
       ['Name, Vorname', data.invoiceIssuer.name || '–'],
@@ -108,16 +136,23 @@ export function generateIvInvoicePdf(data: IvInvoicePdfData): jsPDF {
       ['Postleitzahl, Ort', data.invoiceIssuer.plzCity || ''],
     ],
     theme: 'grid',
-    headStyles: { fillColor: [230, 252, 240], textColor: 20, fontSize: 9, fontStyle: 'bold' },
+    headStyles: {
+      fillColor: [...PDF_THEME.accentRgb],
+      textColor: PDF_THEME.textDark,
+      fontSize: 9,
+      fontStyle: 'bold',
+    },
     bodyStyles: { fontSize: 9 },
-    columnStyles: { 0: { cellWidth: 60 }, 1: { cellWidth: 120 } },
-    margin: { left: LM, right: LM },
+    columnStyles: { 0: { cellWidth: LABEL_COL_MM }, 1: { cellWidth: VALUE_COL_MM } },
+    margin: { left: LM, right: PDF_THEME.RM },
+    styles: { lineColor: PDF_THEME.borderRgb, lineWidth: 0.1 },
   });
   y = (doc as any).lastAutoTable.finalY + 6;
 
   // Billing section
   autoTable(doc, {
     startY: y,
+    tableWidth: TABLE_WIDTH_MM,
     head: [['Abrechnung', '']],
     body: [
       ['GLN (falls vorhanden)', data.billing.gln || ''],
@@ -130,10 +165,16 @@ export function generateIvInvoicePdf(data: IvInvoicePdfData): jsPDF {
       ['Zahlungskondition', data.billing.paymentTermsDays ? `${data.billing.paymentTermsDays} Tage` : ''],
     ],
     theme: 'grid',
-    headStyles: { fillColor: [230, 252, 240], textColor: 20, fontSize: 9, fontStyle: 'bold' },
+    headStyles: {
+      fillColor: [...PDF_THEME.accentRgb],
+      textColor: PDF_THEME.textDark,
+      fontSize: 9,
+      fontStyle: 'bold',
+    },
     bodyStyles: { fontSize: 9 },
-    columnStyles: { 0: { cellWidth: 60 }, 1: { cellWidth: 120 } },
-    margin: { left: LM, right: LM },
+    columnStyles: { 0: { cellWidth: LABEL_COL_MM }, 1: { cellWidth: VALUE_COL_MM } },
+    margin: { left: LM, right: PDF_THEME.RM },
+    styles: { lineColor: PDF_THEME.borderRgb, lineWidth: 0.1 },
   });
   y = (doc as any).lastAutoTable.finalY + 8;
 
@@ -157,16 +198,21 @@ export function generateIvInvoicePdf(data: IvInvoicePdfData): jsPDF {
   }
 
   body.push([
-    { content: 'TOTAL', styles: { fontStyle: 'bold' as const } } as any,
-    '',
-    '',
-    '',
-    { content: money(data.totalCHF), styles: { fontStyle: 'bold' as const } } as any,
+    {
+      content: 'TOTAL',
+      colSpan: 4,
+      styles: { fontStyle: 'bold' as const, halign: 'right' as const },
+    } as any,
+    {
+      content: money(data.totalCHF),
+      styles: { fontStyle: 'bold' as const, halign: 'right' as const },
+    } as any,
     '',
   ]);
 
   autoTable(doc, {
     startY: y,
+    tableWidth: TABLE_WIDTH_MM,
     head: [[
       'Leistungserbringer',
       'Leistung',
@@ -177,22 +223,28 @@ export function generateIvInvoicePdf(data: IvInvoicePdfData): jsPDF {
     ]],
     body,
     theme: 'grid',
-    headStyles: { fillColor: [16, 185, 129], fontSize: 8, fontStyle: 'bold' },
+    headStyles: {
+      fillColor: [...PDF_THEME.accentRgb],
+      textColor: PDF_THEME.textDark,
+      fontSize: 8,
+      fontStyle: 'bold',
+    },
     bodyStyles: { fontSize: 9 },
     columnStyles: {
-      0: { cellWidth: 38 },
-      1: { cellWidth: 30 },
-      2: { cellWidth: 64 },
-      3: { cellWidth: 24, halign: 'right' },
+      0: { cellWidth: 34 },
+      1: { cellWidth: 26 },
+      2: { cellWidth: 58 },
+      3: { cellWidth: 22, halign: 'right' },
       4: { cellWidth: 26, halign: 'right' },
-      5: { cellWidth: 18 },
+      5: { cellWidth: 24 },
     },
-    margin: { left: LM, right: LM },
+    margin: { left: LM, right: PDF_THEME.RM },
+    styles: { lineColor: PDF_THEME.borderRgb, lineWidth: 0.1 },
   });
 
   // Footer
   doc.setFontSize(7);
-  doc.setTextColor(128);
+  doc.setTextColor(PDF_THEME.textMuted);
   doc.text('Erstellt mit Asklepios – IV-Assistenzbeitrag', LM, 287);
 
   return doc;

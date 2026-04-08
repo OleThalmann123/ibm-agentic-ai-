@@ -82,7 +82,7 @@ export function LoginPage({ autoDemo }: { autoDemo?: boolean }) {
             name: 'Demo Arbeitgeber',
             canton: 'ZH',
             representation: 'self',
-            iv_hours_day: 8, iv_hours_night: 0, iv_rate: 35.30,
+            iv_hours_day: 8, iv_hours_night: 0, iv_rate: 35.3,
             contact_data: {
               first_name: 'Max',
               last_name: 'Muster',
@@ -101,7 +101,7 @@ export function LoginPage({ autoDemo }: { autoDemo?: boolean }) {
             });
 
             await supabase.from('assistant').insert([
-              { employer_id: emp.id, name: 'Max Mustermann (Demo)', email: 'max@example.com', date_of_birth: '1990-01-15', hourly_rate: 35.30, vacation_weeks: 4, has_bvg: false, is_active: true, time_entry_mode: 'manual' },
+              { employer_id: emp.id, name: 'Max Mustermann (Demo)', email: 'max@example.com', date_of_birth: '1990-01-15', hourly_rate: 35.3, vacation_weeks: 4, has_bvg: false, is_active: true, time_entry_mode: 'manual' },
               { employer_id: emp.id, name: 'Anna Schmidt (Demo)', email: 'anna@example.com', date_of_birth: '1985-06-20', hourly_rate: 42.00, vacation_weeks: 5, has_bvg: true, is_active: true, time_entry_mode: 'manual' },
             ]);
           }

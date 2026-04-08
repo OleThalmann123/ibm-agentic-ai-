@@ -20,6 +20,7 @@ import {
   mergeWithJudgeResult,
 } from './openrouter';
 import { readFileContent } from './pdf-extractor';
+import { documentClassificationTool } from './tools';
 import { runJudge } from './judge';
 import {
   startTrace,
@@ -84,6 +85,53 @@ async function runDocumentPipelineImpl(
       imageCount: images?.length ?? 0,
       isScanned: !!images?.length,
     });
+
+    // ── Step 1.5: Contract yes/no (Tool: document_classification) ──
+    // Requirement: First determine whether it's a contract. If not, stop early.
+    const step15 = addTraceStep('contract_gate', 'Ist das ein Vertrag? (Tool)', {
+      mode: images?.length ? 'vision' : 'text',
+    });
+    const documentType =
+      images?.length
+        ? 'pdf_scanned'
+        : file
+          ? (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+              ? 'pdf_text'
+              : file.type.startsWith('image/')
+                ? 'image'
+                : 'text_file')
+          : 'text_file';
+    const classificationRaw = await (documentClassificationTool as any).invoke({
+      documentText,
+      documentType,
+    });
+    let isRelevant = false;
+    try {
+      const parsed = JSON.parse(classificationRaw);
+      isRelevant = parsed?.is_relevant === true;
+    } catch {
+      isRelevant = false;
+    }
+    completeTraceStep(step15, {
+      is_relevant: isRelevant,
+    });
+    if (!isRelevant) {
+      const finalTrace = completeTrace({
+        fieldsExtracted: 0,
+        fieldsMissing: 0,
+        fieldsRequiringReview: 0,
+        overallConfidence: 0,
+        modelUsed: 'n/a',
+        judgeModelUsed: 'n/a',
+        toolsCalled: ['document_classification'],
+      });
+      return {
+        classification: 'other',
+        requiresReview: false,
+        reviewFields: [],
+        trace: finalTrace,
+      };
+    }
 
     // ── Step 2: Agent 1 – Extraction with Tools ──
     const step2 = addTraceStep('agent_extraction', 'Agent 1: Datenextraktion', {

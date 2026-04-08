@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@asklepios/backend';
+import {
+  supabase,
+  getIvStelleRecordForCanton,
+  getIvStelleInvoiceRecipientSuggestion,
+} from '@asklepios/backend';
 import { toast } from 'sonner';
 import {
   Settings as SettingsIcon, User, Save, MapPin, CreditCard,
@@ -72,6 +76,26 @@ export function SettingsPage() {
   const [billingAccountHolderStreet, setBillingAccountHolderStreet] = useState(String((contact as any).billing_account_holder_street ?? ''));
   const [billingAccountHolderPlz, setBillingAccountHolderPlz] = useState(String((contact as any).billing_account_holder_plz ?? ''));
   const [billingAccountHolderCity, setBillingAccountHolderCity] = useState(String((contact as any).billing_account_holder_city ?? ''));
+
+  // IV-Rechnung: Empfänger (Behörde) + optionale Rückfragen-Zeile (Fusszeile PDF)
+  const [ivInvoiceAuthorityName, setIvInvoiceAuthorityName] = useState(
+    String((contact as any).iv_invoice_authority_name ?? ''),
+  );
+  const [ivInvoiceAuthorityPlz, setIvInvoiceAuthorityPlz] = useState(
+    String((contact as any).iv_invoice_authority_plz ?? ''),
+  );
+  const [ivInvoiceAuthorityCity, setIvInvoiceAuthorityCity] = useState(
+    String((contact as any).iv_invoice_authority_city ?? ''),
+  );
+  const [ivInvoiceInquiriesName, setIvInvoiceInquiriesName] = useState(
+    String((contact as any).iv_invoice_inquiries_name ?? ''),
+  );
+  const [ivInvoiceInquiriesEmail, setIvInvoiceInquiriesEmail] = useState(
+    String((contact as any).iv_invoice_inquiries_email ?? ''),
+  );
+  const [ivInvoiceInquiriesPhone, setIvInvoiceInquiriesPhone] = useState(
+    String((contact as any).iv_invoice_inquiries_phone ?? ''),
+  );
 
   const resetOnboarding = async () => {
     if (!employer || !employerAccess) return;
@@ -148,6 +172,12 @@ export function SettingsPage() {
       setBillingAccountHolderStreet(String((c as any).billing_account_holder_street ?? ''));
       setBillingAccountHolderPlz(String((c as any).billing_account_holder_plz ?? ''));
       setBillingAccountHolderCity(String((c as any).billing_account_holder_city ?? ''));
+      setIvInvoiceAuthorityName(String((c as any).iv_invoice_authority_name ?? ''));
+      setIvInvoiceAuthorityPlz(String((c as any).iv_invoice_authority_plz ?? ''));
+      setIvInvoiceAuthorityCity(String((c as any).iv_invoice_authority_city ?? ''));
+      setIvInvoiceInquiriesName(String((c as any).iv_invoice_inquiries_name ?? ''));
+      setIvInvoiceInquiriesEmail(String((c as any).iv_invoice_inquiries_email ?? ''));
+      setIvInvoiceInquiriesPhone(String((c as any).iv_invoice_inquiries_phone ?? ''));
     }
   }, [employer]);
 
@@ -202,6 +232,12 @@ export function SettingsPage() {
           billing_account_holder_plz: billingAccountHolderPlz,
           billing_account_holder_city: billingAccountHolderCity,
           payment_terms_days: 30,
+          iv_invoice_authority_name: ivInvoiceAuthorityName,
+          iv_invoice_authority_plz: ivInvoiceAuthorityPlz,
+          iv_invoice_authority_city: ivInvoiceAuthorityCity,
+          iv_invoice_inquiries_name: ivInvoiceInquiriesName,
+          iv_invoice_inquiries_email: ivInvoiceInquiriesEmail,
+          iv_invoice_inquiries_phone: ivInvoiceInquiriesPhone,
         }
       })
       .eq('id', employer.id);
@@ -329,6 +365,21 @@ export function SettingsPage() {
 
   const detectedCanton = getCantonFromPLZ(representation === 'guardian' ? affectedPlz : insuredPlz);
 
+  const applyIvStelleFromCanton = () => {
+    const code = (employer?.canton || detectedCanton?.code || '').trim().toUpperCase();
+    const sug = getIvStelleInvoiceRecipientSuggestion(code);
+    if (!sug) {
+      toast.error('Keine Standard-IV-Stelle hinterlegt', {
+        description: 'Aktuell nur für die Kantone ZH, BE und Luzern. Bitte Adresse manuell eintragen oder Kanton in den Stammdaten setzen.',
+      });
+      return;
+    }
+    setIvInvoiceAuthorityName(sug.authorityName);
+    setIvInvoiceAuthorityPlz(sug.record.plz);
+    setIvInvoiceAuthorityCity(sug.record.city);
+    toast.success('IV-Stelle übernommen', { description: 'Bitte speichern, damit die Daten wirksam werden.' });
+  };
+
   // Guard: don't render if employer was deleted (e.g. after reset)
   if (!employer || !employerAccess) {
     return (
@@ -337,6 +388,9 @@ export function SettingsPage() {
       </div>
     );
   }
+
+  const ivCantonCode = (employer.canton || detectedCanton?.code || '').trim().toUpperCase();
+  const ivStelleRecord = getIvStelleRecordForCanton(ivCantonCode);
 
   return (
     <div className="space-y-6 w-full max-w-7xl mx-auto pb-10">
@@ -510,9 +564,81 @@ export function SettingsPage() {
                   <EditableField label="PLZ" value={billingAccountHolderPlz} onChange={setBillingAccountHolderPlz} placeholder="8000" />
                   <EditableField label="Ort" value={billingAccountHolderCity} onChange={setBillingAccountHolderCity} placeholder="Zürich" />
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Wird im Download „IV‑Rechnung (Deckblatt)“ verwendet.
+                <p className="text-xs text-muted-foreground mt-2">
+                  Wird im Download „IV‑Rechnung (Deckblatt)“ verwendet. Die acht Leistungskategorien entsprechen Art. 39c IVG
+                  (Auswahl in der Zeiterfassung).
                 </p>
+
+                <div className="mt-6 pt-4 border-t border-border/60 space-y-3">
+                  <p className="text-sm font-medium text-foreground">Empfänger der Rechnung (Behörde)</p>
+                  <p className="text-xs text-muted-foreground">
+                    Für das geplante Brief-Layout (oben rechts). Daten werden bereits mitgegeben, sobald das PDF angepasst ist.
+                  </p>
+
+                  {ivStelleRecord ? (
+                    <div className="rounded-xl border border-primary/15 bg-primary/[0.04] p-3 space-y-2 text-xs">
+                      <p className="font-semibold text-foreground">
+                        Referenz IV-Stelle ({ivCantonCode})
+                      </p>
+                      <p className="text-muted-foreground leading-relaxed whitespace-pre-line">
+                        {ivStelleRecord.institutionNameDe}
+                        {'\n'}
+                        {ivStelleRecord.streetLine}
+                        {ivStelleRecord.postBoxLine ? `\n${ivStelleRecord.postBoxLine}` : ''}
+                        {'\n'}
+                        {ivStelleRecord.plz} {ivStelleRecord.city}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <a
+                          href={ivStelleRecord.website}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary font-medium hover:underline"
+                        >
+                          Website
+                        </a>
+                        <span className="text-muted-foreground">·</span>
+                        <span className="text-muted-foreground">{ivStelleRecord.phone}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={applyIvStelleFromCanton}
+                        className="mt-1 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
+                      >
+                        Standard-Adresse übernehmen
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-amber-700/90 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+                      Kein Kanton ZH/BE/LU erkannt (Stammdaten-Kanton oder PLZ der betroffenen Person). IV-Adresse bitte manuell eintragen oder Kanton prüfen.
+                    </p>
+                  )}
+
+                  <div>
+                    <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+                      Dienststelle / Behörde
+                    </label>
+                    <textarea
+                      rows={4}
+                      value={ivInvoiceAuthorityName}
+                      onChange={e => setIvInvoiceAuthorityName(e.target.value)}
+                      placeholder="Name und Anschrift der IV-Stelle (mehrzeilig möglich)"
+                      className="w-full px-3.5 py-2.5 rounded-xl border bg-background text-sm font-medium shadow-sm shadow-black/5 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all resize-y min-h-[5.5rem]"
+                    />
+                  </div>
+                  <div className="grid grid-cols-[120px_1fr] gap-3">
+                    <EditableField label="PLZ" value={ivInvoiceAuthorityPlz} onChange={setIvInvoiceAuthorityPlz} placeholder="8000" />
+                    <EditableField label="Ort" value={ivInvoiceAuthorityCity} onChange={setIvInvoiceAuthorityCity} placeholder="Zürich" />
+                  </div>
+                </div>
+
+                <div className="mt-6 pt-4 border-t border-border/60 space-y-3">
+                  <p className="text-sm font-medium text-foreground">Rückfragen (Fusszeile Rechnung)</p>
+                  <p className="text-xs text-muted-foreground">Optional, falls abweichend vom Rechnungssteller.</p>
+                  <EditableField label="Name" value={ivInvoiceInquiriesName} onChange={setIvInvoiceInquiriesName} placeholder="Kontaktperson" />
+                  <EditableField label="E-Mail" value={ivInvoiceInquiriesEmail} onChange={setIvInvoiceInquiriesEmail} placeholder="mail@…" />
+                  <EditableField label="Telefon" value={ivInvoiceInquiriesPhone} onChange={setIvInvoiceInquiriesPhone} placeholder="+41 …" />
+                </div>
               </Section>
 
               <div className="sticky bottom-4 z-10">

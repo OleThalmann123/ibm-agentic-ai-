@@ -1,18 +1,26 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@asklepios/backend';
-import type { Employer, EmployerAccess, UserRole } from '@asklepios/backend';
+import type { Employer, EmployerAccess } from '@asklepios/backend';
+
+export type EmployerAccessRow = EmployerAccess & {
+  employer?: { id: string; name: string } | null;
+};
+
+const ACTIVE_EMPLOYER_ACCESS_KEY = 'asklepios_active_employer_access_id';
 
 interface AuthContextType {
   session: Session | null;
   user: User | null;
   employer: Employer | null;
   employerAccess: EmployerAccess | null;
+  employerAccessList: EmployerAccessRow[];
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  selectEmployerAccess: (access: EmployerAccessRow) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -22,22 +30,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [employer, setEmployer] = useState<Employer | null>(null);
   const [employerAccess, setEmployerAccess] = useState<EmployerAccess | null>(null);
+  const [employerAccessList, setEmployerAccessList] = useState<EmployerAccessRow[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchEmployerAccess = async (userId: string) => {
-    // Get the first employer_access for this user
-    const { data } = await supabase
+  const fetchEmployerAccesses = async (userId: string) => {
+    const { data, error } = await supabase
       .from('employer_access')
-      .select('*')
-      .eq('user_id', userId)
-      .limit(1)
-      .single();
-    
-    if (data) {
-      setEmployerAccess(data as EmployerAccess);
-      return data as EmployerAccess;
+      .select('*, employer:employer_id(id, name)')
+      .eq('user_id', userId);
+
+    if (error || !data?.length) {
+      setEmployerAccessList([]);
+      setEmployerAccess(null);
+      setEmployer(null);
+      return null;
     }
-    return null;
+
+    const list = data as EmployerAccessRow[];
+    setEmployerAccessList(list);
+
+    const storedId = localStorage.getItem(ACTIVE_EMPLOYER_ACCESS_KEY);
+    const picked = storedId ? list.find((a) => a.id === storedId) : null;
+    const access = picked ?? list[0]!;
+
+    setEmployerAccess(access);
+    localStorage.setItem(ACTIVE_EMPLOYER_ACCESS_KEY, access.id);
+    return access;
   };
 
   const fetchEmployer = async (employerId: string) => {
@@ -53,9 +71,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const refreshProfile = async () => {
     if (user) {
-      const access = await fetchEmployerAccess(user.id);
+      const access = await fetchEmployerAccesses(user.id);
       if (access) await fetchEmployer(access.employer_id);
     }
+  };
+
+  const selectEmployerAccess = async (access: EmployerAccessRow) => {
+    localStorage.setItem(ACTIVE_EMPLOYER_ACCESS_KEY, access.id);
+    setEmployerAccess(access);
+    await fetchEmployer(access.employer_id);
   };
 
   useEffect(() => {
@@ -63,7 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        fetchEmployerAccess(session.user.id).then((access) => {
+        fetchEmployerAccesses(session.user.id).then((access) => {
           if (access) fetchEmployer(access.employer_id);
           setLoading(false);
         });
@@ -76,12 +100,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        fetchEmployerAccess(session.user.id).then((access) => {
+        fetchEmployerAccesses(session.user.id).then((access) => {
           if (access) fetchEmployer(access.employer_id);
         });
       } else {
         setEmployer(null);
         setEmployerAccess(null);
+        setEmployerAccessList([]);
       }
     });
 
@@ -106,12 +131,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut();
     setEmployer(null);
     setEmployerAccess(null);
+    setEmployerAccessList([]);
+    try {
+      localStorage.removeItem(ACTIVE_EMPLOYER_ACCESS_KEY);
+    } catch { /* ignore */ }
   };
 
   return (
     <AuthContext.Provider value={{
-      session, user, employer, employerAccess, loading,
-      signIn, signUp, signOut, refreshProfile
+      session, user, employer, employerAccess, employerAccessList, loading,
+      signIn, signUp, signOut, refreshProfile, selectEmployerAccess
     }}>
       {children}
     </AuthContext.Provider>

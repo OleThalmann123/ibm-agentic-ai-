@@ -21,6 +21,7 @@ import { getLangSmithInvokeConfig } from './langsmith';
 import type { JudgeFieldResult } from './judge';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1';
+const DEFAULT_MODEL = 'anthropic/claude-opus-4.6';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -186,7 +187,7 @@ function getApiKey(): string | null {
   return import.meta.env.VITE_OPENROUTER_API_KEY || null;
 }
 
-function getModel(apiKey: string, modelName: string = 'openrouter/auto'): ChatOpenAI {
+function getModel(apiKey: string, modelName: string = DEFAULT_MODEL): ChatOpenAI {
   return new ChatOpenAI({
     apiKey,
     configuration: {
@@ -380,7 +381,7 @@ async function runAgentWithTools(
     console.warn(`[Agent 1] Tool-calling limit reached (${MAX_TOOL_ROUNDS} rounds). Forcing final response.`);
     const forceModel = getModel(
       import.meta.env.VITE_OPENROUTER_API_KEY!,
-      'openrouter/auto',
+      DEFAULT_MODEL,
     );
     response = await forceModel.invoke(
       allMessages,
@@ -402,7 +403,7 @@ export async function extractContractData(
     throw new Error('VITE_OPENROUTER_API_KEY ist nicht konfiguriert.');
   }
 
-  const model = getModel(apiKey, 'openrouter/auto');
+  const model = getModel(apiKey, DEFAULT_MODEL);
 
   return runAgentWithTools(model, [
     new SystemMessage(SYSTEM_PROMPT),
@@ -432,7 +433,7 @@ export async function extractContractFromImages(
     throw new Error('VITE_OPENROUTER_API_KEY ist nicht konfiguriert.');
   }
 
-  const model = getModel(apiKey, 'google/gemini-2.0-flash-001');
+  const model = getModel(apiKey, DEFAULT_MODEL);
 
   const response = await model.invoke(
     [new SystemMessage(SYSTEM_PROMPT), new HumanMessage({ content: userContent })],

@@ -117,7 +117,7 @@ function getJudgeModel(apiKey: string): ChatOpenAI {
         'X-Title': 'IV-Assistenzbeitrag Judge',
       },
     },
-    modelName: 'google/gemini-2.0-flash-001',
+    modelName: 'anthropic/claude-opus-4.6',
     temperature: 0.0,
     maxRetries: 2,
     modelKwargs: {

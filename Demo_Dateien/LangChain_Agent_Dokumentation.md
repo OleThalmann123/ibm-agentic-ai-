@@ -148,7 +148,7 @@ LangChain baut intern einen HTTP POST Request:
 
 ```
 POST https://openrouter.ai/api/v1/chat/completions
-Authorization: Bearer ***REMOVED***
+Authorization: Bearer <OPENROUTER_API_KEY>
 Content-Type: application/json
 HTTP-Referer: http://localhost:5173
 X-Title: IV-Assistenzbeitrag Vertragsextraktion
@@ -356,7 +356,7 @@ PDF-Datei (500 KB)
 
 **Schritt 2: LangChain-Aufruf (openrouter.ts)**
 ```
-getModel('***REMOVED***', 'openrouter/auto')
+getModel('<OPENROUTER_API_KEY>', 'openrouter/auto')
   → new ChatOpenAI({ baseURL: 'openrouter.ai/api/v1', temperature: 0.1 })
 
 model.invoke([

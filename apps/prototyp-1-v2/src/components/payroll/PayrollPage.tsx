@@ -6,12 +6,19 @@ import {
 } from '@asklepios/backend';
 import { calculatePayslip, generatePayslipPdf, type PayslipAccountingMethod } from '@asklepios/backend';
 import { generateTimesheetPdf } from '@asklepios/backend';
-import { generateIvInvoicePdf, type IvInvoiceLine } from '@asklepios/backend';
+import {
+  generateIvInvoicePdf,
+  type IvInvoiceLine,
+  activityLabelFromStoredCode,
+  formatIvCategoryForInlineDisplay,
+  IV_INVOICE_DEFAULT_RATE_CHF,
+  getIvStelleInvoiceRecipientSuggestion,
+} from '@asklepios/backend';
 import { PDFDocument } from 'pdf-lib';
 import {
   Calculator, FileText, ChevronLeft, ChevronRight, Users,
   ShieldCheck, Clock, Eye, Download, Pencil, Save, X,
-  ChevronDown, TrendingUp, Banknote, ArrowRight, ArrowLeft, Sparkles, Package,
+  ChevronDown, TrendingUp, Banknote, ArrowRight, ArrowLeft, Sparkles, Package, ClipboardList,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Assistant } from '@asklepios/backend';
@@ -38,49 +45,6 @@ interface MonthlyHours {
 // ─── Helpers ───
 const MONTH_NAMES = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
 
-const ACTIVITY_LABELS: Record<string, string> = {
-  // Gespeicherte Codes bleiben (2–10); UI-Legende soll 1–8 sein.
-  '2': '1) Alltägliche Lebensverrichtungen',
-  '3': '2) Haushaltsführung',
-  '4': '3) Gesellschaftliche Teilhabe und Freizeitgestaltung',
-  '5': '4) Erziehung und Kinderbetreuung',
-  '6': '5) Gemeinnützig/ehrenamtlich',
-  '7': '6) Berufliche Aus- und Weiterbildung',
-  '8': '7) Erwerbstätigkeit (1. Arbeitsmarkt)',
-  '9': '8) Überwachung während des Tages',
-  '10': 'Nachtdienst',
-};
-
-function activityLabelFromCode(code?: string | null): string {
-  const c = (code || '').trim();
-  if (!c) return 'Ohne Kategorie';
-  return ACTIVITY_LABELS[c] || c;
-}
-
-function formatActivityForInlineDisplay(code?: string | null): string {
-  const raw = (code || '').trim();
-  if (!raw) return 'Ohne Kategorie';
-  const n = Number(raw);
-  if (!Number.isFinite(n)) return raw;
-
-  // Stored: 2..9 map to display 1..8
-  if (n >= 2 && n <= 9) {
-    const display = n - 1;
-    const label = ACTIVITY_LABELS[String(n)];
-    const clean = label ? label.replace(/^\d+\)\s*/, '') : '';
-    return clean ? `${display} · ${clean}` : String(display);
-  }
-
-  // Allow already-display numbering 1..8
-  if (n >= 1 && n <= 8) {
-    const label = Object.entries(ACTIVITY_LABELS).find(([, v]) => v.startsWith(`${n})`))?.[1];
-    const clean = label ? label.replace(/^\d+\)\s*/, '') : '';
-    return clean ? `${n} · ${clean}` : String(n);
-  }
-
-  return raw;
-}
-
 function parseHours(start: string, end: string): number {
   const toMin = (t: string) => {
     const [hhRaw, mmRaw] = (t || '').split(':');
@@ -98,6 +62,19 @@ function parseHours(start: string, end: string): number {
   const raw = e - s;
   const minutes = raw >= 0 ? raw : raw + 24 * 60;
   return Math.max(0, minutes / 60);
+}
+
+/** Anzeige/Bearbeitung: nur HH:mm (ohne Sekunden). */
+function formatTimeHHmm(t: string | undefined | null): string {
+  const raw = (t ?? '').trim();
+  if (!raw) return '';
+  const [hPart, mPart] = raw.split(':');
+  if (mPart === undefined) return raw.slice(0, 5);
+  const hh = Math.trunc(Number(hPart));
+  const mm = Math.trunc(Number(String(mPart).replace(/\D/g, '').slice(0, 2)));
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return raw.slice(0, 5);
+  if (hh === 24 && mm === 0) return '24:00';
+  return `${String(Math.min(23, Math.max(0, hh))).padStart(2, '0')}:${String(Math.min(59, Math.max(0, mm))).padStart(2, '0')}`;
 }
 
 function monthKey(d: Date): string {
@@ -147,6 +124,19 @@ async function loadImageAsDataUrl(url: string): Promise<string> {
 
 // ─── Flow Steps (3-step linear flow) ───
 type FlowStep = 'stunden' | 'abrechnung' | 'dokumente';
+
+/** Spiegelt bestätigte Monate in assistant.contract_data, damit der Zugangslink sie lesen kann. */
+async function mirrorPayrollFreigabeToAssistant(assistantId: string, monthFirst: string) {
+  const { data, error } = await supabase.from('assistant').select('contract_data').eq('id', assistantId).single();
+  if (error || !data) return;
+  const cd = { ...((data.contract_data as Record<string, unknown>) || {}) } as Record<string, unknown>;
+  const prev = Array.isArray(cd.payroll_freigaben) ? (cd.payroll_freigaben as string[]) : [];
+  const normalized = monthFirst.slice(0, 10);
+  if (prev.some((p) => String(p).slice(0, 10) === normalized)) return;
+  const freigaben = new Set([...prev, normalized]);
+  cd.payroll_freigaben = [...freigaben].sort();
+  await supabase.from('assistant').update({ contract_data: cd }).eq('id', assistantId);
+}
 
 export function PayrollPage() {
   const { employerAccess, employer } = useAuth();
@@ -256,6 +246,30 @@ export function PayrollPage() {
     }
 
     setTimeEntries(grouped);
+
+    const assistantIds = (aData || []).map((a) => a.id);
+    if (assistantIds.length > 0) {
+      const monthFirst = `${year}-${String(month).padStart(2, '0')}-01`;
+      const { data: confRows } = await supabase
+        .from('payroll_confirmation')
+        .select('assistant_id, month, confirmed')
+        .in('assistant_id', assistantIds)
+        .eq('month', monthFirst);
+      const nextConfirmed: Record<string, boolean> = {};
+      for (const row of confRows || []) {
+        if (!row.confirmed || !row.assistant_id) continue;
+        const mk =
+          typeof row.month === 'string'
+            ? row.month.slice(0, 7)
+            : `${year}-${String(month).padStart(2, '0')}`;
+        nextConfirmed[`${row.assistant_id}-${mk}`] = true;
+        void mirrorPayrollFreigabeToAssistant(row.assistant_id, monthFirst);
+      }
+      setConfirmedMap(nextConfirmed);
+    } else {
+      setConfirmedMap({});
+    }
+
     setLoading(false);
   };
 
@@ -304,13 +318,39 @@ export function PayrollPage() {
     const parts = currentMonth.split('-').map(Number);
     const year = parts[0] ?? 2026;
     const month = parts[1] ?? 1;
+    const monthFirst = `${year}-${String(month).padStart(2, '0')}-01`;
 
-    await supabase.from('payroll_confirmation').upsert({
+    const { error: confErr } = await supabase.from('payroll_confirmation').upsert({
       assistant_id: assistantId,
-      month: `${year}-${String(month).padStart(2, '0')}-01`,
+      month: monthFirst,
       confirmed: true,
       confirmed_at: new Date().toISOString(),
     }, { onConflict: 'assistant_id,month' });
+
+    if (confErr) {
+      toast.error('Freigabe konnte nicht gespeichert werden', { description: confErr.message });
+      return;
+    }
+
+    // Zusätzlich in contract_data spiegeln, damit der Zugangslink (ohne payroll_confirmation-SELECT) die Freigabe sieht.
+    const { data: asstRow, error: loadAsstErr } = await supabase
+      .from('assistant')
+      .select('contract_data')
+      .eq('id', assistantId)
+      .single();
+    if (!loadAsstErr && asstRow) {
+      const cd = { ...((asstRow.contract_data as Record<string, unknown>) || {}) } as Record<string, unknown>;
+      const prev = Array.isArray(cd.payroll_freigaben) ? (cd.payroll_freigaben as string[]) : [];
+      const freigaben = new Set([...prev, monthFirst]);
+      cd.payroll_freigaben = [...freigaben].sort();
+      const { error: patchErr } = await supabase.from('assistant').update({ contract_data: cd }).eq('id', assistantId);
+      if (patchErr) {
+        console.error('payroll_freigaben update', patchErr);
+        toast.message('Hinweis', {
+          description: 'Freigabe ist gespeichert; der Assistenz-Link sieht sie ggf. erst nach erneutem Öffnen des Lohn-Tabs.',
+        });
+      }
+    }
 
     setConfirmedMap(prev => ({ ...prev, [`${assistantId}-${currentMonth}`]: true }));
     toast.success(`Lohnabrechnung für ${name} bestätigt!`);
@@ -337,8 +377,8 @@ export function PayrollPage() {
   // Edit entry
   const startEditing = (entry: { id: string; start_time: string; end_time: string }) => {
     setEditingEntryId(entry.id);
-    setEditStart(entry.start_time);
-    setEditEnd(entry.end_time);
+    setEditStart(formatTimeHHmm(entry.start_time));
+    setEditEnd(formatTimeHHmm(entry.end_time));
   };
 
   const cancelEditing = () => {
@@ -399,7 +439,9 @@ export function PayrollPage() {
           : insuredName;
 
       const invoiceIssuerEmailPhone = [cd?.email || '', cd?.phone || ''].filter(Boolean).join(' · ');
-      const rate = Number(String(employer?.iv_rate ?? 35.30).replace(',', '.')) || 35.30;
+      const rate =
+        Number(String(employer?.iv_rate ?? IV_INVOICE_DEFAULT_RATE_CHF).replace(',', '.')) ||
+        IV_INVOICE_DEFAULT_RATE_CHF;
 
       const ivLines: IvInvoiceLine[] = [];
       for (const a of assistants) {
@@ -416,7 +458,7 @@ export function PayrollPage() {
           const amount = Number((rounded * rate).toFixed(2));
           ivLines.push({
             assistantName: a.name || '—',
-            activityLabel: cat === 'Ohne Kategorie' ? cat : activityLabelFromCode(cat),
+            activityLabel: cat === 'Ohne Kategorie' ? cat : activityLabelFromStoredCode(cat),
             hours: rounded,
             rateCHF: rate,
             amountCHF: amount,
@@ -427,6 +469,23 @@ export function PayrollPage() {
       const ivTotalCHF = Number(ivLines.reduce((s, l) => s + (l.amountCHF || 0), 0).toFixed(2));
 
       const logoDataUrl = await loadImageAsDataUrl(asklepiosLogo);
+
+      const recipientAuthorityManual = String(cd?.iv_invoice_authority_name ?? '').trim();
+      const recipientPlzManual =
+        cd?.iv_invoice_authority_plz && cd?.iv_invoice_authority_city
+          ? `${cd.iv_invoice_authority_plz} ${cd.iv_invoice_authority_city}`.trim()
+          : '';
+      const ivStelleSuggestion = getIvStelleInvoiceRecipientSuggestion(employer?.canton);
+      const invoiceRecipientResolved =
+        recipientAuthorityManual || recipientPlzManual
+          ? { authorityName: recipientAuthorityManual, plzCity: recipientPlzManual }
+          : ivStelleSuggestion
+            ? {
+                authorityName: ivStelleSuggestion.authorityName,
+                plzCity: ivStelleSuggestion.plzCity,
+              }
+            : { authorityName: '', plzCity: '' };
+
       const ivDoc = generateIvInvoicePdf({
         invoiceDateLabel: new Date().toLocaleDateString('de-CH'),
         monthLabel: monthLabel(currentMonth),
@@ -458,6 +517,12 @@ export function PayrollPage() {
             : '',
           paymentTermsDays: Number(cd?.payment_terms_days) || 30,
           bankName: cd?.bank_name || '',
+        },
+        invoiceRecipient: invoiceRecipientResolved,
+        invoiceInquiriesFooter: {
+          name: String(cd?.iv_invoice_inquiries_name ?? '').trim(),
+          email: String(cd?.iv_invoice_inquiries_email ?? '').trim(),
+          phone: String(cd?.iv_invoice_inquiries_phone ?? '').trim(),
         },
         lines: ivLines,
         totalCHF: ivTotalCHF,
@@ -817,7 +882,7 @@ export function PayrollPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
               <div style={{
                 width: 36, height: 36, borderRadius: 10,
-                background: 'linear-gradient(135deg, #3b82f6, #6366f1)',
+                background: 'linear-gradient(135deg, #2563eb, #059669)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
                 <Calculator style={{ width: 20, height: 20, color: '#fff' }} />
@@ -875,7 +940,7 @@ export function PayrollPage() {
         </div>
 
         {/* Stats row */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginTop: 24, position: 'relative', zIndex: 1 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14, marginTop: 24, position: 'relative', zIndex: 1 }}>
           <StatCard icon={<Users style={{ width: 16, height: 16 }} />} label="Personen" value={String(assistants.length)} />
           <StatCard icon={<Clock style={{ width: 16, height: 16 }} />} label="Stunden" value={fmt(totalHoursAll)} />
           <StatCard icon={<ShieldCheck style={{ width: 16, height: 16 }} />} label="Bestätigt" value={`${confirmedCount}/${assistants.length}`} />
@@ -912,7 +977,7 @@ export function PayrollPage() {
                 : 'border-border/70 bg-gradient-to-br from-card via-card to-primary/[0.035]',
             )}
           >
-            {/* Spielerische Mesh-Glows — nur Primary / Success / Violet, wie im Rest der Karte */}
+            {/* Mesh-Glows — nur Primary / Success (kein Violett), wie im Rest der Karte */}
             {monthlyPackageReady ? (
               <>
                 <div
@@ -1256,7 +1321,16 @@ export function PayrollPage() {
                               <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', border: '1px solid #e2e8f0' }}>
                                 <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b', margin: '0 0 4px' }}>Bruttolohn</p>
                                 <p style={{ fontSize: 17, fontWeight: 800, color: '#1e293b', margin: 0, fontVariantNumeric: 'tabular-nums' }}>CHF {fmt(result.bruttolohn.perYear)}</p>
-                                <p style={{ fontSize: 11, color: '#94a3b8', margin: '2px 0 0' }}>{fmt(hours.totalHours)} Std × CHF {fmt(a.hourly_rate || 0)}</p>
+                                <div style={{ marginTop: 2, minWidth: 0 }}>
+                                  <p style={{ fontSize: 11, color: '#94a3b8', margin: 0, lineHeight: 1.4 }}>
+                                    Arbeitslohn: {fmt(hours.totalHours)} Std × CHF {fmt(a.hourly_rate || 0)} = CHF {fmt(result.arbeitslohn.perYear)}
+                                  </p>
+                                  {result.ferienzuschlag.perYear > 0 ? (
+                                    <p style={{ fontSize: 11, color: '#94a3b8', margin: '4px 0 0', lineHeight: 1.4 }}>
+                                      Ferienzuschlag: CHF {fmt(result.ferienzuschlag.perYear)} (laut Ferienwochen im Vertrag)
+                                    </p>
+                                  ) : null}
+                                </div>
                               </div>
                               <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', border: '1px solid #e2e8f0' }}>
                                 <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b', margin: '0 0 4px' }}>Auszuzahlender Nettolohn</p>
@@ -1335,10 +1409,10 @@ export function PayrollPage() {
                                                 />
                                               </div>
                                             ) : (
-                                              <p style={{ fontSize: 13, fontWeight: 500, color: '#1e293b', margin: 0 }}>{e.start_time} – {e.end_time}</p>
+                                              <p style={{ fontSize: 13, fontWeight: 500, color: '#1e293b', margin: 0 }}>{formatTimeHHmm(e.start_time)} – {formatTimeHHmm(e.end_time)}</p>
                                             )}
                                             <p style={{ fontSize: 11, color: '#94a3b8', margin: '1px 0 0' }}>
-                                              {formatActivityForInlineDisplay(e.category)}{e.is_night && ' 🌙'}
+                                              {formatIvCategoryForInlineDisplay(e.category)}{e.is_night && ' 🌙'}
                                             </p>
                                           </div>
                                         </div>
@@ -1612,6 +1686,7 @@ export function PayrollPage() {
                                   fileType="PDF"
                                   icon={<Download style={{ width: 18, height: 18 }} />}
                                   layout="row"
+                                  docListKind="payslip"
                                   onClick={() => downloadPayslipPdf(a, result, hours)}
                                 />
                               )}
@@ -1622,6 +1697,7 @@ export function PayrollPage() {
                                 icon={<Download style={{ width: 18, height: 18 }} />}
                                 disabled={hours.totalHours === 0}
                                 layout="row"
+                                docListKind="report"
                                 onClick={() => void downloadLohnUndEinsatzrapportPdf(a, hours)}
                               />
                             </div>
@@ -1656,6 +1732,7 @@ export function PayrollPage() {
 function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
     <div style={{
+      minWidth: 0,
       background: 'rgba(255,255,255,0.07)',
       borderRadius: 12, padding: '14px 16px',
       backdropFilter: 'blur(8px)',
@@ -1665,7 +1742,15 @@ function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string
         {icon}
         <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
       </div>
-      <p style={{ fontSize: 22, fontWeight: 800, color: '#fff', margin: 0, fontVariantNumeric: 'tabular-nums' }}>{value}</p>
+      <p style={{
+        fontSize: 22,
+        fontWeight: 800,
+        color: '#fff',
+        margin: 0,
+        fontVariantNumeric: 'tabular-nums',
+        overflowWrap: 'anywhere',
+        lineHeight: 1.2,
+      }}>{value}</p>
     </div>
   );
 }
@@ -1874,6 +1959,7 @@ function DocCard({
   disabled,
   tone,
   layout = 'card',
+  docListKind,
   onClick,
 }: {
   title: string;
@@ -1884,11 +1970,26 @@ function DocCard({
   disabled?: boolean;
   tone?: 'default' | 'primary';
   layout?: 'card' | 'row';
+  /** Nur für Listen-Layout: unterscheidbare Mini-Icons in der Vorschau */
+  docListKind?: 'payslip' | 'report';
   onClick: () => void;
 }) {
   const isPrimary = tone === 'primary';
   const typeColor = fileType === 'PDF' ? { fg: '#1d4ed8', bg: '#eef2ff', border: '#c7d2fe' } : { fg: '#0f766e', bg: '#ecfeff', border: '#a5f3fc' };
   const isRow = layout === 'row';
+  const listAccent =
+    docListKind === 'payslip'
+      ? { previewBg: 'linear-gradient(180deg, #ecfdf5 0%, #f8fafc 100%)', chipBg: '#d1fae5', chipFg: '#047857' }
+      : docListKind === 'report'
+        ? { previewBg: 'linear-gradient(180deg, #eff6ff 0%, #f8fafc 100%)', chipBg: '#dbeafe', chipFg: '#1d4ed8' }
+        : null;
+  const ListKindIcon = docListKind === 'payslip' ? Banknote : docListKind === 'report' ? ClipboardList : null;
+  const previewSheen =
+    docListKind === 'payslip'
+      ? 'radial-gradient(120px 80px at 25% 20%, rgba(16,185,129,0.14), transparent 62%), radial-gradient(140px 90px at 80% 60%, rgba(5,150,105,0.07), transparent 62%)'
+      : docListKind === 'report'
+        ? 'radial-gradient(120px 80px at 25% 20%, rgba(59,130,246,0.11), transparent 62%), radial-gradient(140px 90px at 80% 60%, rgba(14,165,233,0.08), transparent 62%)'
+        : 'radial-gradient(120px 80px at 25% 20%, rgba(59,130,246,0.08), transparent 62%), radial-gradient(140px 90px at 80% 60%, rgba(14,165,233,0.06), transparent 62%)';
 
   return (
     <button
@@ -1921,13 +2022,13 @@ function DocCard({
         e.currentTarget.style.background = '#fff';
       }}
     >
-      {/* Left preview (small, passive) */}
+      {/* Left preview: bei Dokumenten-Liste klares Typ-Icon statt generischer Zeilen */}
       <div style={{
-        width: isRow ? 92 : '100%',
+        width: isRow ? (listAccent ? 104 : 92) : '100%',
         height: isRow ? 62 : 'auto',
         borderRadius: 14,
         border: isPrimary ? '1px solid rgba(59,130,246,0.18)' : '1px solid #e2e8f0',
-        background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
+        background: isRow && listAccent ? listAccent.previewBg : 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
         position: 'relative',
         overflow: 'hidden',
         flexShrink: 0,
@@ -1935,20 +2036,53 @@ function DocCard({
         <div style={{
           position: 'absolute',
           inset: 0,
-          background: 'radial-gradient(120px 80px at 25% 20%, rgba(59,130,246,0.08), transparent 62%), radial-gradient(140px 90px at 80% 60%, rgba(99,102,241,0.06), transparent 62%)',
+          background: previewSheen,
           pointerEvents: 'none',
         }} />
-        <div style={{ padding: 10, position: 'relative' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-            <div style={{ height: 8, width: '62%', borderRadius: 999, background: '#e2e8f0' }} />
-            <div style={{ height: 8, width: 28, borderRadius: 999, background: '#e2e8f0' }} />
+        {isRow && listAccent && ListKindIcon ? (
+          <div
+            style={{
+              position: 'relative',
+              zIndex: 1,
+              height: '100%',
+              minHeight: 62,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 8,
+            }}
+            aria-hidden
+          >
+            <div
+              style={{
+                width: 52,
+                height: 52,
+                borderRadius: 14,
+                background: listAccent.chipBg,
+                border: `1px solid ${listAccent.chipFg}22`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: listAccent.chipFg,
+                boxShadow: '0 2px 8px rgba(15,23,42,0.06)',
+              }}
+            >
+              <ListKindIcon style={{ width: 28, height: 28 }} strokeWidth={2} />
+            </div>
           </div>
-          <div style={{ display: 'grid', gap: 6 }}>
-            <div style={{ height: 7, width: '92%', borderRadius: 999, background: '#e2e8f0' }} />
-            <div style={{ height: 7, width: '84%', borderRadius: 999, background: '#e2e8f0' }} />
-            <div style={{ height: 7, width: '74%', borderRadius: 999, background: '#e2e8f0' }} />
+        ) : (
+          <div style={{ padding: 10, position: 'relative', zIndex: 1 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+              <div style={{ height: 8, width: '62%', borderRadius: 999, background: '#e2e8f0' }} />
+              <div style={{ height: 8, width: 28, borderRadius: 999, background: '#e2e8f0' }} />
+            </div>
+            <div style={{ display: 'grid', gap: 6 }}>
+              <div style={{ height: 7, width: '92%', borderRadius: 999, background: '#e2e8f0' }} />
+              <div style={{ height: 7, width: '84%', borderRadius: 999, background: '#e2e8f0' }} />
+              <div style={{ height: 7, width: '74%', borderRadius: 999, background: '#e2e8f0' }} />
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Right meta */}
@@ -1958,18 +2092,32 @@ function DocCard({
             width: 36,
             height: 36,
             borderRadius: 12,
-            background: isPrimary ? 'rgba(59,130,246,0.10)' : '#f1f5f9',
+            background: isPrimary
+              ? 'rgba(59,130,246,0.10)'
+              : listAccent
+                ? docListKind === 'payslip'
+                  ? 'rgba(16,185,129,0.14)'
+                  : 'rgba(59,130,246,0.12)'
+                : '#f1f5f9',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            color: isPrimary ? '#2563eb' : '#334155',
+            color: isPrimary ? '#2563eb' : listAccent ? listAccent.chipFg : '#334155',
             flexShrink: 0,
           }}>
             {icon}
           </div>
           <div style={{ minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', letterSpacing: '-0.01em' }}>{title}</span>
+              <span style={{
+                fontSize: 14,
+                fontWeight: 800,
+                color: '#0f172a',
+                letterSpacing: '-0.01em',
+                lineHeight: 1.35,
+                overflowWrap: 'anywhere',
+                minWidth: 0,
+              }}>{title}</span>
               <span style={{
                 fontSize: 10,
                 fontWeight: 800,
@@ -2004,8 +2152,8 @@ function DocCard({
             )}
           </div>
         </div>
-        <div style={{ fontSize: 12, color: '#94a3b8' }}>
-          Klick zum Herunterladen
+        <div style={{ fontSize: 12, color: disabled ? '#cbd5e1' : '#94a3b8' }}>
+          {disabled ? 'Keine Stunden erfasst – Download nicht verfügbar' : 'Klick zum Herunterladen'}
         </div>
       </div>
     </button>

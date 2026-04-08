@@ -13,7 +13,7 @@ const navItems = [
 ];
 
 export function AppShell() {
-  const { user, employer, signOut, refreshProfile } = useAuth();
+  const { user, employer, employerAccess, employerAccessList, selectEmployerAccess, signOut, refreshProfile } = useAuth();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -59,6 +59,29 @@ export function AppShell() {
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {employerAccessList.length > 1 && (
+          <div className="px-4 py-2 border-b border-sidebar-border space-y-1">
+            <label htmlFor="mandant-switch" className="text-[10px] font-semibold text-sidebar-foreground/50 uppercase tracking-wider">
+              Mandant
+            </label>
+            <select
+              id="mandant-switch"
+              value={employerAccess?.id ?? ''}
+              onChange={(e) => {
+                const row = employerAccessList.find((a) => a.id === e.target.value);
+                if (row) void selectEmployerAccess(row);
+              }}
+              className="w-full text-xs rounded-lg border border-sidebar-border bg-sidebar-accent/30 text-sidebar-foreground px-2 py-2 focus:outline-none focus:ring-2 focus:ring-primary/30"
+            >
+              {employerAccessList.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.employer?.name?.trim() || a.invited_email || 'Mandant'}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Navigation */}
         <nav className="flex-1 p-3 space-y-1">

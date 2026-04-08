@@ -1,6 +1,16 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import type { PayslipAccountingMethod, PayslipResult } from '../backend/payslip';
+import { PDF_THEME, pdfValueColMm } from './pdf-theme';
+
+const TW = PDF_THEME.INNER_W;
+const LABEL = PDF_THEME.labelColMm;
+const VALUE = pdfValueColMm();
+/** Vier Spalten (Lohn / Abzüge): Summe = INNER_W */
+const L0 = 58;
+const L1 = 28;
+const L2 = 52;
+const L3 = TW - L0 - L1 - L2;
 
 export interface PayslipPdfData {
   monthYearLabel?: string; // e.g. "[Monat, Jahr]" or "März 2026"
@@ -30,8 +40,8 @@ function fmtPct(n: number | null): string {
 
 export function generatePayslipPdf(data: PayslipPdfData): jsPDF {
   const doc = new jsPDF('p', 'mm', 'a4');
-  const W = 190;
-  const LM = 10;
+  const W = TW;
+  const LM = PDF_THEME.LM;
   let y = 15;
 
   // Header
@@ -44,9 +54,13 @@ export function generatePayslipPdf(data: PayslipPdfData): jsPDF {
   doc.text(data.placeDateLabel || '[Ort, Datum]', LM + W, y + 6, { align: 'right' });
   y += 12;
 
+  const headFill = { fillColor: [...PDF_THEME.accentRgb] as [number, number, number], textColor: PDF_THEME.textDark, fontSize: 9, fontStyle: 'bold' as const };
+  const gridStyles = { lineColor: PDF_THEME.borderRgb, lineWidth: 0.1 };
+
   // Arbeitgebender
   autoTable(doc, {
     startY: y,
+    tableWidth: TW,
     head: [['Arbeitgebender', '']],
     body: [
       ['Vorname, Name', data.employer.name || ''],
@@ -54,16 +68,18 @@ export function generatePayslipPdf(data: PayslipPdfData): jsPDF {
       ['PLZ, Wohnort', data.employer.plzCity || ''],
     ],
     theme: 'grid',
-    headStyles: { fillColor: [230, 238, 250], textColor: 20, fontSize: 9, fontStyle: 'bold' },
+    headStyles: headFill,
     bodyStyles: { fontSize: 9 },
-    columnStyles: { 0: { cellWidth: 55 }, 1: { cellWidth: 125 } },
-    margin: { left: LM, right: LM },
+    columnStyles: { 0: { cellWidth: LABEL }, 1: { cellWidth: VALUE } },
+    margin: { left: LM, right: PDF_THEME.RM },
+    styles: gridStyles,
   });
   y = (doc as any).lastAutoTable.finalY + 6;
 
   // Arbeitnehmender
   autoTable(doc, {
     startY: y,
+    tableWidth: TW,
     head: [['Arbeitnehmender', '']],
     body: [
       ['Vorname, Name', data.employee.name || ''],
@@ -72,16 +88,18 @@ export function generatePayslipPdf(data: PayslipPdfData): jsPDF {
       ['AHV-Nummer', data.employee.ahvNumber || ''],
     ],
     theme: 'grid',
-    headStyles: { fillColor: [230, 238, 250], textColor: 20, fontSize: 9, fontStyle: 'bold' },
+    headStyles: headFill,
     bodyStyles: { fontSize: 9 },
-    columnStyles: { 0: { cellWidth: 55 }, 1: { cellWidth: 125 } },
-    margin: { left: LM, right: LM },
+    columnStyles: { 0: { cellWidth: LABEL }, 1: { cellWidth: VALUE } },
+    margin: { left: LM, right: PDF_THEME.RM },
+    styles: gridStyles,
   });
   y = (doc as any).lastAutoTable.finalY + 6;
 
   // Grundlagen
   autoTable(doc, {
     startY: y,
+    tableWidth: TW,
     head: [['Grundlagen', '']],
     body: [
       ['Kanton', data.grundlagen.cantonLabel || 'Auswählen'],
@@ -90,10 +108,11 @@ export function generatePayslipPdf(data: PayslipPdfData): jsPDF {
       ['Anzahl Stunden', String(data.grundlagen.hours ?? 0)],
     ],
     theme: 'grid',
-    headStyles: { fillColor: [230, 238, 250], textColor: 20, fontSize: 9, fontStyle: 'bold' },
+    headStyles: headFill,
     bodyStyles: { fontSize: 9 },
-    columnStyles: { 0: { cellWidth: 80 }, 1: { halign: 'right' } },
-    margin: { left: LM, right: LM },
+    columnStyles: { 0: { cellWidth: LABEL }, 1: { cellWidth: VALUE, halign: 'right' } },
+    margin: { left: LM, right: PDF_THEME.RM },
+    styles: gridStyles,
   });
   y = (doc as any).lastAutoTable.finalY + 6;
 
@@ -106,13 +125,20 @@ export function generatePayslipPdf(data: PayslipPdfData): jsPDF {
 
   autoTable(doc, {
     startY: y,
+    tableWidth: TW,
     head: [['Lohn', 'Sätze', 'Pro Stunde', 'Pro Monat']],
     body: lohnBody,
     theme: 'grid',
-    headStyles: { fillColor: [230, 238, 250], textColor: 20, fontSize: 9, fontStyle: 'bold' },
+    headStyles: headFill,
     bodyStyles: { fontSize: 9 },
-    columnStyles: { 0: { cellWidth: 80 }, 1: { halign: 'right', cellWidth: 25 }, 2: { halign: 'right', cellWidth: 35 }, 3: { halign: 'right', cellWidth: 35 } },
-    margin: { left: LM, right: LM },
+    columnStyles: {
+      0: { cellWidth: L0 },
+      1: { halign: 'right', cellWidth: L1 },
+      2: { halign: 'right', cellWidth: L2 },
+      3: { halign: 'right', cellWidth: L3 },
+    },
+    margin: { left: LM, right: PDF_THEME.RM },
+    styles: gridStyles,
   });
   y = (doc as any).lastAutoTable.finalY + 6;
 
@@ -138,27 +164,34 @@ export function generatePayslipPdf(data: PayslipPdfData): jsPDF {
       { content: fmtMoney(data.result.totalDeductions.perMonth), styles: { fontStyle: 'bold' } },
     ],
     [
-      { content: 'Nettolohn', styles: { fontStyle: 'bold', fillColor: [230, 238, 250] } },
-      { content: '', styles: { fontStyle: 'bold', fillColor: [230, 238, 250] } },
-      { content: fmtMoney(data.result.netWage.perHour), styles: { fontStyle: 'bold', fillColor: [230, 238, 250] } },
-      { content: fmtMoney(data.result.netWage.perMonth), styles: { fontStyle: 'bold', fillColor: [230, 238, 250] } },
+      { content: 'Nettolohn', styles: { fontStyle: 'bold', fillColor: [...PDF_THEME.accentRgb] } },
+      { content: '', styles: { fontStyle: 'bold', fillColor: [...PDF_THEME.accentRgb] } },
+      { content: fmtMoney(data.result.netWage.perHour), styles: { fontStyle: 'bold', fillColor: [...PDF_THEME.accentRgb] } },
+      { content: fmtMoney(data.result.netWage.perMonth), styles: { fontStyle: 'bold', fillColor: [...PDF_THEME.accentRgb] } },
     ],
   ];
 
   autoTable(doc, {
     startY: y,
+    tableWidth: TW,
     head: [['Abzüge', 'Sätze', 'Pro Stunde', 'Pro Monat']],
     body: abzuegeBody,
     theme: 'grid',
-    headStyles: { fillColor: [230, 238, 250], textColor: 20, fontSize: 9, fontStyle: 'bold' },
+    headStyles: headFill,
     bodyStyles: { fontSize: 9 },
-    columnStyles: { 0: { cellWidth: 80 }, 1: { halign: 'right', cellWidth: 25 }, 2: { halign: 'right', cellWidth: 35 }, 3: { halign: 'right', cellWidth: 35 } },
-    margin: { left: LM, right: LM },
+    columnStyles: {
+      0: { cellWidth: L0 },
+      1: { halign: 'right', cellWidth: L1 },
+      2: { halign: 'right', cellWidth: L2 },
+      3: { halign: 'right', cellWidth: L3 },
+    },
+    margin: { left: LM, right: PDF_THEME.RM },
+    styles: gridStyles,
   });
 
   // Footer
   doc.setFontSize(7);
-  doc.setTextColor(128);
+  doc.setTextColor(PDF_THEME.textMuted);
   doc.text('Erstellt mit Asklepios – IV-Assistenzbeitrag', LM, 287);
 
   return doc;

@@ -51,6 +51,18 @@ function parseHours(start: string, end: string): number {
   return Math.max(0, minutes / 60);
 }
 
+function formatTimeHHmm(t: string | undefined | null): string {
+  const raw = (t ?? '').trim();
+  if (!raw) return '';
+  const [hPart, mPart] = raw.split(':');
+  if (mPart === undefined) return raw.slice(0, 5);
+  const hh = Math.trunc(Number(hPart));
+  const mm = Math.trunc(Number(String(mPart).replace(/\D/g, '').slice(0, 2)));
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return raw.slice(0, 5);
+  if (hh === 24 && mm === 0) return '24:00';
+  return `${String(Math.min(23, Math.max(0, hh))).padStart(2, '0')}:${String(Math.min(59, Math.max(0, mm))).padStart(2, '0')}`;
+}
+
 function monthKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
@@ -60,6 +72,18 @@ function monthLabel(key: string): string {
   const y = parts[0] ?? '';
   const m = parts[1] ?? '01';
   return `${MONTH_NAMES[parseInt(m, 10) - 1]} ${y}`;
+}
+
+async function mirrorPayrollFreigabeToAssistant(assistantId: string, monthFirst: string) {
+  const { data, error } = await supabase.from('assistant').select('contract_data').eq('id', assistantId).single();
+  if (error || !data) return;
+  const cd = { ...((data.contract_data as Record<string, unknown>) || {}) } as Record<string, unknown>;
+  const prev = Array.isArray(cd.payroll_freigaben) ? (cd.payroll_freigaben as string[]) : [];
+  const normalized = monthFirst.slice(0, 10);
+  if (prev.some((p) => String(p).slice(0, 10) === normalized)) return;
+  const freigaben = new Set([...prev, normalized]);
+  cd.payroll_freigaben = [...freigaben].sort();
+  await supabase.from('assistant').update({ contract_data: cd }).eq('id', assistantId);
 }
 
 export function PayrollPage() {
@@ -139,6 +163,30 @@ export function PayrollPage() {
     }
 
     setTimeEntries(grouped);
+
+    const assistantIds = (aData || []).map((a) => a.id);
+    if (assistantIds.length > 0) {
+      const monthFirst = `${year}-${String(month).padStart(2, '0')}-01`;
+      const { data: confRows } = await supabase
+        .from('payroll_confirmation')
+        .select('assistant_id, month, confirmed')
+        .in('assistant_id', assistantIds)
+        .eq('month', monthFirst);
+      const nextConfirmed: Record<string, boolean> = {};
+      for (const row of confRows || []) {
+        if (!row.confirmed || !row.assistant_id) continue;
+        const mk =
+          typeof row.month === 'string'
+            ? row.month.slice(0, 7)
+            : `${year}-${String(month).padStart(2, '0')}`;
+        nextConfirmed[`${row.assistant_id}-${mk}`] = true;
+        void mirrorPayrollFreigabeToAssistant(row.assistant_id, monthFirst);
+      }
+      setConfirmedMap(nextConfirmed);
+    } else {
+      setConfirmedMap({});
+    }
+
     setLoading(false);
   };
 
@@ -173,17 +221,41 @@ export function PayrollPage() {
   };
 
   const handleConfirm = async (assistantId: string, name: string) => {
-    // Persist confirmation to DB
     const parts = currentMonth.split('-').map(Number);
     const year = parts[0] ?? 2026;
     const month = parts[1] ?? 1;
+    const monthFirst = `${year}-${String(month).padStart(2, '0')}-01`;
 
-    await supabase.from('payroll_confirmation').upsert({
+    const { error: confErr } = await supabase.from('payroll_confirmation').upsert({
       assistant_id: assistantId,
-      month: `${year}-${String(month).padStart(2, '0')}-01`,
+      month: monthFirst,
       confirmed: true,
       confirmed_at: new Date().toISOString(),
     }, { onConflict: 'assistant_id,month' });
+
+    if (confErr) {
+      toast.error('Freigabe konnte nicht gespeichert werden', { description: confErr.message });
+      return;
+    }
+
+    const { data: asstRow, error: loadAsstErr } = await supabase
+      .from('assistant')
+      .select('contract_data')
+      .eq('id', assistantId)
+      .single();
+    if (!loadAsstErr && asstRow) {
+      const cd = { ...((asstRow.contract_data as Record<string, unknown>) || {}) } as Record<string, unknown>;
+      const prev = Array.isArray(cd.payroll_freigaben) ? (cd.payroll_freigaben as string[]) : [];
+      const freigaben = new Set([...prev, monthFirst]);
+      cd.payroll_freigaben = [...freigaben].sort();
+      const { error: patchErr } = await supabase.from('assistant').update({ contract_data: cd }).eq('id', assistantId);
+      if (patchErr) {
+        console.error('payroll_freigaben update', patchErr);
+        toast.message('Hinweis', {
+          description: 'Freigabe ist gespeichert; der Assistenz-Link sieht sie ggf. erst nach erneutem Öffnen des Lohn-Tabs.',
+        });
+      }
+    }
 
     setConfirmedMap(prev => ({ ...prev, [`${assistantId}-${currentMonth}`]: true }));
     toast.success(`Lohnabrechnung für ${name} bestätigt!`);
@@ -192,8 +264,8 @@ export function PayrollPage() {
   // Edit entry
   const startEditing = (entry: { id: string; start_time: string; end_time: string }) => {
     setEditingEntryId(entry.id);
-    setEditStart(entry.start_time);
-    setEditEnd(entry.end_time);
+    setEditStart(formatTimeHHmm(entry.start_time));
+    setEditEnd(formatTimeHHmm(entry.end_time));
   };
 
   const cancelEditing = () => {
@@ -268,7 +340,7 @@ export function PayrollPage() {
 
     const nbuRateEmployee = cd?.nbu_employee ? (parseFloat(cd.nbu_employee) / 100) : undefined;
     const payslip = calculatePayslip({
-      canton,
+      canton: kanton,
       accountingMethod,
       hourlyRate: stundenlohn,
       hours: selectedHours.totalHours,
@@ -744,7 +816,7 @@ export function PayrollPage() {
                                     />
                                   </div>
                                 ) : (
-                                  <p className="text-sm font-medium">{e.start_time} – {e.end_time}</p>
+                                  <p className="text-sm font-medium">{formatTimeHHmm(e.start_time)} – {formatTimeHHmm(e.end_time)}</p>
                                 )}
                                 <p className="text-xs text-muted-foreground">
                                   {e.category || 'Ohne Kategorie'}

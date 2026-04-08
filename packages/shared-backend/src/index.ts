@@ -15,6 +15,8 @@ export * from './backend/payslip';
 
 // Export shared types and utilities
 export * from './shared/types';
+export * from './shared/iv-assistance-categories';
+export * from './shared/iv-stellen-supported-cantons';
 export * from './shared/utils';
 export * from './shared/payslip-pdf';
 export * from './shared/timesheet-pdf';
