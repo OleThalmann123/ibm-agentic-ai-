@@ -21,6 +21,7 @@ interface TimesheetPdfData {
 }
 
 const DAY_NAMES = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+const DAY_NAMES_FULL = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
 
 const ACTIVITY_BY_DISPLAY_NUMBER: Record<number, string> = {
   1: 'Alltägliche Lebensverrichtungen',
@@ -102,8 +103,28 @@ export function generateTimesheetPdf(data: TimesheetPdfData): jsPDF {
   const sorted = [...data.entries].sort((a, b) => a.date.localeCompare(b.date));
   const body = sorted.map(e => {
     const d = new Date(e.date + 'T00:00:00');
-    const dayName = DAY_NAMES[d.getDay()] || '';
-    const dateStr = `${dayName} ${d.getDate().toString().padStart(2, '0')}.${(d.getMonth() + 1).toString().padStart(2, '0')}.${d.getFullYear()}`;
+    const dayIdx = d.getDay();
+    const dayName = DAY_NAMES[dayIdx] || '';
+    const baseDate = `${d.getDate().toString().padStart(2, '0')}.${(d.getMonth() + 1).toString().padStart(2, '0')}.${d.getFullYear()}`;
+
+    // If the end time is earlier than the start time, the shift crosses midnight (next day).
+    const crossesMidnight =
+      typeof e.start_time === 'string' &&
+      typeof e.end_time === 'string' &&
+      e.start_time.trim() !== '' &&
+      e.end_time.trim() !== '' &&
+      e.end_time < e.start_time;
+
+    let dateStr = `${dayName} ${baseDate}`;
+    if (crossesMidnight) {
+      const d2 = new Date(e.date + 'T00:00:00');
+      d2.setDate(d2.getDate() + 1);
+      const day2 = DAY_NAMES_FULL[d2.getDay()] || '';
+      const day1 = DAY_NAMES_FULL[dayIdx] || '';
+      const baseDate2 = `${d2.getDate().toString().padStart(2, '0')}.${(d2.getMonth() + 1).toString().padStart(2, '0')}.${d2.getFullYear()}`;
+      // Match user expectation: "Dienstag bis Mittwoch" + the date range.
+      dateStr = `${day1} bis ${day2} ${baseDate}–${baseDate2}`;
+    }
     return [
       dateStr,
       e.start_time,
