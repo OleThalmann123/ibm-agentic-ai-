@@ -895,7 +895,8 @@ export function PayrollPage() {
           <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl" aria-hidden>
             <div
               className={cn(
-                'absolute left-1/2 top-1/2 h-[200vmax] w-[200vmax] -translate-x-1/2 -translate-y-1/2 will-change-transform bg-[conic-gradient(from_0deg_at_50%_50%,hsl(var(--primary))_0deg,hsl(270_65%_58%)_115deg,hsl(160_55%_42%)_235deg,hsl(var(--primary))_360deg)] motion-reduce:animate-none',
+                // Farbschema bewusst nur Primary/Success, damit es ins UI passt (kein "neues" Violett).
+                'absolute left-1/2 top-1/2 h-[200vmax] w-[200vmax] -translate-x-1/2 -translate-y-1/2 will-change-transform bg-[conic-gradient(from_0deg_at_50%_50%,hsl(var(--primary))_0deg,hsl(var(--primary)/0.6)_120deg,hsl(var(--success)/0.55)_240deg,hsl(var(--primary))_360deg)] motion-reduce:animate-none',
                 monthlyPackageReady
                   ? 'opacity-[0.68] animate-[spin_15s_linear_infinite]'
                   : 'opacity-[0.45] animate-[spin_28s_linear_infinite]',
@@ -923,7 +924,7 @@ export function PayrollPage() {
                   aria-hidden
                 />
                 <div
-                  className="pointer-events-none absolute left-1/3 top-1/2 h-40 w-40 -translate-y-1/2 rounded-full bg-violet-500/20 blur-2xl motion-reduce:animate-none animate-iv-mesh-breathe [animation-delay:2.4s]"
+                  className="pointer-events-none absolute left-1/3 top-1/2 h-40 w-40 -translate-y-1/2 rounded-full bg-primary/15 blur-2xl motion-reduce:animate-none animate-iv-mesh-breathe [animation-delay:2.4s]"
                   aria-hidden
                 />
               </>
@@ -935,7 +936,7 @@ export function PayrollPage() {
             )}
             {monthlyPackageReady && (
               <div
-                className="pointer-events-none absolute inset-0 rounded-[13px] bg-[radial-gradient(720px_420px_at_12%_-10%,hsl(var(--success)/0.16),transparent_58%),radial-gradient(620px_400px_at_92%_0%,hsl(var(--primary)/0.14),transparent_52%),radial-gradient(480px_320px_at_50%_100%,hsl(270_65%_58%/0.08),transparent_55%)]"
+                className="pointer-events-none absolute inset-0 rounded-[13px] bg-[radial-gradient(720px_420px_at_12%_-10%,hsl(var(--success)/0.16),transparent_58%),radial-gradient(620px_400px_at_92%_0%,hsl(var(--primary)/0.14),transparent_52%),radial-gradient(520px_360px_at_50%_115%,hsl(var(--primary)/0.08),transparent_55%)]"
                 aria-hidden
               />
             )}
@@ -958,7 +959,7 @@ export function PayrollPage() {
                         className={cn(
                           'text-lg font-extrabold uppercase tracking-wide sm:text-xl',
                           monthlyPackageReady
-                            ? 'bg-gradient-to-r from-primary via-violet-600 to-emerald-600 bg-clip-text text-transparent'
+                            ? 'bg-gradient-to-r from-primary via-primary to-success bg-clip-text text-transparent'
                             : 'text-foreground',
                         )}
                       >

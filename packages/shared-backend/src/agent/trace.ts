@@ -7,6 +7,7 @@
 
 export type TraceStepType =
   | 'pdf_extraction'
+  | 'contract_gate'
   | 'tool_call'
   | 'agent_extraction'
   | 'agent_judge'
