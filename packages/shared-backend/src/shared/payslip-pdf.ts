@@ -16,6 +16,7 @@ export function generatePayslipPdf(data: PayslipPdfData): jsPDF {
   const W = 190;
   const LM = 10;
   let y = 15;
+  const money = (n: number) => `CHF ${fmt(n)}`;
 
   // Title
   doc.setFontSize(16);
@@ -26,7 +27,7 @@ export function generatePayslipPdf(data: PayslipPdfData): jsPDF {
   doc.text(data.month, LM + W, y, { align: 'right' });
   y += 10;
 
-  // AG / AN boxes
+  // Arbeitgebender / Arbeitnehmender boxes
   const boxW = W / 2 - 3;
 
   // Arbeitgebender
@@ -67,7 +68,7 @@ export function generatePayslipPdf(data: PayslipPdfData): jsPDF {
     body: [
       ['Kanton', data.grundlagen.kanton],
       ['Abrechnungsverfahren', data.grundlagen.verfahren],
-      ['Stundenlohn', `Fr. ${fmt(data.grundlagen.stundenlohn)}`],
+      ['Stundenlohn', money(data.grundlagen.stundenlohn)],
       ['Anzahl Stunden', fmt(data.grundlagen.stunden)],
     ],
     theme: 'grid',
@@ -82,12 +83,11 @@ export function generatePayslipPdf(data: PayslipPdfData): jsPDF {
 
   // Lohn table
   const lohnBody: any[][] = [
-    ['Arbeitslohn', '', `Fr. ${fmt(r.arbeitslohn.perHour)}`, `Fr. ${fmt(r.arbeitslohn.perYear)}`],
+    ['Arbeitslohn', '—', money(r.arbeitslohn.perHour), money(r.arbeitslohn.perYear)],
+    // Immer anzeigen, damit die Tabelle immer gleich aussieht (auch wenn 0.00).
+    ['Ferienzuschlag', r.ferienzuschlag.rate != null ? fmtPct(r.ferienzuschlag.rate) : '—', money(r.ferienzuschlag.perHour), money(r.ferienzuschlag.perYear)],
+    [{ content: 'Bruttolohn Arbeitnehmender', styles: { fontStyle: 'bold' } }, '', { content: money(r.bruttolohn.perHour), styles: { fontStyle: 'bold' } }, { content: money(r.bruttolohn.perYear), styles: { fontStyle: 'bold' } }],
   ];
-  if (r.ferienzuschlag.perYear > 0) {
-    lohnBody.push(['Ferienzuschlag', fmtPct(r.ferienzuschlag.rate!), `Fr. ${fmt(r.ferienzuschlag.perHour)}`, `Fr. ${fmt(r.ferienzuschlag.perYear)}`]);
-  }
-  lohnBody.push([{ content: 'Bruttolohn Arbeitnehmender', styles: { fontStyle: 'bold' } }, '', { content: `Fr. ${fmt(r.bruttolohn.perHour)}`, styles: { fontStyle: 'bold' } }, { content: `Fr. ${fmt(r.bruttolohn.perYear)}`, styles: { fontStyle: 'bold' } }]);
 
   autoTable(doc, {
     startY: y,
@@ -101,27 +101,10 @@ export function generatePayslipPdf(data: PayslipPdfData): jsPDF {
   });
   y = (doc as any).lastAutoTable.finalY + 3;
 
-  // AG Beiträge
-  const agBody: any[][] = r.agLines.map(l => [l.label, l.rate != null ? fmtPct(l.rate) : '', `Fr. ${fmt(l.perHour)}`, `Fr. ${fmt(l.perYear)}`]);
-  agBody.push([{ content: 'Total Beiträge AG', styles: { fontStyle: 'bold' } }, { content: fmtPct(r.totalAG.rate!), styles: { fontStyle: 'bold' } }, { content: `Fr. ${fmt(r.totalAG.perHour)}`, styles: { fontStyle: 'bold' } }, { content: `Fr. ${fmt(r.totalAG.perYear)}`, styles: { fontStyle: 'bold' } }]);
-  agBody.push([{ content: 'Totalaufwand AG', styles: { fontStyle: 'bold', fillColor: [240, 245, 255] } }, '', { content: `Fr. ${fmt(r.totalaufwandAG.perHour)}`, styles: { fontStyle: 'bold', fillColor: [240, 245, 255] } }, { content: `Fr. ${fmt(r.totalaufwandAG.perYear)}`, styles: { fontStyle: 'bold', fillColor: [240, 245, 255] } }]);
-
-  autoTable(doc, {
-    startY: y,
-    head: [['Beiträge Arbeitgebender', 'Sätze', 'Pro Stunde', 'Pro Monat']],
-    body: agBody,
-    theme: 'grid',
-    headStyles: { fillColor: [30, 64, 175], fontSize: 8, fontStyle: 'bold' },
-    bodyStyles: { fontSize: 9 },
-    columnStyles: { 0: { cellWidth: 80 }, 1: { halign: 'right', cellWidth: 25 }, 2: { halign: 'right', cellWidth: 35 }, 3: { halign: 'right', cellWidth: 35 } },
-    margin: { left: LM, right: LM },
-  });
-  y = (doc as any).lastAutoTable.finalY + 3;
-
-  // AN Beiträge
-  const anBody: any[][] = r.anLines.map(l => [l.label, l.rate != null ? fmtPct(l.rate) : '', `Fr. ${fmt(l.perHour)}`, `Fr. ${fmt(l.perYear)}`]);
-  anBody.push([{ content: 'Total Beiträge AN', styles: { fontStyle: 'bold' } }, { content: fmtPct(r.totalAN.rate!), styles: { fontStyle: 'bold' } }, { content: `Fr. ${fmt(r.totalAN.perHour)}`, styles: { fontStyle: 'bold' } }, { content: `Fr. ${fmt(r.totalAN.perYear)}`, styles: { fontStyle: 'bold' } }]);
-  anBody.push([{ content: 'Nettolohn AN', styles: { fontStyle: 'bold', fillColor: [240, 245, 255] } }, '', { content: `Fr. ${fmt(r.nettolohn.perHour)}`, styles: { fontStyle: 'bold', fillColor: [240, 245, 255] } }, { content: `Fr. ${fmt(r.nettolohn.perYear)}`, styles: { fontStyle: 'bold', fillColor: [240, 245, 255] } }]);
+  // Abzüge Arbeitnehmender (keine arbeitgeberseitigen Beiträge anzeigen)
+  const anBody: any[][] = r.anLines.map(l => [l.label, l.rate != null ? fmtPct(l.rate) : '—', money(l.perHour), money(l.perYear)]);
+  anBody.push([{ content: 'Total Abzüge Arbeitnehmender', styles: { fontStyle: 'bold' } }, { content: r.totalAN.rate != null ? fmtPct(r.totalAN.rate) : '—', styles: { fontStyle: 'bold' } }, { content: money(r.totalAN.perHour), styles: { fontStyle: 'bold' } }, { content: money(r.totalAN.perYear), styles: { fontStyle: 'bold' } }]);
+  anBody.push([{ content: 'Nettolohn Arbeitnehmender', styles: { fontStyle: 'bold', fillColor: [240, 245, 255] } }, '', { content: money(r.nettolohn.perHour), styles: { fontStyle: 'bold', fillColor: [240, 245, 255] } }, { content: money(r.nettolohn.perYear), styles: { fontStyle: 'bold', fillColor: [240, 245, 255] } }]);
 
   autoTable(doc, {
     startY: y,
@@ -131,21 +114,6 @@ export function generatePayslipPdf(data: PayslipPdfData): jsPDF {
     headStyles: { fillColor: [30, 64, 175], fontSize: 8, fontStyle: 'bold' },
     bodyStyles: { fontSize: 9 },
     columnStyles: { 0: { cellWidth: 80 }, 1: { halign: 'right', cellWidth: 25 }, 2: { halign: 'right', cellWidth: 35 }, 3: { halign: 'right', cellWidth: 35 } },
-    margin: { left: LM, right: LM },
-  });
-  y = (doc as any).lastAutoTable.finalY + 3;
-
-  // Leistungen nach Adressaten
-  const adrBody: any[][] = r.adressaten.map(a => [`${a.label} (${a.details})`, `Fr. ${fmt(a.perYear)}`]);
-
-  autoTable(doc, {
-    startY: y,
-    head: [['Leistungen nach Adressaten', 'Pro Monat']],
-    body: adrBody,
-    theme: 'grid',
-    headStyles: { fillColor: [30, 64, 175], fontSize: 8, fontStyle: 'bold' },
-    bodyStyles: { fontSize: 9 },
-    columnStyles: { 0: { cellWidth: 130 }, 1: { halign: 'right' } },
     margin: { left: LM, right: LM },
   });
 

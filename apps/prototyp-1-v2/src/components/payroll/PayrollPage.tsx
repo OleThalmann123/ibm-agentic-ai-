@@ -226,6 +226,7 @@ export function PayrollPage() {
 
     setConfirmedMap(prev => ({ ...prev, [`${assistantId}-${currentMonth}`]: true }));
     toast.success(`Lohnabrechnung für ${name} bestätigt!`);
+    setFlowStep('dokumente');
   };
 
   // Edit entry
@@ -991,12 +992,6 @@ export function PayrollPage() {
                                   icon={<Download style={{ width: 15, height: 15 }} />}
                                   label="Lohnabrechnung PDF"
                                   variant="primary"
-                                />
-                                <ActionButton
-                                  onClick={() => downloadTimesheetPdf(a, hours)}
-                                  icon={<FileText style={{ width: 15, height: 15 }} />}
-                                  label="Stundenzettel PDF"
-                                  variant="outline"
                                 />
                                 <ActionButton
                                   onClick={() => setFlowStep('stunden')}
