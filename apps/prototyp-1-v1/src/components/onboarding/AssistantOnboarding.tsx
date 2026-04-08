@@ -153,64 +153,7 @@ export function AssistantOnboarding({ onComplete, onClose }: AssistantOnboarding
     setConfidenceMap(cMap);
   };
 
-  const loadDemoData = () => {
-    const demoResult: ExtractionResult = {
-      extraction_metadata: {
-        document_language: 'de',
-        overall_confidence: 0.82,
-        fields_extracted: 18,
-        fields_missing: 3,
-        warnings: ['FEHLENDE_AHV_NUMMER', 'KANTON_ABGELEITET'],
-      },
-      contracts: {
-        employer: {
-          first_name: { value: 'Anna', confidence: 'high', confidence_score: 0.95, source_text: 'Name: Anna Meier', note: '' },
-          last_name: { value: 'Meier', confidence: 'high', confidence_score: 0.95, source_text: 'Name: Anna Meier', note: '' },
-          street: { value: 'Musterstrasse 12', confidence: 'high', confidence_score: 0.95, source_text: '', note: '' },
-          zip: { value: '4051', confidence: 'high', confidence_score: 0.95, source_text: '', note: '' },
-          city: { value: 'Basel', confidence: 'high', confidence_score: 0.95, source_text: '', note: '' },
-        },
-        assistant: {
-          first_name: { value: 'Sara', confidence: 'high', confidence_score: 0.97, source_text: 'Name: Sara Keller', note: '' },
-          last_name: { value: 'Keller', confidence: 'high', confidence_score: 0.97, source_text: 'Name: Sara Keller', note: '' },
-          street: { value: 'Lindenweg 5', confidence: 'high', confidence_score: 0.95, source_text: 'Adresse: Lindenweg 5, 4058 Basel', note: '' },
-          zip: { value: '4058', confidence: 'high', confidence_score: 0.95, source_text: '', note: '' },
-          city: { value: 'Basel', confidence: 'high', confidence_score: 0.95, source_text: '', note: '' },
-          birth_date: { value: '1990-03-14', confidence: 'high', confidence_score: 0.95, source_text: 'Geburtsdatum: 14.03.1990', note: '' },
-          ahv_number: { value: null, confidence: 'low', confidence_score: 0.0, source_text: '', note: 'Nicht im Vertrag' },
-          civil_status: { value: 'ledig', confidence: 'high', confidence_score: 0.95, source_text: 'Zivilstand: ledig', note: '' },
-          nationality: { value: 'CH', confidence: 'high', confidence_score: 0.9, source_text: 'Staatsangehörigkeit: Schweiz', note: '' },
-          residence_permit: { value: 'CH', confidence: 'high', confidence_score: 0.9, source_text: 'Schweizer Bürgerin', note: '' },
-        },
-        contract_terms: {
-          start_date: { value: '2026-03-01', confidence: 'high', confidence_score: 0.97, source_text: 'Vertragsbeginn: 01.03.2026', note: '' },
-          end_date: { value: null, confidence: 'high', confidence_score: 0.95, source_text: 'unbefristet', note: 'Unbefristet' },
-          is_indefinite: { value: true, confidence: 'high', confidence_score: 0.95, source_text: 'unbefristet', note: '' },
-          hours_per_week: { value: 20, confidence: 'high', confidence_score: 0.97, source_text: 'Stunden pro Woche: 20 Stunden', note: '' },
-          hours_per_month: { value: 86, confidence: 'high', confidence_score: 0.95, source_text: 'ca. 86 Stunden', note: '' },
-          notice_period_days: { value: 30, confidence: 'medium', confidence_score: 0.7, source_text: 'Kündigungsfrist von einem Monat', note: 'Als 30 Tage interpretiert' },
-        },
-        wage: {
-          wage_type: { value: 'hourly', confidence: 'high', confidence_score: 0.97, source_text: 'Stundenlohn: CHF 30.00 brutto', note: '' },
-          hourly_rate: { value: 30.00, confidence: 'high', confidence_score: 0.98, source_text: 'Stundenlohn: CHF 30.00 brutto', note: '' },
-          monthly_rate: { value: 2580.00, confidence: 'medium', confidence_score: 0.75, source_text: 'Monatslohn (ca.): CHF 2\'580.00', note: 'Ca.-Angabe' },
-          vacation_weeks: { value: 4, confidence: 'high', confidence_score: 0.95, source_text: '4 Wochen bezahlte Ferien', note: '' },
-          holiday_supplement_pct: { value: 0.0833, confidence: 'high', confidence_score: 0.95, source_text: 'Ferienzuschlag: 8.33 %', note: '' },
-          payment_iban: { value: 'CH93 0076 2011 6238 5295 7', confidence: 'high', confidence_score: 0.97, source_text: 'IBAN: CH93 0076 2011 6238 5295 7', note: '' },
-        },
-        social_insurance: {
-          accounting_method: { value: null, confidence: 'low', confidence_score: 0.1, source_text: '', note: 'Nicht im Vertrag' },
-          canton: { value: 'BS', confidence: 'medium', confidence_score: 0.7, source_text: '4051 Basel', note: 'Aus PLZ abgeleitet' },
-          nbu_employer_pct: { value: null, confidence: 'low', confidence_score: 0.0, source_text: '', note: 'Nicht angegeben' },
-          nbu_employee_pct: { value: null, confidence: 'low', confidence_score: 0.0, source_text: '', note: 'Nicht angegeben' },
-        },
-      },
-    };
-    setExtraction(demoResult);
-    populateFromExtraction(demoResult);
-    setStep('review');
-    setTab('stammdaten');
-  };
+  // Demo mode removed: contracts are always evaluated live from upload.
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || !e.target.files[0]) return;
@@ -295,7 +238,6 @@ export function AssistantOnboarding({ onComplete, onClose }: AssistantOnboarding
       date_of_birth: birthDate.trim() || null,
       hourly_rate: parseFloat(hourlyRate) || null,
       vacation_weeks: parseInt(vacationWeeks, 10) || null,
-      has_withholding_tax: false,
       has_bvg: false,
       time_entry_mode: 'manual' as const,
       is_active: true,
@@ -400,12 +342,6 @@ export function AssistantOnboarding({ onComplete, onClose }: AssistantOnboarding
                 className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"
               >
                 <FileText className="w-3.5 h-3.5" /> Vertragstext aus Zwischenablage einfügen
-              </button>
-
-              <div className="w-12 border-t my-2" />
-
-              <button type="button" onClick={loadDemoData} className="text-primary hover:underline font-medium text-sm">
-                Demo-Modus: Mustervertrag laden
               </button>
             </div>
           </div>
@@ -583,8 +519,7 @@ export function AssistantOnboarding({ onComplete, onClose }: AssistantOnboarding
                   </MiniField>
                   <MiniField status={getStatus('billingMethod', billingMethod)} title="Abrechnungsverfahren" message={getMessage('billingMethod', billingMethod)}>
                     <select value={billingMethod} onChange={e => setBillingMethod(e.target.value)} className={selectStyle}>
-                      <option value="simplified">Vereinfacht</option>
-                      <option value="standard">Standard</option>
+                      <option value="standard">Ordentlich</option>
                     </select>
                   </MiniField>
                   <MiniField status={getStatus('canton', canton)} title="Kanton" message={getMessage('canton', canton)}>

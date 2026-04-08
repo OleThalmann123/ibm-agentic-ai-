@@ -16,9 +16,13 @@ export const RATES = {
   AHV_IV_EO: 0.053,    // 5.30%
   ALV: 0.011,           // 1.10%
   VK: 0.05 * 0.1055,   // 0.5275% (Verwaltungskosten)
-  QST_VEREINFACHT: 0.05, // 5.00% (Quellensteuer bei vereinfachtem Verfahren)
-  FAK_AN_WALLIS: 0.0017, // 0.17% (AN-FAK nur Kanton Wallis)
 } as const;
+
+// ─── Plafonds / Caps (jährlich anpassbar) ─────────────────
+// In dieser Engine sind Beträge "perYear" faktisch pro Abrechnungsmonat (Monatssumme).
+// Für ALV/UVG plafonds verwenden wir deshalb den Monatscap.
+const MONTHLY_ALV_CAP = 12350; // CHF 148'200 / 12
+const MONTHLY_UVG_CAP = 12350; // CHF 148'200 / 12 (UVG/NBU)
 
 // ─── FAK rates by canton ───
 export const FAK_RATES: Record<string, { name: string; rate: number }> = {
@@ -59,12 +63,10 @@ export const VACATION_OPTIONS = [
 ] as const;
 
 // ─── Billing method enum ───
-export type BillingMethod = 'vereinfacht' | 'ordentlich' | 'ordentlich_quellensteuer';
+export type BillingMethod = 'ordentlich';
 
 export const BILLING_OPTIONS: { label: string; value: BillingMethod }[] = [
-  { label: 'Vereinfachtes Abrechnungsverfahren', value: 'vereinfacht' },
   { label: 'Ordentliches Abrechnungsverfahren', value: 'ordentlich' },
-  { label: 'Ordentliches mit Quellensteuer', value: 'ordentlich_quellensteuer' },
 ];
 
 // ─── Input types ───
@@ -82,7 +84,6 @@ export interface PayrollInput {
   // Optional employee deductions
   ktvAN?: number;  // KTV rate (decimal)
   nbuAN?: number;  // NBU rate (decimal)
-  quellensteuerSatz?: number; // only for ordentlich_quellensteuer
 
   // Metadata (for payslip document)
   jahr?: string;
@@ -138,6 +139,7 @@ export function round5(value: number): number {
 
 export function calculatePayroll(input: PayrollInput): PayrollResult {
   const { stundenlohn, anzahlStunden, kanton, abrechnungsverfahren, ferienzuschlag } = input;
+  void abrechnungsverfahren; // MVP: aktuell nur 'ordentlich' unterstützt
 
   // ── Stage 1: Gross ──
   const arbeitslohnH = stundenlohn;
@@ -149,12 +151,21 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   const bruttoH = arbeitslohnH + ferienzuschlagH;
   const bruttoY = arbeitslohnY + ferienzuschlagY;
 
+  // Base amounts for capped contributions
+  const alvBaseY = Math.min(bruttoY, MONTHLY_ALV_CAP);
+  const uvgBaseY = Math.min(bruttoY, MONTHLY_UVG_CAP);
+
   // ── Stage 2: Employer contributions ──
   const fakRate = FAK_RATES[kanton]?.rate ?? 0;
 
   const agLines: PayrollLine[] = [
     { label: 'AHV/IV/EO', rate: RATES.AHV_IV_EO, perHour: bruttoH * RATES.AHV_IV_EO, perYear: round5(bruttoY * RATES.AHV_IV_EO) },
-    { label: 'ALV', rate: RATES.ALV, perHour: bruttoH * RATES.ALV, perYear: round5(bruttoY * RATES.ALV) },
+    {
+      label: 'ALV',
+      rate: RATES.ALV,
+      perHour: anzahlStunden > 0 ? round5(alvBaseY * RATES.ALV) / anzahlStunden : 0,
+      perYear: round5(alvBaseY * RATES.ALV),
+    },
     { label: `FAK (${kanton})`, rate: fakRate, perHour: bruttoH * fakRate, perYear: round5(bruttoY * fakRate) },
     { label: 'VK', rate: RATES.VK, perHour: bruttoH * RATES.VK, perYear: round5(bruttoY * RATES.VK) },
   ];
@@ -176,40 +187,23 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   // ── Stage 4: Employee deductions ──
   const anLines: PayrollLine[] = [
     { label: 'AHV/IV/EO', rate: RATES.AHV_IV_EO, perHour: bruttoH * RATES.AHV_IV_EO, perYear: round5(bruttoY * RATES.AHV_IV_EO) },
-    { label: 'ALV', rate: RATES.ALV, perHour: bruttoH * RATES.ALV, perYear: round5(bruttoY * RATES.ALV) },
+    {
+      label: 'ALV',
+      rate: RATES.ALV,
+      perHour: anzahlStunden > 0 ? round5(alvBaseY * RATES.ALV) / anzahlStunden : 0,
+      perYear: round5(alvBaseY * RATES.ALV),
+    },
   ];
 
   if (input.ktvAN != null && input.ktvAN > 0) {
     anLines.push({ label: 'KTV (AN)', rate: input.ktvAN, perHour: bruttoH * input.ktvAN, perYear: round5(bruttoY * input.ktvAN) });
   }
   if (input.nbuAN != null && input.nbuAN > 0) {
-    anLines.push({ label: 'NBU (AN)', rate: input.nbuAN, perHour: bruttoH * input.nbuAN, perYear: round5(bruttoY * input.nbuAN) });
-  }
-
-  // Quellensteuer
-  if (abrechnungsverfahren === 'vereinfacht') {
     anLines.push({
-      label: 'Quellensteuer',
-      rate: RATES.QST_VEREINFACHT,
-      perHour: bruttoH * RATES.QST_VEREINFACHT,
-      perYear: round5(bruttoY * RATES.QST_VEREINFACHT),
-    });
-  } else if (abrechnungsverfahren === 'ordentlich_quellensteuer' && input.quellensteuerSatz) {
-    anLines.push({
-      label: 'Quellensteuer',
-      rate: input.quellensteuerSatz,
-      perHour: bruttoH * input.quellensteuerSatz,
-      perYear: round5(bruttoY * input.quellensteuerSatz),
-    });
-  }
-
-  // FAK AN (only Wallis)
-  if (kanton === 'VS') {
-    anLines.push({
-      label: 'FAK (Wallis AN)',
-      rate: RATES.FAK_AN_WALLIS,
-      perHour: bruttoH * RATES.FAK_AN_WALLIS,
-      perYear: round5(bruttoY * RATES.FAK_AN_WALLIS),
+      label: 'NBU (AN)',
+      rate: input.nbuAN,
+      perHour: anzahlStunden > 0 ? round5(uvgBaseY * input.nbuAN) / anzahlStunden : 0,
+      perYear: round5(uvgBaseY * input.nbuAN),
     });
   }
 
@@ -234,14 +228,13 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   const vkAg = findPerYear(agLines, ['VK']);
   const ahvIvEoAn = findPerYear(anLines, ['AHV/IV/EO']);
   const alvAn = findPerYear(anLines, ['ALV']);
-  const qstVereinfacht = abrechnungsverfahren === 'vereinfacht' ? findPerYear(anLines, ['Quellensteuer']) : 0;
 
-  const akBeitraege = round5(ahvIvEoAg + alvAg + vkAg + ahvIvEoAn + alvAn + qstVereinfacht);
+  const akBeitraege = round5(ahvIvEoAg + alvAg + vkAg + ahvIvEoAn + alvAn);
 
   adressaten.push({
     label: 'Ausgleichskasse',
     perYear: akBeitraege,
-    details: 'AHV/IV/EO + ALV + VK (AG+AN)' + (abrechnungsverfahren === 'vereinfacht' ? ' + Quellensteuer' : ''),
+    details: 'AHV/IV/EO + ALV + VK (AG+AN)',
   });
 
   // 2. FAK
@@ -251,7 +244,7 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   adressaten.push({
     label: 'Familienausgleichskasse (FAK)',
     perYear: fakTotal,
-    details: `FAK ${kanton}` + (kanton === 'VS' ? ' + AN-Beitrag 0.17%' : ''),
+    details: `FAK ${kanton}`,
   });
 
   // 3. KT-Versicherer (if any KTV)
@@ -271,16 +264,6 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
       label: 'Unfallversicherer',
       perYear: uvTotal,
       details: 'BU (AG) + NBU (AN)',
-    });
-  }
-
-  // 5. Quellensteuer Steueramt (only ordentlich_quellensteuer)
-  if (abrechnungsverfahren === 'ordentlich_quellensteuer' && input.quellensteuerSatz) {
-    const qstOrdentlich = findPerYear(anLines, ['Quellensteuer']);
-    adressaten.push({
-      label: 'Steueramt (Quellensteuer)',
-      perYear: qstOrdentlich,
-      details: `Quellensteuer ${(input.quellensteuerSatz * 100).toFixed(2)}%`,
     });
   }
 

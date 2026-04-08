@@ -35,15 +35,14 @@ const FAK_SAETZE: Record<string, number> = {
 
 const KANTONE = Object.keys(FAK_SAETZE).sort();
 
-type Abrechnungsverfahren = '' | 'vereinfacht' | 'ordentlich' | 'ordentlich_quellensteuer';
+type Abrechnungsverfahren = '' | 'ordentlich';
 type Ferienzuschlag = '' | 'kein' | '8.33' | '10.64' | '13.04';
 
 // ─── Festwerte ─────────────────────────────────────────────────────────
 const AHV_IV_EO_SATZ = 0.053;
 const ALV_SATZ = 0.011;
 const VK_SATZ = 0.05 * 0.1055; // 0.5275%
-const QST_VEREINFACHT = 0.05;
-const FAK_WALLIS_AN = 0.0017; // 0.17%
+// MVP: Abrechnungsverfahren aktuell nur "Ordentlich" unterstützt. (Quellensteuer/VS-AN-FAK out of scope)
 
 const FERIENZUSCHLAG_MAP: Record<string, number> = {
   '': 0,
@@ -74,7 +73,6 @@ interface Inputs {
   buAg: string;
   ktvAn: string;
   nbuAn: string;
-  quellensteuerSatz: string;
 }
 
 const DEFAULT_INPUTS: Inputs = {
@@ -95,7 +93,6 @@ const DEFAULT_INPUTS: Inputs = {
   buAg: '',
   ktvAn: '',
   nbuAn: '',
-  quellensteuerSatz: '',
 };
 
 function parseNum(v: string): number | null {
@@ -181,29 +178,14 @@ export function LohnbudgetRechner() {
     const ktvAnStd = ktvAnSatz !== null ? bruttolohnStd * ktvAnSatz : null;
     const nbuAnStd = nbuAnSatz !== null ? bruttolohnStd * nbuAnSatz : null;
 
-    // Quellensteuer
-    let qstSatz: number | null = null;
-    if (verfahren === 'vereinfacht') {
-      qstSatz = QST_VEREINFACHT;
-    } else if (verfahren === 'ordentlich_quellensteuer') {
-      qstSatz = parseNum(inputs.quellensteuerSatz);
-    }
-    const qstStd = qstSatz !== null ? bruttolohnStd * qstSatz : null;
-
-    // FAK AN (nur Wallis)
-    const fakAnStd = kanton === 'Wallis' ? bruttolohnStd * FAK_WALLIS_AN : null;
-
-    const anBetraegeStd = [ahvAn, alvAn, ktvAnStd, nbuAnStd, qstStd, fakAnStd].filter((v): v is number => v !== null);
+    const anBetraegeStd = [ahvAn, alvAn, ktvAnStd, nbuAnStd].filter((v): v is number => v !== null);
     const totalAnStd = anBetraegeStd.reduce((a, b) => a + b, 0);
 
     const ahvAnJahr = bruttolohnJahr * AHV_IV_EO_SATZ;
     const alvAnJahr = bruttolohnJahr * ALV_SATZ;
     const ktvAnJahr = ktvAnSatz !== null ? bruttolohnJahr * ktvAnSatz : null;
     const nbuAnJahr = nbuAnSatz !== null ? bruttolohnJahr * nbuAnSatz : null;
-    const qstJahr = qstSatz !== null ? bruttolohnJahr * qstSatz : null;
-    const fakAnJahr = kanton === 'Wallis' ? bruttolohnJahr * FAK_WALLIS_AN : null;
-
-    const anBetraegeJahr = [ahvAnJahr, alvAnJahr, ktvAnJahr, nbuAnJahr, qstJahr, fakAnJahr].filter((v): v is number => v !== null);
+    const anBetraegeJahr = [ahvAnJahr, alvAnJahr, ktvAnJahr, nbuAnJahr].filter((v): v is number => v !== null);
     const totalAnJahr = anBetraegeJahr.reduce((a, b) => a + b, 0);
 
     // Nettolohn
@@ -212,20 +194,14 @@ export function LohnbudgetRechner() {
 
     // Adressaten
     let beitraegeAusgleichskasseJahr = ahvAgJahr + alvAgJahr + vkAgJahr + ahvAnJahr + alvAnJahr;
-    if (verfahren === 'vereinfacht' && qstJahr !== null) {
-      beitraegeAusgleichskasseJahr += qstJahr;
-    }
 
     let beitraegeFakJahr = fakAgJahr;
-    if (fakAnJahr !== null) beitraegeFakJahr += fakAnJahr;
 
     const praemienKtJahr = [ktvAgJahr, ktvAnJahr].filter((v): v is number => v !== null);
     const totalKtJahr = praemienKtJahr.length > 0 ? praemienKtJahr.reduce((a, b) => a + b, 0) : null;
 
     const praemienUnfallJahr = [buAgJahr, nbuAnJahr].filter((v): v is number => v !== null);
     const totalUnfallJahr = praemienUnfallJahr.length > 0 ? praemienUnfallJahr.reduce((a, b) => a + b, 0) : null;
-
-    const qstSteueramtJahr = verfahren === 'ordentlich_quellensteuer' ? qstJahr : null;
 
     return {
       // Lohn
@@ -241,15 +217,15 @@ export function LohnbudgetRechner() {
       // Totalaufwand
       totalAufwandAgStd, totalAufwandAgJahr,
       // AN
-      ahvAn, alvAn, ktvAnStd, nbuAnStd, qstStd, fakAnStd,
-      ahvAnJahr, alvAnJahr, ktvAnJahr, nbuAnJahr, qstJahr, fakAnJahr,
+      ahvAn, alvAn, ktvAnStd, nbuAnStd,
+      ahvAnJahr, alvAnJahr, ktvAnJahr, nbuAnJahr,
       totalAnStd, totalAnJahr,
-      ktvAnSatz, nbuAnSatz, qstSatz,
+      ktvAnSatz, nbuAnSatz,
       // Netto
       nettolohnStd, nettolohnJahr,
       // Adressaten
       beitraegeAusgleichskasseJahr, beitraegeFakJahr,
-      totalKtJahr, totalUnfallJahr, qstSteueramtJahr,
+      totalKtJahr, totalUnfallJahr,
       kanton,
       verfahren,
     };
@@ -329,9 +305,7 @@ export function LohnbudgetRechner() {
             onChange={v => set('abrechnungsverfahren', v as Abrechnungsverfahren)}
             options={[
               { value: '', label: 'Auswählen…' },
-              { value: 'vereinfacht', label: 'Vereinfachtes' },
               { value: 'ordentlich', label: 'Ordentliches' },
-              { value: 'ordentlich_quellensteuer', label: 'Ordentl. m. Quellensteuer' },
             ]}
           />
           <InputField label="Stundenlohn (CHF)" value={inputs.stundenlohn} onChange={v => set('stundenlohn', v)} placeholder="33.00" type="number" />
@@ -361,9 +335,6 @@ export function LohnbudgetRechner() {
           <InputField label="BU-Satz AG" value={inputs.buAg} onChange={v => set('buAg', v)} placeholder="z.B. 0.005" type="number" />
           <InputField label="KTV-Satz AN" value={inputs.ktvAn} onChange={v => set('ktvAn', v)} placeholder="z.B. 0.007" type="number" />
           <InputField label="NBU-Satz AN" value={inputs.nbuAn} onChange={v => set('nbuAn', v)} placeholder="z.B. 0.01" type="number" />
-          {inputs.abrechnungsverfahren === 'ordentlich_quellensteuer' && (
-            <InputField label="QSt-Satz (manuell)" value={inputs.quellensteuerSatz} onChange={v => set('quellensteuerSatz', v)} placeholder="z.B. 0.10" type="number" />
-          )}
         </div>
       </div>
 
@@ -403,14 +374,6 @@ export function LohnbudgetRechner() {
             <ResultRow label={`ALV (${fmtPct(ALV_SATZ)})`} std={result.alvAn} jahr={result.alvAnJahr} />
             {result.ktvAnStd !== null && <ResultRow label={`KTV AN (${fmtPct(result.ktvAnSatz!)})`} std={result.ktvAnStd} jahr={result.ktvAnJahr!} muted />}
             {result.nbuAnStd !== null && <ResultRow label={`NBU AN (${fmtPct(result.nbuAnSatz!)})`} std={result.nbuAnStd} jahr={result.nbuAnJahr!} muted />}
-            {result.qstStd !== null && (
-              <ResultRow
-                label={`Quellensteuer (${fmtPct(result.qstSatz!)}${result.verfahren === 'vereinfacht' ? ', fix' : ''})`}
-                std={result.qstStd}
-                jahr={result.qstJahr!}
-              />
-            )}
-            {result.fakAnStd !== null && <ResultRow label="FAK AN Wallis (0.17%)" std={result.fakAnStd} jahr={result.fakAnJahr!} muted />}
             <ResultRow label="Total AN-Abzüge" std={result.totalAnStd} jahr={result.totalAnJahr} bold />
           </ResultSection>
 
@@ -434,7 +397,6 @@ export function LohnbudgetRechner() {
               <AdressatRow label="Beiträge an FAK" value={result.beitraegeFakJahr} />
               {result.totalKtJahr !== null && <AdressatRow label="Prämien an KT-Versicherer" value={result.totalKtJahr} />}
               {result.totalUnfallJahr !== null && <AdressatRow label="Prämien an Unfallversicherer" value={result.totalUnfallJahr} />}
-              {result.qstSteueramtJahr !== null && <AdressatRow label="Quellensteuer an Steueramt" value={result.qstSteueramtJahr} />}
             </div>
           )}
 
@@ -444,7 +406,6 @@ export function LohnbudgetRechner() {
             <p className="text-[11px] text-muted-foreground leading-relaxed">
               Rechner basiert auf Schweizer Sozialversicherungssätzen (AHV/IV/EO, ALV, FAK).
               VK-Satz = 5% × 10.55%. FAK-Sätze und kantonale Bestimmungen gemäss aktuellem Stand.
-              Wallis: zusätzlicher AN-FAK-Beitrag von 0.17%.
             </p>
           </div>
         </div>

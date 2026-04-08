@@ -90,6 +90,38 @@ function getCantonFromPLZ(plz: string): { code: string; name: string } | null {
   return null;
 }
 
+// Minimaler PLZ → Ort Lookup (MVP). Nur häufige/prüfrelevante PLZ.
+const PLZ_CITY_MAP: Record<string, string> = {
+  '3000': 'Bern',
+  '3001': 'Bern',
+  '3011': 'Bern',
+  '3012': 'Bern',
+  '3013': 'Bern',
+  '3014': 'Bern',
+  '3015': 'Bern',
+  '3018': 'Bern',
+  '3027': 'Bern',
+  '4000': 'Basel',
+  '4001': 'Basel',
+  '4058': 'Basel',
+  '6000': 'Luzern',
+  '6003': 'Luzern',
+  '8000': 'Zürich',
+  '8001': 'Zürich',
+  '8003': 'Zürich',
+  '8004': 'Zürich',
+  '8005': 'Zürich',
+  '8006': 'Zürich',
+  '8008': 'Zürich',
+  '8032': 'Zürich',
+};
+
+function getCityFromPLZ(plz: string): string | null {
+  const z = plz.trim();
+  if (z.length !== 4) return null;
+  return PLZ_CITY_MAP[z] || null;
+}
+
 // ─── Stable sub-components ───
 
 const inputCls = "w-full px-4 py-3 rounded-lg border bg-background text-base focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary";
@@ -107,11 +139,23 @@ function Field({ label, value, onChange, disabled, placeholder, type = 'text' }:
   );
 }
 
-function Radio({ active, onClick, label, icon: Icon }: { active: boolean; onClick: () => void; label: string; icon?: React.ComponentType<{className?: string}> }) {
+function Radio({ active, onClick, label, icon: Icon, disabled }: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  icon?: React.ComponentType<{className?: string}>;
+  disabled?: boolean;
+}) {
   return (
-    <button type="button" onClick={onClick}
+    <button
+      type="button"
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
       className={`w-full text-left px-5 py-4 rounded-xl border-2 text-base font-medium transition-all
-        ${active ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/30'}`}>
+        ${disabled ? 'opacity-50 cursor-not-allowed bg-muted/30 border-border' : ''}
+        ${!disabled && active ? 'border-primary bg-primary/5' : ''}
+        ${!disabled && !active ? 'border-border hover:border-primary/30' : ''}`}
+    >
       <span className="flex items-center gap-3">
         <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0
           ${active ? 'border-primary bg-primary' : 'border-muted-foreground/30'}`}>
@@ -158,6 +202,7 @@ export function EmployerOnboarding({ onComplete }: Props) {
   // Setup
   const [tracker, setTracker] = useState('');
   const [approvalNeeded, setApprovalNeeded] = useState('');
+  const [activitiesInDayShifts, setActivitiesInDayShifts] = useState<'yes' | 'no' | ''>('');
   const [loading, setLoading] = useState(false);
   const [detectedCanton, setDetectedCanton] = useState<{ code: string; name: string } | null>(null);
 
@@ -166,8 +211,20 @@ export function EmployerOnboarding({ onComplete }: Props) {
     setCZip(zip);
     if (zip.length >= 4) {
       setDetectedCanton(getCantonFromPLZ(zip));
+      if (!cCity.trim()) {
+        const derived = getCityFromPLZ(zip);
+        if (derived) setCCity(derived);
+      }
     } else {
       setDetectedCanton(null);
+    }
+  };
+
+  const handleAffectedZipChange = (zip: string) => {
+    setAZip(zip);
+    if (zip.length >= 4 && !aCity.trim()) {
+      const derived = getCityFromPLZ(zip);
+      if (derived) setACity(derived);
     }
   };
 
@@ -187,7 +244,7 @@ export function EmployerOnboarding({ onComplete }: Props) {
   const canNext = () => {
     if (step === 1) return cFirst.trim() !== '' && cLast.trim() !== '';
     if (step === 2) return aFirst.trim() !== '' && aLast.trim() !== '';
-    if (step === 3) return tracker !== '' && (tracker === 'employer' || approvalNeeded !== '');
+    if (step === 3) return tracker !== '' && (tracker === 'employer' || (approvalNeeded !== '' && activitiesInDayShifts !== ''));
     return false;
   };
 
@@ -200,6 +257,7 @@ export function EmployerOnboarding({ onComplete }: Props) {
 
     const isSupporter = role === 'supporter';
     const name = isSupporter ? `${aFirst} ${aLast}`.trim() : `${cFirst} ${cLast}`.trim();
+    const timeEntryRequiresActivityBreakdown = tracker === 'assistant' ? activitiesInDayShifts === 'yes' : false;
 
     const { data: emp, error: e1 } = await supabase
       .from('employer')
@@ -234,8 +292,30 @@ export function EmployerOnboarding({ onComplete }: Props) {
     if (e2) { toast.error('Fehler: ' + e2.message); setLoading(false); return; }
 
     await supabase.from('assistant').insert([
-      { employer_id: emp.id, name: 'Max Mustermann (Demo)', email: 'max@example.com', date_of_birth: '1990-01-15', hourly_rate: 35.30, vacation_weeks: 4, has_withholding_tax: false, has_bvg: false, is_active: true, time_entry_mode: tracker === 'employer' ? 'manual' : 'self' },
-      { employer_id: emp.id, name: 'Anna Schmidt (Demo)', email: 'anna@example.com', date_of_birth: '1985-06-20', hourly_rate: 42.00, vacation_weeks: 5, has_withholding_tax: false, has_bvg: true, is_active: true, time_entry_mode: tracker === 'employer' ? 'manual' : 'self' },
+      {
+        employer_id: emp.id,
+        name: 'Max Mustermann (Demo)',
+        email: 'max@example.com',
+        date_of_birth: '1990-01-15',
+        hourly_rate: 35.30,
+        vacation_weeks: 4,
+        has_bvg: false,
+        is_active: true,
+        time_entry_mode: tracker === 'employer' ? 'manual' : 'self',
+        contract_data: { time_entry_requires_activity_breakdown: timeEntryRequiresActivityBreakdown },
+      },
+      {
+        employer_id: emp.id,
+        name: 'Anna Schmidt (Demo)',
+        email: 'anna@example.com',
+        date_of_birth: '1985-06-20',
+        hourly_rate: 42.00,
+        vacation_weeks: 5,
+        has_bvg: true,
+        is_active: true,
+        time_entry_mode: tracker === 'employer' ? 'manual' : 'self',
+        contract_data: { time_entry_requires_activity_breakdown: timeEntryRequiresActivityBreakdown },
+      },
     ]);
 
     toast.success('Einrichtung abgeschlossen!');
@@ -306,7 +386,7 @@ export function EmployerOnboarding({ onComplete }: Props) {
         </div>
         <Field label="Strasse & Nr." value={aStreet} onChange={setAStreet} />
         <div className="grid grid-cols-[120px_1fr] gap-4">
-          <Field label="PLZ" value={aZip} onChange={setAZip} />
+          <Field label="PLZ" value={aZip} onChange={handleAffectedZipChange} />
           <Field label="Ort" value={aCity} onChange={setACity} />
         </div>
         <Field label="E-Mail (optional)" value={aEmail} onChange={setAEmail} type="email" placeholder="name@beispiel.ch" />
@@ -317,7 +397,19 @@ export function EmployerOnboarding({ onComplete }: Props) {
     if (step === 3) return (
       <div className="space-y-4">
         <h3 className="text-xl font-bold flex items-center gap-2"><ClipboardList className="w-6 h-6 text-primary" />Wer erfasst die Stunden?</h3>
-        <Radio active={tracker === 'employer'} onClick={() => { setTracker('employer'); setApprovalNeeded(''); }} label="Ich selbst (Arbeitgeber)" icon={User} />
+        <Radio
+          active={tracker === 'employer'}
+          onClick={() => { setTracker('employer'); setApprovalNeeded(''); setActivitiesInDayShifts(''); }}
+          label={role === 'affected' ? 'Ich selbst (Betroffene Person) – MVP 1: out of scope' : 'Ich selbst (Arbeitgeber)'}
+          icon={User}
+          disabled={role === 'affected'}
+        />
+        {role === 'affected' && (
+          <p className="text-sm text-muted-foreground -mt-2">
+            In <span className="font-medium">MVP 1</span> wird die Zeiterfassung durch die betroffene Person selbst noch nicht unterstützt.
+            Bitte wählen Sie dafür „Die Assistenzperson“.
+          </p>
+        )}
         <Radio active={tracker === 'assistant'} onClick={() => setTracker('assistant')} label="Die Assistenzperson" icon={UserX} />
 
         {tracker === 'assistant' && (
@@ -325,6 +417,18 @@ export function EmployerOnboarding({ onComplete }: Props) {
             <p className="text-base font-medium flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-primary" />Müssen die Stunden genehmigt werden?</p>
             <Radio active={approvalNeeded === 'yes'} onClick={() => setApprovalNeeded('yes')} label="Ja, ich genehmige" />
             <Radio active={approvalNeeded === 'no'} onClick={() => setApprovalNeeded('no')} label="Nein, direkt übernehmen" />
+
+            <div className="pt-3">
+              <p className="text-base font-medium">Soll die Assistenzperson bei Tagdiensten zusätzlich Tätigkeiten erfassen?</p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Wenn Sie <span className="font-medium">Ja</span> wählen, erscheint bei <span className="font-medium">Tagdiensten</span> beim Erfassen der Stunden
+                ein zusätzliches Feld „Tätigkeitsbereich“. Bei Nachtdiensten wird dieses Feld nicht angezeigt.
+              </p>
+              <div className="mt-3 space-y-2">
+                <Radio active={activitiesInDayShifts === 'yes'} onClick={() => setActivitiesInDayShifts('yes')} label="Ja, Tätigkeiten mit erfassen" />
+                <Radio active={activitiesInDayShifts === 'no'} onClick={() => setActivitiesInDayShifts('no')} label="Nein, nur Zeiten erfassen" />
+              </div>
+            </div>
           </div>
         )}
       </div>

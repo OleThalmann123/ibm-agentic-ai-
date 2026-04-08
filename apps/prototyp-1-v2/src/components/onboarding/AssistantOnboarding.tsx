@@ -1,40 +1,516 @@
-import { useState, useEffect } from 'react';
+import {
+  useState,
+  useEffect,
+  useMemo,
+  useRef,
+  type ReactNode,
+  type ChangeEvent,
+  type FormEvent,
+} from 'react';
 import { supabase } from '@asklepios/backend';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import asklepiosLogo from '@/assets/asklepios-logo.png';
 
 const formatAIWarning = (code: string) => {
   const map: Record<string, string> = {
     'FEHLENDE_AHV_NUMMER': 'AHV-Nummer fehlt im Dokument',
-    'KANTON_ABGELEITET': 'Kanton wurde automatisch anhand der PLZ abgeleitet',
+    'KANTON_ABGELEITET': 'Wohnsitzkanton wurde automatisch anhand der PLZ abgeleitet',
     'FEHLENDE_SOZIALVERSICHERUNGSANGABEN': 'Sozialversicherungsabzüge konnten nicht gefunden werden',
     'UNVOLLSTAENDIGE_ADRESSE': 'Adresse der Assistenzperson ist unvollständig',
     'LOHN_NICHT_ERKANNT': 'Bruttolohn konnte nicht eindeutig bestimmt werden'
   };
   return map[code] || code.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
 };
-import { UploadCloud, CheckCircle2, FileText, ArrowRight, AlertCircle, HelpCircle, User, ArrowLeft, Loader2, Share2, Copy, Check } from 'lucide-react';
+import { UploadCloud, CheckCircle2, FileText, ArrowRight, AlertCircle, HelpCircle, User, ArrowLeft, Loader2, Share2, Copy, Check, ShieldCheck, AlertTriangle, X } from 'lucide-react';
 import { readFileContent } from '@asklepios/backend';
 import { runDocumentPipeline } from '@asklepios/backend';
-import { ContractExtractionResult, IDPField, ConfidenceLevel } from '@asklepios/backend';
+import { ContractExtractionResult, IDPField, ConfidenceLevel, BinaryStatus } from '@asklepios/backend';
+import type { PipelineTrace } from '@asklepios/backend';
 
-// Check if field was AI-extracted
-function isAiExtracted(confidence: string): boolean {
-  return confidence === 'high' || confidence === 'medium';
-}
-
-function confidenceLabel(confidence: string): string {
-  return 'KI';
-}
-
-// Required fields
 const REQUIRED_FIELDS = ['firstName', 'lastName', 'birthDate', 'ahvNumber', 'contractStart', 'hoursPerWeek', 'hourlyRate'];
 
-function confidenceMessage(field: IDPField<any>): string | undefined {
-  if (field.confidence === 'high' && field.value !== null) return undefined;
-  if (field.confidence === 'medium') return field.note || 'Unsicher, bitte prüfen';
-  if (field.value === null) return field.note || 'Nicht im Vertrag gefunden';
-  return field.note || 'Bitte ergänzen';
+const normalizeCountryToIso2 = (raw: string) => {
+  const v = raw.trim();
+  if (!v) return '';
+  const u = v.toUpperCase();
+  if (/^[A-Z]{2}$/.test(u)) return u;
+  const map: Record<string, string> = {
+    schweiz: 'CH',
+    switzerland: 'CH',
+    suisse: 'CH',
+    italien: 'IT',
+    italy: 'IT',
+    italia: 'IT',
+    deutschland: 'DE',
+    germany: 'DE',
+    österreich: 'AT',
+    oesterreich: 'AT',
+    austria: 'AT',
+    frankreich: 'FR',
+    france: 'FR',
+    liechtenstein: 'LI',
+  };
+  return map[v.toLowerCase()] || v;
+};
+
+const extractSuggestedIso2 = (text?: string) => {
+  if (!text) return null;
+  const m = text.match(/sollte\s+['"]?([A-Z]{2})['"]?/i);
+  return m?.[1]?.toUpperCase() ?? null;
+};
+
+const FIELD_LABELS: Record<string, string> = {
+  'employer.first_name': 'Auftraggeber Vorname',
+  'employer.last_name': 'Auftraggeber Nachname',
+  'employer.street': 'Auftraggeber Strasse',
+  'employer.zip': 'Auftraggeber PLZ',
+  'employer.city': 'Auftraggeber Ort',
+  'assistant.first_name': 'Vorname', 'assistant.last_name': 'Nachname',
+  'assistant.street': 'Strasse',
+  'assistant.house_number': 'Hausnummer',
+  'assistant.zip': 'PLZ',
+  'assistant.city': 'Ort',
+  'assistant.country': 'Land',
+  'assistant.phone': 'Telefon',
+  'assistant.email': 'E-Mail',
+  'assistant.birth_date': 'Geburtsdatum', 'assistant.ahv_number': 'AHV-Nummer',
+  'assistant.gender': 'Geschlecht',
+  'assistant.civil_status': 'Zivilstand', 'assistant.nationality': 'Nationalität',
+  'assistant.residence_permit': 'Aufenthaltsstatus',
+  'contract_terms.start_date': 'Vertragsbeginn', 'contract_terms.end_date': 'Vertragsende',
+  'contract_terms.is_indefinite': 'Unbefristet',
+  'contract_terms.hours_per_week': 'Stunden/Woche', 'contract_terms.hours_per_month': 'Stunden/Monat',
+  'contract_terms.notice_period_days': 'Kündigungsfrist (Tage)',
+  'wage.wage_type': 'Lohnart',
+  'wage.hourly_rate': 'Stundenlohn', 'wage.monthly_rate': 'Monatslohn',
+  'wage.vacation_weeks': 'Ferienwochen',
+  'wage.holiday_supplement_pct': 'Ferienzuschlag',
+  'wage.payment_iban': 'IBAN',
+  'social_insurance.canton': 'Wohnsitzkanton',
+  'social_insurance.accounting_method': 'Abrechnungsverfahren',
+  'social_insurance.nbu_employer_pct': 'Nichtberufsunfallversicherung (NBU) Arbeitgeber (%)',
+  'social_insurance.nbu_employee_pct': 'Nichtberufsunfallversicherung (NBU) Arbeitnehmer (%)',
+};
+
+/** UI-Feld-Schlüssel → Extraktions-Pfad (für Status, Review, Popup) */
+const FIELD_KEY_TO_PATH: Record<string, string> = {
+  firstName: 'assistant.first_name',
+  lastName: 'assistant.last_name',
+  street: 'assistant.street',
+  houseNumber: 'assistant.house_number',
+  plz: 'assistant.zip',
+  city: 'assistant.city',
+  country: 'assistant.country',
+  phone: 'assistant.phone',
+  email: 'assistant.email',
+  birthDate: 'assistant.birth_date',
+  gender: 'assistant.gender',
+  ahvNumber: 'assistant.ahv_number',
+  civilStatus: 'assistant.civil_status',
+  residencePermit: 'assistant.residence_permit',
+  contractStart: 'contract_terms.start_date',
+  contractEnd: 'contract_terms.end_date',
+  contractUnbefristet: 'contract_terms.is_indefinite',
+  noticePeriodDays: 'contract_terms.notice_period_days',
+  hoursPerWeek: 'contract_terms.hours_per_week',
+  hoursPerMonth: 'contract_terms.hours_per_month',
+  wageType: 'wage.wage_type',
+  hourlyRate: 'wage.hourly_rate',
+  monthlyRate: 'wage.monthly_rate',
+  vacationWeeks: 'wage.vacation_weeks',
+  vacationSurcharge: 'wage.holiday_supplement_pct',
+  iban: 'wage.payment_iban',
+  billingMethod: 'social_insurance.accounting_method',
+  canton: 'social_insurance.canton',
+  nbuEmployer: 'social_insurance.nbu_employer_pct',
+  nbuEmployee: 'social_insurance.nbu_employee_pct',
+};
+
+const PATH_TO_FIELD_KEY: Record<string, string> = Object.fromEntries(
+  Object.entries(FIELD_KEY_TO_PATH).map(([k, v]) => [v, k]),
+);
+
+const SWISS_CANTON_OPTIONS: [string, string][] = [
+  ['LU', 'Luzern'],
+  ['BE', 'Bern'],
+  ['ZH', 'Zürich'],
+];
+
+// Grobe Ableitung Wohnsitzkanton aus PLZ-Präfix (MVP: nur LU/BE/ZH relevant).
+// (Entspricht der Logik im Agent-Tool; bewusst simpel gehalten.)
+const ZIP_PREFIX_TO_CANTON: Record<string, string> = {
+  '28': 'BE', '29': 'BE', '30': 'BE', '31': 'BE', '33': 'BE', '34': 'BE', '35': 'BE', '36': 'BE', '37': 'BE', '38': 'BE', '39': 'BE',
+  '54': 'LU', '55': 'LU', '60': 'LU', '61': 'LU',
+  '80': 'ZH', '81': 'ZH', '82': 'ZH', '83': 'ZH', '84': 'ZH', '85': 'ZH',
+};
+
+/** Verhindert doppelte Pipeline-Läufe für dieselbe Datei (z. B. React Strict Mode). */
+const EXTRACTION_IN_FLIGHT = new Map<string, Promise<void>>();
+function extractionDedupeKey(file: File) {
+  return `${file.name}\0${file.size}\0${file.lastModified}`;
+}
+
+const TOAST_EXTRACTION_LOADING = 'extraction-loading';
+const TOAST_EXTRACTION_RESULT = 'extraction-result';
+
+export type PopupAttentionField = {
+  path: string;
+  label: string;
+  missing: boolean;
+  needsReview: boolean;
+  hint?: string;
+};
+
+/** Alle Formular-relevanten Pfade + alle vom Judge gemeldeten Pfade. */
+function collectAttentionPaths(reviewPaths: string[]): string[] {
+  const keys = new Set<string>(Object.values(FIELD_KEY_TO_PATH));
+  for (const p of reviewPaths) keys.add(p);
+  return [...keys];
+}
+
+function buildPopupAttentionFields(
+  extraction: ContractExtractionResult | null,
+  reviewPaths: string[],
+  contractIsIndefinite: boolean,
+): PopupAttentionField[] {
+  if (!extraction?.contracts) return [];
+
+  const reviewSet = new Set(reviewPaths);
+  const paths = collectAttentionPaths(reviewPaths);
+  const out: PopupAttentionField[] = [];
+  const OPTIONAL_MISSING_PATHS = new Set<string>([
+    // Telefon ist optional – wenn nicht im Vertrag vorhanden, soll es nicht als "fehlend" erscheinen.
+    'assistant.phone',
+  ]);
+
+  for (const path of paths) {
+    const dot = path.indexOf('.');
+    if (dot === -1) continue;
+    const section = path.slice(0, dot) as keyof ContractExtractionResult['contracts'];
+    const fieldName = path.slice(dot + 1);
+    const contractSection = extraction.contracts[section];
+    if (!contractSection || typeof contractSection !== 'object') continue;
+    const rawField = (contractSection as Record<string, IDPField<unknown> | undefined>)[fieldName];
+    if (!rawField) continue;
+
+    const v = rawField.value;
+    const missing =
+      v === null ||
+      v === undefined ||
+      (typeof v === 'string' && v.trim() === '');
+
+    const inReviewList = reviewSet.has(path);
+    const lowConf =
+      typeof rawField.confidence_score === 'number' && rawField.confidence_score < 0.8;
+    const statusReview = (rawField as { status?: string }).status === 'review_required';
+
+    const needsReview = inReviewList || lowConf || statusReview;
+
+    if (
+      path === 'contract_terms.end_date' &&
+      contractIsIndefinite &&
+      missing &&
+      !needsReview
+    ) {
+      continue;
+    }
+
+    if (missing && !needsReview && OPTIONAL_MISSING_PATHS.has(path)) continue;
+    if (!missing && !needsReview) continue;
+
+    const hint =
+      (rawField as { judge_justification?: string }).judge_justification ||
+      rawField.note ||
+      (missing
+        ? 'Nicht im Arbeitsvertrag identifiziert – bitte ergänzen oder bestätigen.'
+        : undefined);
+
+    out.push({
+      path,
+      label: FIELD_LABELS[path] || path.replace(/\./g, ' › '),
+      missing,
+      needsReview,
+      hint,
+    });
+  }
+
+  // UX-Regel: Wenn Wohnsitzkanton Prüfbedarf hat, braucht es zwingend eine PLZ,
+  // damit der Wohnsitzkanton nachvollziehbar/ableitbar ist.
+  const cantonRow = out.find(r => r.path === 'social_insurance.canton');
+  const plzRow = out.find(r => r.path === 'assistant.zip');
+  const hasPlzValue = !!extraction?.contracts?.assistant?.zip?.value;
+  if (cantonRow?.needsReview && !hasPlzValue) {
+    if (plzRow) {
+      plzRow.missing = true;
+      plzRow.needsReview = true;
+      plzRow.hint = 'Bitte PLZ ergänzen – sie wird für den Wohnsitzkanton benötigt.';
+    } else {
+      out.unshift({
+        path: 'assistant.zip',
+        label: FIELD_LABELS['assistant.zip'] || 'PLZ',
+        missing: true,
+        needsReview: true,
+        hint: 'Bitte PLZ ergänzen – sie wird für den Wohnsitzkanton benötigt.',
+      });
+    }
+  }
+
+  out.sort((a, b) => {
+    if (a.missing !== b.missing) return a.missing ? -1 : 1;
+    if (a.needsReview !== b.needsReview) return a.needsReview ? -1 : 1;
+    return a.label.localeCompare(b.label, 'de');
+  });
+
+  return out;
+}
+
+function ReviewPopup({
+  attentionFields,
+  contractPreviewUrl,
+  contractFileName,
+  contractMimeType,
+  renderFieldEditor,
+  onClose,
+}: {
+  attentionFields: PopupAttentionField[];
+  contractPreviewUrl: string | null;
+  contractFileName: string;
+  contractMimeType: string;
+  renderFieldEditor: (path: string) => ReactNode;
+  onClose: () => void;
+}) {
+  const isPdf =
+    contractMimeType.includes('pdf') ||
+    contractFileName.toLowerCase().endsWith('.pdf') ||
+    contractPreviewUrl?.toLowerCase().includes('.pdf') === true;
+  const isImage = contractMimeType.startsWith('image/');
+  const showOpenLink = !!contractPreviewUrl && !(isPdf || isImage);
+
+  const reviewRowsAll = attentionFields.filter(r => !r.missing && r.needsReview);
+  const missingRowsAll = attentionFields.filter(r => r.missing);
+
+  const hasReview = reviewRowsAll.length > 0;
+  // Immer konsistent führen: zuerst "Prüfen" (wenn vorhanden), sonst direkt "Ergänzen".
+  const [mode, setMode] = useState<'pruefen' | 'ergaenzen'>(hasReview ? 'pruefen' : 'ergaenzen');
+
+  const reviewRows = mode === 'pruefen' ? reviewRowsAll : [];
+  const missingRows = mode === 'ergaenzen' ? missingRowsAll : [];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/45 backdrop-blur-sm animate-in fade-in duration-200 p-3 sm:p-4 sm:pt-6">
+      <div className="w-full max-w-7xl max-h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-300 rounded-2xl p-[1px] bg-[linear-gradient(90deg,rgba(59,130,246,0.55),rgba(168,85,247,0.50),rgba(16,185,129,0.38))] shadow-[0_26px_90px_rgba(2,6,23,0.35)]">
+        <div className="bg-white rounded-2xl overflow-hidden flex flex-col max-h-[92vh]">
+        <div className="shrink-0 px-4 py-3 sm:px-5 text-white relative overflow-hidden">
+          <div className="absolute inset-0 bg-[radial-gradient(1200px_600px_at_15%_0%,rgba(59,130,246,0.22),transparent_55%),radial-gradient(900px_520px_at_85%_15%,rgba(168,85,247,0.22),transparent_50%),radial-gradient(700px_520px_at_40%_120%,rgba(16,185,129,0.16),transparent_55%),linear-gradient(to_bottom,rgba(2,6,23,0.92),rgba(2,6,23,0.82))]" />
+          <div className="flex items-start justify-between gap-3">
+            <div className="relative">
+              <h3 className="text-lg font-bold leading-tight">Asklepios braucht deine Hilfe</h3>
+              <p className="text-sm text-white/70 mt-0.5">
+                Bitte <span className="font-semibold text-white">prüfen</span> (mit Arbeitsvertrag) und <span className="font-semibold text-white">ergänzen</span> (falls nicht im Vertrag).
+              </p>
+            </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="relative rounded-lg p-2 text-white/70 hover:bg-white/10 hover:text-white transition-colors"
+            aria-label="Schliessen"
+          >
+            <X className="w-5 h-5" />
+          </button>
+          </div>
+
+          {/* Hint + Tabs */}
+          {attentionFields.length > 0 ? (
+            <div className="mt-3 space-y-2 relative">
+              <p className="text-sm text-white/80 leading-relaxed">
+                Asklepios hat deine Daten erfolgreich ausgelesen. Er benötigt an einigen Stellen noch Hilfe:
+                <br />
+                <span className="font-semibold text-white">Prüfen:</span> Unsichere Werte mit dem Arbeitsvertrag rechts abgleichen.
+                <br />
+                <span className="font-semibold text-white">Ergänzen:</span> Fehlende Werte manuell eintragen (wenn korrekt, darf es leer bleiben).
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="inline-flex rounded-full bg-white/10 p-0.5 border border-white/10">
+                  {hasReview ? (
+                    <button
+                      type="button"
+                      onClick={() => setMode('pruefen')}
+                      className={`px-3 py-1 rounded-full text-[11px] font-bold transition-all ${
+                        mode === 'pruefen' ? 'bg-white text-slate-900 shadow-sm' : 'text-white/80 hover:text-white'
+                      }`}
+                    >
+                      Prüfen ({reviewRowsAll.length})
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => setMode('ergaenzen')}
+                    className={`px-3 py-1 rounded-full text-[11px] font-bold transition-all ${
+                      mode === 'ergaenzen' ? 'bg-white text-slate-900 shadow-sm' : 'text-white/80 hover:text-white'
+                    }`}
+                  >
+                    Ergänzen ({missingRowsAll.length})
+                  </button>
+                </div>
+                <span className="text-[11px] text-white/60">
+                  {mode === 'pruefen' ? 'Prüfen mit Vertrag rechts' : 'Ergänzen: nicht im Vertrag vorhanden'}
+                </span>
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="flex flex-1 min-h-0 flex-col lg:flex-row">
+          {/* Links: Feldliste */}
+          <div className={`${mode === 'pruefen' ? 'lg:w-[48%] lg:border-r' : 'w-full'} flex flex-col min-h-0 border-b lg:border-b-0 border-slate-100 max-h-[50vh] lg:max-h-none`}>
+            <div className="overflow-y-auto flex-1 px-4 py-3 space-y-5">
+              {(mode === 'pruefen' ? reviewRowsAll.length === 0 : missingRowsAll.length === 0) ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-sm font-semibold text-slate-800">
+                    {mode === 'pruefen' ? 'Keine Unsicherheiten zum Prüfen.' : 'Keine fehlenden Angaben zum Ergänzen.'}
+                  </p>
+                  <p className="text-xs text-slate-600 mt-1">
+                    {mode === 'pruefen'
+                      ? 'Wenn du trotzdem etwas ergänzen möchtest, wechsle zu «Ergänzen».'
+                      : hasReview
+                        ? 'Wenn du unsichere Felder abgleichen möchtest, wechsle zu «Prüfen».'
+                        : 'Du kannst den Dialog schliessen und im Formular fortfahren.'}
+                  </p>
+                  {mode === 'pruefen' ? (
+                    <button
+                      type="button"
+                      onClick={() => setMode('ergaenzen')}
+                      className="mt-3 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50"
+                    >
+                      Zu Ergänzen wechseln
+                    </button>
+                  ) : hasReview ? (
+                    <button
+                      type="button"
+                      onClick={() => setMode('pruefen')}
+                      className="mt-3 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50"
+                    >
+                      Zu Prüfen wechseln
+                    </button>
+                  ) : null}
+                </div>
+              ) : (
+                <>
+                  {/* Cards */}
+                  {(mode === 'pruefen' ? reviewRows : missingRows).map((row) => (
+                    <div
+                      key={row.path}
+                      className={`rounded-xl border px-3 py-2.5 shadow-sm ${
+                        mode === 'pruefen'
+                          ? 'border-orange-200 bg-white'
+                          : 'border-amber-200 bg-white'
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-center gap-1.5 gap-y-1">
+                        <span className="text-sm font-semibold text-slate-800">{row.label}</span>
+                        {mode === 'ergaenzen' ? (
+                          <span className="text-[9px] font-semibold leading-tight px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-900 border border-amber-200 max-w-[14rem]">
+                            Ergänzen
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-orange-50 text-orange-900 border border-orange-200 flex items-center gap-0.5">
+                            <AlertTriangle className="w-3 h-3" /> Prüfen
+                          </span>
+                        )}
+                      </div>
+                      {row.hint ? (
+                        <p className="text-xs text-slate-500 mt-1.5 leading-snug">{row.hint}</p>
+                      ) : null}
+                      <div className="mt-2.5 pt-2.5 border-t border-slate-100 space-y-2">
+                        {renderFieldEditor(row.path)}
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+              <p className="text-xs text-slate-500">
+                Tipp: Du kannst alles direkt hier im Dialog ergänzen/korrigieren.
+              </p>
+            </div>
+          </div>
+
+          {/* Rechts: Vertrag */}
+          {mode === 'pruefen' ? (
+          <div className="flex-1 flex flex-col min-h-[300px] lg:min-h-0 bg-slate-100/90">
+            <div className="shrink-0 px-4 py-2 border-b border-slate-200/80 flex items-center justify-between gap-2">
+              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+                Arbeitsvertrag
+              </span>
+              <div className="flex items-center gap-2 min-w-0">
+                {showOpenLink ? (
+                  <a
+                    href={contractPreviewUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[11px] font-semibold text-slate-600 hover:text-slate-900 underline shrink-0"
+                  >
+                    Vertrag öffnen
+                  </a>
+                ) : null}
+              </div>
+            </div>
+            <div className="flex-1 min-h-[240px] p-2 sm:p-3">
+              {contractPreviewUrl && isPdf ? (
+                <div className="w-full h-full min-h-[280px] rounded-lg border border-slate-200 bg-white overflow-hidden">
+                  <embed
+                    key={contractPreviewUrl}
+                    src={contractPreviewUrl}
+                    type="application/pdf"
+                    className="w-full h-full min-h-[280px]"
+                  />
+                </div>
+              ) : contractPreviewUrl && isImage ? (
+                <div className="h-full overflow-auto rounded-lg border border-slate-200 bg-white flex items-start justify-center p-2">
+                  <img
+                    src={contractPreviewUrl}
+                    alt="Hochgeladener Vertrag"
+                    className="max-w-full h-auto object-contain"
+                  />
+                </div>
+              ) : (
+                <div className="h-full min-h-[200px] rounded-lg border border-dashed border-slate-300 bg-white flex flex-col items-center justify-center text-center px-4">
+                  <FileText className="w-10 h-10 text-slate-300 mb-2" />
+                  <p className="text-sm text-slate-500">
+                    {contractPreviewUrl
+                      ? 'Für diesen Dateityp gibt es keine eingebettete Vorschau. Bitte die Datei separat öffnen.'
+                    : 'Keine Dateivorschau verfügbar. Bitte prüfen Sie die extrahierten Felder im Formular.'}
+                  </p>
+                  {contractPreviewUrl ? (
+                    <a
+                      href={contractPreviewUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-3 text-sm font-semibold text-slate-700 underline"
+                    >
+                      Vertrag öffnen
+                    </a>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          </div>
+          ) : null}
+        </div>
+
+        <div className="shrink-0 border-t border-slate-100 px-4 py-3 sm:px-5">
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-full py-3 rounded-xl bg-foreground text-background font-bold text-sm hover:bg-foreground/90 transition-colors"
+          >
+            Fertig – weiter im Formular
+          </button>
+        </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ─── Validation & Formatting Helpers ─────────────────────
@@ -104,41 +580,90 @@ function MiniField({
   title, 
   children,
   aiDetected = false,
+  fieldStatus,
+  attentionHighlight = false,
+  reviewed = false,
+  onReviewToggle,
   required = false,
   hasValue = false,
   error,
   hint,
+  reviewHint,
   className = "" 
 }: { 
   title: string, 
-  children: React.ReactNode,
+  children: ReactNode,
   aiDetected?: boolean,
+  fieldStatus?: 'ok' | 'review_required',
+  /** Feld steht auch im Prüf-Dialog – orange bis im Formular bestätigt */
+  attentionHighlight?: boolean,
+  reviewed?: boolean,
+  onReviewToggle?: () => void,
   required?: boolean,
   hasValue?: boolean,
   error?: string | null,
   hint?: string,
+  reviewHint?: string,
   className?: string
 }) {
+  const isReviewRequired = fieldStatus === 'review_required';
+  const needsCheck = isReviewRequired || attentionHighlight;
+  // UX: Karten immer weiss; Status nur über Rahmen/Farbe kommunizieren.
+  const borderColor = error
+    ? 'border-red-300 bg-white'
+    : needsCheck && !reviewed
+      ? 'border-amber-300 bg-white'
+      : 'border-slate-200 bg-white';
+  // Wording-Konsistenz: überall nur "Prüfen" und "Ergänzen"
+  const badgeText = needsCheck ? (hasValue ? 'Prüfen' : 'Ergänzen') : (!hasValue ? 'Optional' : 'OK');
+
   return (
-    <div className={`p-2.5 rounded-xl border flex flex-col justify-between ${error ? 'border-red-300 bg-red-50/30' : 'border-slate-200 bg-white'} transition-colors shadow-sm ${className}`}>
+    <div className={`p-2.5 rounded-xl border flex flex-col justify-between ${borderColor} transition-colors shadow-sm ${className}`}>
       <div>
         <div className="flex items-center justify-between mb-2">
           <span className="text-[9px] font-bold uppercase tracking-widest text-slate-500">{title}</span>
-          {aiDetected && hasValue && (
-            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 flex items-center gap-0.5">
-              <CheckCircle2 className="w-2.5 h-2.5" />
-              KI
-            </span>
-          )}
+          <div className="flex items-center gap-1">
+            {aiDetected && hasValue && fieldStatus === 'ok' && !needsCheck && (
+              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 flex items-center gap-0.5">
+                <ShieldCheck className="w-2.5 h-2.5" />
+                OK
+              </span>
+            )}
+            {needsCheck && !reviewed && (
+              <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-600 flex items-center gap-0.5">
+                {hasValue ? <AlertTriangle className="w-2.5 h-2.5" /> : <HelpCircle className="w-2.5 h-2.5" />}
+                {badgeText}
+              </span>
+            )}
+          </div>
         </div>
         <div className="w-full">{children}</div>
       </div>
       <div className="min-h-[20px]">
+        {needsCheck && hasValue && onReviewToggle ? (
+          <div className="mt-1.5 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onReviewToggle}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[10px] font-semibold transition-colors ${
+                reviewed
+                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
+                  : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'
+              }`}
+            >
+              <Check className="w-3 h-3" />
+              {reviewed ? 'Bestätigt' : 'Bestätigen'}
+            </button>
+            {!reviewed ? (
+              <span className="text-[10px] text-slate-500">Nur nötig bei «Prüfen».</span>
+            ) : null}
+          </div>
+        ) : null}
         {error ? (
           <p className="text-[10px] mt-1.5 text-red-500 font-medium">{error}</p>
         ) : hint && hasValue ? (
           <p className="text-[10px] mt-1.5 text-emerald-500 font-medium">✓ {hint}</p>
-        ) : !hasValue ? (
+        ) : !hasValue && !needsCheck ? (
           <p className="text-[10px] mt-1.5 text-slate-400">
             {required ? 'Pflichtfeld' : 'Optional'}
           </p>
@@ -153,9 +678,14 @@ function MiniField({
 export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, editAssistant }: AssistantOnboardingProps) {
   const { employerAccess } = useAuth();
   
-  const [step, setStep] = useState<'upload' | 'extracting' | 'review' | 'success'>(
+  const [step, setStep] = useState<'upload' | 'extracting' | 'rejected' | 'review' | 'success'>(
     editAssistant ? 'review' : (initialUploadFile ? 'extracting' : 'upload')
   );
+  const [pendingExtractionToast, setPendingExtractionToast] = useState<{
+    description: string;
+    hasWarnings: boolean;
+  } | null>(null);
+  const [rejectedFileName, setRejectedFileName] = useState<string>('');
   const [tab, setTab] = useState<'stammdaten' | 'abrechnungsdaten'>('stammdaten');
   const [extraction, setExtraction] = useState<ContractExtractionResult | null>(null);
   const [extractionError, setExtractionError] = useState<string | null>(null);
@@ -167,9 +697,13 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [street, setStreet] = useState('');
+  const [houseNumber, setHouseNumber] = useState('');
   const [plz, setPlz] = useState('');
   const [city, setCity] = useState('');
+  const [country, setCountry] = useState('CH');
+  const [phone, setPhone] = useState('');
   const [birthDate, setBirthDate] = useState('');
+  const [gender, setGender] = useState('');
   const [ahvNumber, setAhvNumber] = useState('');
   const [civilStatus, setCivilStatus] = useState('');
   const [residencePermit, setResidencePermit] = useState('');
@@ -177,6 +711,8 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
 
   const [contractStart, setContractStart] = useState('');
   const [contractEnd, setContractEnd] = useState('');
+  const [contractUnbefristet, setContractUnbefristet] = useState(false);
+  const [noticePeriodDays, setNoticePeriodDays] = useState('');
   const [hoursPerWeek, setHoursPerWeek] = useState('');
   const [hoursPerMonth, setHoursPerMonth] = useState('');
   const [wageType, setWageType] = useState('hourly');
@@ -185,21 +721,132 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
   const [vacationWeeks, setVacationWeeks] = useState('4');
   const [vacationSurcharge, setVacationSurcharge] = useState('');
   const [iban, setIban] = useState('');
-  const [billingMethod, setBillingMethod] = useState('simplified');
+  /** Leer bis Extraktion oder Bearbeitung – kein stiller «Vereinfacht»-Default bei fehlendem Vertragswert */
+  const [billingMethod, setBillingMethod] = useState('');
   const [canton, setCanton] = useState('');
   const [nbuEmployer, setNbuEmployer] = useState('');
   const [nbuEmployee, setNbuEmployee] = useState('');
   
   const [saving, setSaving] = useState(false);
-  const [isProcessingInitial, setIsProcessingInitial] = useState(false);
+  // Binary review state
+  const [reviewFields, setReviewFields] = useState<string[]>([]);
+  const [reviewedFields, setReviewedFields] = useState<Set<string>>(new Set());
+  const [showReviewPopup, setShowReviewPopup] = useState(false);
+  const [pipelineTrace, setPipelineTrace] = useState<PipelineTrace | null>(null);
+
+  const [contractPreviewUrl, setContractPreviewUrl] = useState<string | null>(null);
+  const [contractFileName, setContractFileName] = useState('');
+  const [contractMimeType, setContractMimeType] = useState('');
+  const contractUrlRef = useRef<string | null>(null);
+
+  const setContractPreviewFromFile = (file: File | null) => {
+    if (contractUrlRef.current) {
+      URL.revokeObjectURL(contractUrlRef.current);
+      contractUrlRef.current = null;
+    }
+    if (file) {
+      const url = URL.createObjectURL(file);
+      contractUrlRef.current = url;
+      setContractPreviewUrl(url);
+      setContractFileName(file.name);
+      setContractMimeType(file.type || '');
+    } else {
+      setContractPreviewUrl(null);
+      setContractFileName('');
+      setContractMimeType('');
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (contractUrlRef.current) {
+        URL.revokeObjectURL(contractUrlRef.current);
+        contractUrlRef.current = null;
+      }
+    };
+  }, []);
+
+  // UX: "Extraktion abgeschlossen" erst anzeigen, wenn UI wirklich im Review angekommen ist.
+  useEffect(() => {
+    if (step !== 'review') return;
+    if (!pendingExtractionToast) return;
+    toast.success('Extraktion abgeschlossen', {
+      id: TOAST_EXTRACTION_RESULT,
+      description: pendingExtractionToast.description,
+      duration: pendingExtractionToast.hasWarnings ? 10000 : 4500,
+    });
+    setPendingExtractionToast(null);
+  }, [step, pendingExtractionToast]);
+
+  const popupAttentionFields = useMemo(
+    () => buildPopupAttentionFields(extraction, reviewFields, contractUnbefristet),
+    [extraction, reviewFields, contractUnbefristet],
+  );
+
+  const attentionFormKeys = useMemo(() => {
+    const s = new Set<string>();
+    for (const row of popupAttentionFields) {
+      const k = PATH_TO_FIELD_KEY[row.path];
+      if (k) s.add(k);
+    }
+    return s;
+  }, [popupAttentionFields]);
+
+  const reviewedAttentionCount = useMemo(() => {
+    let n = 0;
+    for (const k of attentionFormKeys) {
+      if (reviewedFields.has(k)) n++;
+    }
+    return n;
+  }, [attentionFormKeys, reviewedFields]);
+
+  const toggleFieldReviewed = (fieldKey: string) => {
+    setReviewedFields(prev => {
+      const next = new Set(prev);
+      if (next.has(fieldKey)) next.delete(fieldKey);
+      else next.add(fieldKey);
+      return next;
+    });
+  };
+
+  const getFieldStatus = (key: string): 'ok' | 'review_required' | undefined => {
+    if (key === 'contractEnd' && contractUnbefristet) return 'ok';
+
+    // UI-Regel: Leere Werte dürfen nie als OK erscheinen.
+    if (key === 'canton' && !canton.trim()) return 'review_required';
+
+    const field = confidenceMap[key];
+    if (!field) return undefined;
+
+    if ((field as any).status) return (field as any).status;
+
+    const path = FIELD_KEY_TO_PATH[key];
+    if (path && reviewFields.includes(path)) return 'review_required';
+
+    return field.confidence_score >= 0.8 ? 'ok' : 'review_required';
+  };
+
+  const getFieldReviewHint = (key: string): string | undefined => {
+    const field = confidenceMap[key];
+    if (!field) return undefined;
+
+    if ((field as any).judge_justification) return (field as any).judge_justification;
+
+    if (field.value === null || field.value === undefined) {
+      return field.note || 'Ergänzen';
+    }
+    if (field.confidence_score < 0.8) {
+      return field.note || 'Prüfen';
+    }
+    return undefined;
+  };
 
   // Trigger extraction immediately if initialUploadFile is provided
   useEffect(() => {
-    if (initialUploadFile && step === 'extracting' && !isProcessingInitial) {
-      setIsProcessingInitial(true);
-      processFile(initialUploadFile);
+    if (initialUploadFile && step === 'extracting') {
+      void processFile(initialUploadFile);
     }
-  }, [initialUploadFile, step, isProcessingInitial]);
+  }, [initialUploadFile, step]);
 
   // Pre-fill form if editing an existing assistant
   useEffect(() => {
@@ -209,15 +856,21 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
       setFirstName(data.first_name || editAssistant.name?.split(' ')[0] || '');
       setLastName(data.last_name || editAssistant.name?.split(' ').slice(1).join(' ') || '');
       setStreet(data.street || '');
+      setHouseNumber(data.house_number?.toString?.() || data.houseNumber?.toString?.() || '');
       setPlz(data.plz || '');
       setCity(data.city || '');
+      setCountry(data.country || 'CH');
+      setPhone(data.phone || '');
       setBirthDate(editAssistant.date_of_birth || data.birth_date || '');
+      setGender(data.gender || '');
       setAhvNumber(data.ahv_number || '');
       setCivilStatus(data.civil_status || '');
       setResidencePermit(data.residence_permit || '');
       setEmail(editAssistant.email || '');
       setContractStart(data.contract_start || '');
       setContractEnd(data.contract_end || '');
+      setContractUnbefristet(!!data.contract_unbefristet);
+      setNoticePeriodDays(data.notice_period_days?.toString() || '');
       setHoursPerWeek(data.hours_per_week?.toString() || '');
       setHoursPerMonth(data.hours_per_month?.toString() || '');
       setWageType(data.wage_type || 'hourly');
@@ -226,7 +879,11 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
       setVacationWeeks(editAssistant.vacation_weeks?.toString() || data.vacation_weeks?.toString() || '4');
       setVacationSurcharge(data.vacation_surcharge || '');
       setIban(data.iban || data.payment_iban || '');
-      setBillingMethod(data.billing_method || 'simplified');
+      setBillingMethod(
+        data.billing_method === 'ordinary' || data.billing_method === 'standard'
+          ? 'ordinary'
+          : '',
+      );
       setCanton(data.canton || '');
       setNbuEmployer(data.nbu_employer || data.nbu_employer_pct || '');
       setNbuEmployee(data.nbu_employee || data.nbu_employee_pct || '');
@@ -255,18 +912,32 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
     setField('firstName', a.first_name, setFirstName);
     setField('lastName', a.last_name, setLastName);
     setField('street', a.street, setStreet);
+    setField('houseNumber', (a as any).house_number, setHouseNumber);
     setField('plz', a.zip, setPlz);
     setField('city', a.city, setCity);
+    setField('country', (a as any).country, setCountry);
+    setField('phone', (a as any).phone, setPhone);
+    setField('email', (a as any).email, setEmail);
     setField('birthDate', a.birth_date, setBirthDate);
+    setField('gender', (a as any).gender, setGender);
     setField('ahvNumber', a.ahv_number, setAhvNumber);
     setField('civilStatus', a.civil_status, setCivilStatus);
     setField('residencePermit', a.residence_permit, setResidencePermit);
 
     if (ct) {
       setField('contractStart', ct.start_date, setContractStart);
-      setField('contractEnd', ct.end_date, setContractEnd);
+      const indef = ct.is_indefinite?.value === true;
+      setContractUnbefristet(!!indef);
+      if (indef) {
+        setContractEnd('');
+      } else {
+        setField('contractEnd', ct.end_date, setContractEnd);
+      }
+      if (ct.end_date) cMap.contractEnd = ct.end_date;
+      if (ct.is_indefinite) cMap.contractUnbefristet = ct.is_indefinite;
       setField('hoursPerWeek', ct.hours_per_week, setHoursPerWeek);
       setField('hoursPerMonth', ct.hours_per_month, setHoursPerMonth);
+      setField('noticePeriodDays', ct.notice_period_days, setNoticePeriodDays);
     }
 
     if (w) {
@@ -279,163 +950,251 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
     }
 
     if (si) {
-      setField('billingMethod', si.accounting_method, setBillingMethod);
+      if (si.accounting_method) {
+        cMap.billingMethod = si.accounting_method;
+        if (si.accounting_method.value !== null && si.accounting_method.value !== undefined) {
+          setBillingMethod(String(si.accounting_method.value));
+        } else {
+          setBillingMethod('');
+        }
+      }
       setField('canton', si.canton, setCanton);
       setField('nbuEmployer', si.nbu_employer_pct, setNbuEmployer);
       setField('nbuEmployee', si.nbu_employee_pct, setNbuEmployee);
     }
 
+    // UX: Wenn der Judge bereits ein konkretes ISO-Land vorschlägt, vorbefüllen,
+    // damit der User nur noch "Prüfen" muss.
+    const countryNote = (cMap.country as any)?.judge_justification || (cMap.country as any)?.note;
+    const suggestedIso2 = extractSuggestedIso2(typeof countryNote === 'string' ? countryNote : undefined);
+    if (suggestedIso2) {
+      setCountry(suggestedIso2);
+    } else if (cMap.country?.value != null) {
+      setCountry(normalizeCountryToIso2(String(cMap.country.value)));
+    }
+
+    // UI normalization: prevent redundant house number in "street" + separate field
+    const rawStreet = a.street?.value != null ? String(a.street.value) : '';
+    const rawHn = (a as any).house_number?.value != null ? String((a as any).house_number.value) : '';
+    if (rawStreet) {
+      const next = normalizeStreetAndHouseNumber(rawStreet, rawHn);
+      if (next.street !== rawStreet) setStreet(next.street);
+      if (!rawHn && next.houseNumber) setHouseNumber(next.houseNumber);
+    }
+
     setConfidenceMap(cMap);
   };
 
-  const loadDemoData = () => {
-    const demoResult: ContractExtractionResult = {
-      extraction_metadata: {
-        document_language: 'de',
-        overall_confidence: 0.82,
-        fields_extracted: 18,
-        fields_missing: 3,
-        warnings: ['FEHLENDE_AHV_NUMMER', 'KANTON_ABGELEITET'],
-      },
-      contracts: {
-        employer: {
-          first_name: { value: 'Anna', confidence: 'high', confidence_score: 0.95, source_text: 'Name: Anna Meier', note: '' },
-          last_name: { value: 'Meier', confidence: 'high', confidence_score: 0.95, source_text: 'Name: Anna Meier', note: '' },
-          street: { value: 'Musterstrasse 12', confidence: 'high', confidence_score: 0.95, source_text: '', note: '' },
-          zip: { value: '4051', confidence: 'high', confidence_score: 0.95, source_text: '', note: '' },
-          city: { value: 'Basel', confidence: 'high', confidence_score: 0.95, source_text: '', note: '' },
-        },
-        assistant: {
-          first_name: { value: 'Sara', confidence: 'high', confidence_score: 0.97, source_text: 'Name: Sara Keller', note: '' },
-          last_name: { value: 'Keller', confidence: 'high', confidence_score: 0.97, source_text: 'Name: Sara Keller', note: '' },
-          street: { value: 'Lindenweg 5', confidence: 'high', confidence_score: 0.95, source_text: 'Adresse: Lindenweg 5, 4058 Basel', note: '' },
-          zip: { value: '4058', confidence: 'high', confidence_score: 0.95, source_text: '', note: '' },
-          city: { value: 'Basel', confidence: 'high', confidence_score: 0.95, source_text: '', note: '' },
-          birth_date: { value: '1990-03-14', confidence: 'high', confidence_score: 0.95, source_text: 'Geburtsdatum: 14.03.1990', note: '' },
-          ahv_number: { value: null, confidence: 'low', confidence_score: 0.0, source_text: '', note: 'Nicht im Vertrag' },
-          civil_status: { value: 'ledig', confidence: 'high', confidence_score: 0.95, source_text: 'Zivilstand: ledig', note: '' },
-          nationality: { value: 'CH', confidence: 'high', confidence_score: 0.9, source_text: 'Staatsangehörigkeit: Schweiz', note: '' },
-          residence_permit: { value: 'CH', confidence: 'high', confidence_score: 0.9, source_text: 'Schweizer Bürgerin', note: '' },
-        },
-        contract_terms: {
-          start_date: { value: '2026-03-01', confidence: 'high', confidence_score: 0.97, source_text: 'Vertragsbeginn: 01.03.2026', note: '' },
-          end_date: { value: null, confidence: 'high', confidence_score: 0.95, source_text: 'unbefristet', note: 'Unbefristet' },
-          is_indefinite: { value: true, confidence: 'high', confidence_score: 0.95, source_text: 'unbefristet', note: '' },
-          hours_per_week: { value: 20, confidence: 'high', confidence_score: 0.97, source_text: 'Stunden pro Woche: 20 Stunden', note: '' },
-          hours_per_month: { value: 86, confidence: 'high', confidence_score: 0.95, source_text: 'ca. 86 Stunden', note: '' },
-          notice_period_days: { value: 30, confidence: 'medium', confidence_score: 0.7, source_text: 'Kündigungsfrist von einem Monat', note: 'Als 30 Tage interpretiert' },
-        },
-        wage: {
-          wage_type: { value: 'hourly', confidence: 'high', confidence_score: 0.97, source_text: 'Stundenlohn: CHF 30.00 brutto', note: '' },
-          hourly_rate: { value: 30.00, confidence: 'high', confidence_score: 0.98, source_text: 'Stundenlohn: CHF 30.00 brutto', note: '' },
-          monthly_rate: { value: 2580.00, confidence: 'medium', confidence_score: 0.75, source_text: 'Monatslohn (ca.): CHF 2\'580.00', note: 'Ca.-Angabe' },
-          vacation_weeks: { value: 4, confidence: 'high', confidence_score: 0.95, source_text: '4 Wochen bezahlte Ferien', note: '' },
-          holiday_supplement_pct: { value: 0.0833, confidence: 'high', confidence_score: 0.95, source_text: 'Ferienzuschlag: 8.33 %', note: '' },
-          payment_iban: { value: 'CH93 0076 2011 6238 5295 7', confidence: 'high', confidence_score: 0.97, source_text: 'IBAN: CH93 0076 2011 6238 5295 7', note: '' },
-        },
-        social_insurance: {
-          accounting_method: { value: null, confidence: 'low', confidence_score: 0.1, source_text: '', note: 'Nicht im Vertrag' },
-          canton: { value: 'BS', confidence: 'medium', confidence_score: 0.7, source_text: '4051 Basel', note: 'Aus PLZ abgeleitet' },
-          nbu_employer_pct: { value: null, confidence: 'low', confidence_score: 0.0, source_text: '', note: 'Nicht angegeben' },
-          nbu_employee_pct: { value: null, confidence: 'low', confidence_score: 0.0, source_text: '', note: 'Nicht angegeben' },
-        },
-      },
-    };
-    setExtraction(demoResult);
-    populateFromExtraction(demoResult);
-    setStep('review');
-    setTab('stammdaten');
+  const normalizeStreetAndHouseNumber = (streetValue: string, houseNumberValue: string) => {
+    const streetTrim = streetValue.trim();
+    const m = streetTrim.match(/^(.*\D)\s+(\d+)$/);
+    if (!m) return { street: streetValue, houseNumber: houseNumberValue };
+    const streetName = (m[1] ?? '').trim();
+    const hnFromStreet = (m[2] ?? '').trim();
+    if (!streetName || !hnFromStreet) return { street: streetValue, houseNumber: houseNumberValue };
+    const hnExisting = houseNumberValue.trim();
+
+    if (!hnExisting) {
+      return { street: streetName, houseNumber: hnFromStreet };
+    }
+    if (hnExisting === hnFromStreet) {
+      return { street: streetName, houseNumber: hnExisting };
+    }
+    return { street: streetValue, houseNumber: houseNumberValue };
   };
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Keep UI consistent while editing: if house number is filled, strip duplicate trailing number from street
+  useEffect(() => {
+    const hn = houseNumber.trim();
+    const st = street.trim();
+    if (!hn || !st) return;
+    const m = st.match(/^(.*\D)\s+(\d+)$/);
+    if (!m) return;
+    const streetName = (m[1] ?? '').trim();
+    const hnFromStreet = (m[2] ?? '').trim();
+    if (!streetName || !hnFromStreet) return;
+    if (hnFromStreet === hn && streetName !== st) {
+      setStreet(streetName);
+    }
+  }, [street, houseNumber]);
+
+  // Auto-derive Wohnsitzkanton aus PLZ (wenn noch nicht gesetzt)
+  useEffect(() => {
+    if (canton.trim()) return;
+    const z = plz.trim();
+    if (z.length !== 4) return;
+    const p2 = z.substring(0, 2);
+    const derived = ZIP_PREFIX_TO_CANTON[p2];
+    if (derived) setCanton(derived);
+  }, [plz, canton]);
+
+  const COUNTRY_OPTIONS = [
+    { value: 'CH', label: 'Schweiz (CH)' },
+    { value: 'DE', label: 'Deutschland (DE)' },
+    { value: 'AT', label: 'Österreich (AT)' },
+    { value: 'FR', label: 'Frankreich (FR)' },
+    { value: 'IT', label: 'Italien (IT)' },
+    { value: 'LI', label: 'Liechtenstein (LI)' },
+    { value: 'OTHER', label: 'Anderes…' },
+  ] as const;
+
+  // Demo mode removed: contracts are always evaluated live via the agent pipeline after upload.
+
+  const handleUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || !e.target.files[0]) return;
     const file = e.target.files[0];
     processFile(file);
   };
 
   const processFile = async (file: File) => {
-    setStep('extracting');
-    setExtractionError(null);
+    const dedupeKey = extractionDedupeKey(file);
+    const inFlight = EXTRACTION_IN_FLIGHT.get(dedupeKey);
+    if (inFlight) {
+      await inFlight;
+      return;
+    }
 
-    try {
-      const { text } = await readFileContent(file);
-      toast.info('Dokument wird analysiert', { 
-        description: 'Bitte warten Sie, unser KI-Agent liest die Daten aus.' 
+    const run = (async () => {
+      setStep('extracting');
+      setExtractionError(null);
+      setContractPreviewFromFile(file);
+
+      toast.info('Dokument wird analysiert', {
+        id: TOAST_EXTRACTION_LOADING,
+        description: 'Bitte warten Sie, unser KI-Agent liest die Daten aus.',
       });
-      
-      const pipelineResult = await runDocumentPipeline(file, text);
-      
-      if (pipelineResult.classification !== 'contract') {
-        throw new Error('Das hochgeladene Dokument wurde nicht als gültiger Schweizer Arbeitsvertrag erkannt. Bitte überprüfen Sie die Datei.');
-      }
-      
-      if (!pipelineResult.extraction?.contracts) {
-        throw new Error('Konnte keine Vertragsdaten extrahieren.');
-      }
-      
-      const result = pipelineResult.extraction;
-      
-      setExtraction(result);
-      populateFromExtraction(result);
-      
-      if (pipelineResult.assistant_id) {
-        setSavedAssistantId(pipelineResult.assistant_id);
-      }
-      
-      setStep('review');
-      setTab('stammdaten');
-      
-      const meta = result.extraction_metadata;
-      toast.success('Extraktion erfolgreich', {
-        description: `${meta.fields_extracted} Felder erkannt (Sicherheit: ${Math.round(meta.overall_confidence * 100)}%)`
-      });
-      
-      if (meta.warnings.length > 0) {
-        const warningDesc = meta.warnings.map(formatAIWarning).join(' • ');
-        toast.warning('Hinweise zur Extraktion', {
-          description: warningDesc,
-          duration: 8000
+
+      try {
+        const { text } = await readFileContent(file);
+        const pipelineResult = await runDocumentPipeline(file, text);
+
+        if (pipelineResult.classification !== 'contract') {
+          toast.dismiss(TOAST_EXTRACTION_LOADING);
+          setContractPreviewFromFile(null);
+          setRejectedFileName(file.name);
+          setStep('rejected');
+          return;
+        }
+
+        if (!pipelineResult.extraction?.contracts) {
+          throw new Error('Konnte keine Vertragsdaten extrahieren.');
+        }
+
+        const result = pipelineResult.extraction;
+
+        setExtraction(result);
+        populateFromExtraction(result);
+
+        if (pipelineResult.assistant_id) {
+          setSavedAssistantId(pipelineResult.assistant_id);
+        }
+
+        const rFields = pipelineResult.reviewFields || [];
+        setReviewFields(rFields);
+        const contractIndefAtImport =
+          result.contracts.contract_terms?.is_indefinite?.value === true;
+        const attention = buildPopupAttentionFields(
+          result,
+          rFields,
+          !!contractIndefAtImport,
+        );
+
+        if (pipelineResult.trace) {
+          setPipelineTrace(pipelineResult.trace);
+        }
+
+        setStep('review');
+        setTab('stammdaten');
+
+        if (attention.length > 0) {
+          setShowReviewPopup(true);
+        }
+
+        const meta = result.extraction_metadata;
+        const warnLines = (meta.warnings ?? []).map(formatAIWarning);
+        const hasWarnings = warnLines.length > 0;
+        const overallOk = (meta as any).overall_status === 'ok' && !hasWarnings;
+        const statusText = overallOk
+          ? 'Alle Felder OK'
+          : hasWarnings
+            ? 'Hinweise beachten (siehe unten)'
+            : `${(meta as any).fields_requiring_review || 0} Felder prüfen`;
+
+        toast.dismiss(TOAST_EXTRACTION_LOADING);
+
+        const baseLine = `${meta.fields_extracted} Felder erkannt – ${statusText}`;
+        const description = hasWarnings
+          ? `${baseLine} — Hinweise: ${warnLines.join(' · ')}`
+          : baseLine;
+
+        // Toast erst nach UI-Wechsel auf "review" anzeigen, damit er nicht "zu früh" wirkt.
+        setPendingExtractionToast({ description, hasWarnings });
+      } catch (err) {
+        toast.dismiss(TOAST_EXTRACTION_LOADING);
+        setContractPreviewFromFile(null);
+        const msg = err instanceof Error ? err.message : 'Unbekannter Fehler';
+        setExtractionError(msg);
+        toast.error('Extraktion fehlgeschlagen', {
+          description: msg,
         });
+        setStep('upload');
       }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Unbekannter Fehler';
-      setExtractionError(msg);
-      toast.error('Extraktion fehlgeschlagen', {
-        description: msg
-      });
-      setStep('upload');
+    })();
+
+    EXTRACTION_IN_FLIGHT.set(dedupeKey, run);
+    try {
+      await run;
+    } finally {
+      EXTRACTION_IN_FLIGHT.delete(dedupeKey);
     }
   };
 
 
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const doSave = async () => {
     if (!employerAccess?.employer_id) return;
-    
+
+    // Speichern darf nur im Schritt 2 passieren.
+    if (tab !== 'abrechnungsdaten') {
+      setTab('abrechnungsdaten');
+      toast.info('Bitte auch die Abrechnungsdaten prüfen.', { duration: 2500 });
+      return;
+    }
+
     setSaving(true);
     const fullName = `${firstName} ${lastName}`.trim();
     
     const payload = {
       employer_id: employerAccess.employer_id,
       name: fullName || 'Unbenannt',
-      email: email.trim() || null,
+      // DB-Constraint: assistant.email darf nicht NULL sein
+      email: email.trim() || '',
       date_of_birth: birthDate.trim() || null,
       hourly_rate: parseFloat(hourlyRate) || null,
       vacation_weeks: parseInt(vacationWeeks, 10) || null,
-      has_withholding_tax: false,
       has_bvg: false,
       time_entry_mode: 'manual' as const,
       is_active: true,
       contract_data: {
         first_name: firstName, last_name: lastName,
-        street, plz, city, ahv_number: ahvNumber,
+        street,
+        house_number: houseNumber.trim() || null,
+        plz, city,
+        country: country.trim() || null,
+        phone: phone.trim() || null,
+        gender: gender || null,
+        ahv_number: ahvNumber,
         civil_status: civilStatus, residence_permit: residencePermit,
-        contract_start: contractStart, contract_end: contractEnd,
+        contract_start: contractStart,
+        contract_end: contractUnbefristet ? '' : contractEnd,
+        contract_unbefristet: contractUnbefristet,
+        notice_period_days: noticePeriodDays.trim() || null,
         hours_per_week: hoursPerWeek, hours_per_month: hoursPerMonth,
         wage_type: wageType, monthly_rate: monthlyRate,
         vacation_surcharge: vacationSurcharge,
-        iban, billing_method: billingMethod,
+        iban,
+        billing_method:
+          billingMethod === 'ordinary' ? billingMethod : null,
         canton, nbu_employer: nbuEmployer, nbu_employee: nbuEmployee,
         extraction_metadata: extraction?.extraction_metadata ?? null,
       }
@@ -480,23 +1239,312 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
     return !!confidenceMap[key];
   };
 
-  const isRequired = (key: string): boolean => REQUIRED_FIELDS.includes(key);
+  const isRequired = (key: string): boolean => {
+    if (REQUIRED_FIELDS.includes(key)) return true;
 
-  const inputStyle = "w-full px-2.5 py-1.5 rounded-lg border bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors";
-  const selectStyle = "w-full px-2.5 py-1.5 rounded-lg border bg-white text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors";
+    // Wenn Wohnsitzkanton Prüfbedarf hat, braucht es zwingend eine PLZ.
+    if (key === 'plz' && getFieldStatus('canton') === 'review_required') return true;
+
+    return false;
+  };
+
+  // Inputs immer weiss (keine transparenten Felder), auch im dunklen Flow-Container.
+  const inputStyle = "w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-900 placeholder:text-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors";
+  const selectStyle = "w-full px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-900 text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors";
+
+  /** Build common MiniField props for a given field key */
+  const fieldProps = (key: string) => ({
+    aiDetected: isFieldAi(key),
+    fieldStatus: getFieldStatus(key),
+    attentionHighlight: attentionFormKeys.has(key),
+    reviewed: reviewedFields.has(key),
+    onReviewToggle: () => toggleFieldReviewed(key),
+    reviewHint: getFieldReviewHint(key),
+    required: isRequired(key),
+  });
+
+  const renderPopupFieldEditor = (path: string): ReactNode => {
+    const fk = PATH_TO_FIELD_KEY[path];
+    const pIn = `${inputStyle} mt-1`;
+    const pSel = `${selectStyle} mt-1`;
+    if (!fk) {
+      return (
+        <p className="text-[11px] text-slate-500 leading-snug">
+          Kein passendes Formularfeld – bitte nach dem Dialog im Formular ergänzen (sofern zutreffend).
+        </p>
+      );
+    }
+    switch (fk) {
+      case 'firstName':
+        return <input type="text" className={pIn} placeholder="Ergänzen…" value={firstName} onChange={(e) => setFirstName(e.target.value)} />;
+      case 'lastName':
+        return <input type="text" className={pIn} placeholder="Ergänzen…" value={lastName} onChange={(e) => setLastName(e.target.value)} />;
+      case 'street':
+        return (
+          <input
+            type="text"
+            className={pIn}
+            placeholder="Ergänzen…"
+            value={street}
+            onChange={(e) => setStreet(e.target.value)}
+            onBlur={() => {
+              const next = normalizeStreetAndHouseNumber(street, houseNumber);
+              setStreet(next.street);
+              setHouseNumber(next.houseNumber);
+            }}
+          />
+        );
+      case 'plz':
+        return (
+          <input
+            type="text"
+            className={pIn}
+            placeholder="z. B. 8000"
+            maxLength={4}
+            value={plz}
+            onChange={(e) => setPlz(e.target.value.replace(/\D/g, '').slice(0, 4))}
+          />
+        );
+      case 'city':
+        return <input type="text" className={pIn} placeholder="Ergänzen…" value={city} onChange={(e) => setCity(e.target.value)} />;
+      case 'birthDate':
+        return <input type="date" className={pIn} value={birthDate} onChange={(e) => setBirthDate(e.target.value)} />;
+      case 'gender':
+        return (
+          <select value={gender} onChange={(e) => setGender(e.target.value)} className={`${selectStyle} mt-1`}>
+            <option value="">Bitte wählen…</option>
+            <option value="male">Männlich</option>
+            <option value="female">Weiblich</option>
+            <option value="diverse">Divers</option>
+          </select>
+        );
+      case 'ahvNumber':
+        return (
+          <input
+            type="text"
+            className={pIn}
+            placeholder="756.xxxx.xxxx.xx"
+            value={ahvNumber}
+            onChange={(e) => setAhvNumber(formatAhvNumber(e.target.value))}
+          />
+        );
+      case 'phone':
+        return <input type="text" className={pIn} placeholder="+41 …" value={phone} onChange={(e) => setPhone(e.target.value)} />;
+      case 'email':
+        return <input type="email" className={pIn} placeholder="name@domain.ch" value={email} onChange={(e) => setEmail(e.target.value)} />;
+      case 'country':
+        return (
+          <select
+            className={pSel}
+            value={country && COUNTRY_OPTIONS.some(o => o.value === country) ? country : 'OTHER'}
+            onChange={(e) => {
+              const v = e.target.value;
+              setCountry(v === 'OTHER' ? '' : v);
+            }}
+          >
+            {COUNTRY_OPTIONS.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        );
+      case 'houseNumber':
+        return <input type="text" inputMode="numeric" className={pIn} placeholder="z. B. 45" value={houseNumber} onChange={(e) => setHouseNumber(e.target.value)} />;
+      case 'civilStatus':
+        return (
+          <select value={civilStatus} onChange={(e) => setCivilStatus(e.target.value)} className={`${selectStyle} mt-1`}>
+            <option value="">Bitte wählen…</option>
+            <option value="ledig">Ledig</option>
+            <option value="verheiratet">Verheiratet</option>
+            <option value="geschieden">Geschieden</option>
+            <option value="verwitwet">Verwitwet</option>
+            <option value="eingetragene Partnerschaft">Eingetragene Partnerschaft</option>
+          </select>
+        );
+      case 'residencePermit':
+        return (
+          <select value={residencePermit} onChange={(e) => setResidencePermit(e.target.value)} className={`${selectStyle} mt-1`}>
+            <option value="">Bitte wählen…</option>
+            <option value="CH">Schweizer/in</option>
+            <option value="B">Ausweis B</option>
+            <option value="C">Ausweis C</option>
+            <option value="G">Ausweis G</option>
+            <option value="L">Ausweis L</option>
+            <option value="N">Ausweis N</option>
+            <option value="F">Ausweis F</option>
+          </select>
+        );
+      case 'contractStart':
+        return <input type="date" className={pIn} value={contractStart} onChange={(e) => setContractStart(e.target.value)} />;
+      case 'contractUnbefristet':
+        return (
+          <label className="flex items-center gap-2 text-sm mt-1 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              className="w-5 h-5 rounded border-slate-300"
+              checked={contractUnbefristet}
+              onChange={(e) => {
+                const v = e.target.checked;
+                setContractUnbefristet(v);
+                if (v) setContractEnd('');
+              }}
+            />
+            <span>Unbefristet</span>
+          </label>
+        );
+      case 'contractEnd':
+        if (contractUnbefristet) {
+          return <p className="text-xs text-slate-500 mt-1">Entfällt bei unbefristetem Vertrag.</p>;
+        }
+        return <input type="date" className={pIn} value={contractEnd} onChange={(e) => setContractEnd(e.target.value)} />;
+      case 'noticePeriodDays':
+        return (
+          <input
+            type="number"
+            min={0}
+            className={pIn}
+            placeholder="z. B. 30"
+            value={noticePeriodDays}
+            onChange={(e) => setNoticePeriodDays(e.target.value)}
+          />
+        );
+      case 'hoursPerWeek':
+        return (
+          <input
+            type="number"
+            min={0}
+            max={168}
+            step={0.5}
+            className={pIn}
+            placeholder="z. B. 20"
+            value={hoursPerWeek}
+            onChange={(e) => setHoursPerWeek(e.target.value)}
+          />
+        );
+      case 'hoursPerMonth':
+        return (
+          <input
+            type="number"
+            min={0}
+            max={744}
+            step={0.5}
+            className={pIn}
+            placeholder="z. B. 86"
+            value={hoursPerMonth}
+            onChange={(e) => setHoursPerMonth(e.target.value)}
+          />
+        );
+      case 'wageType':
+        return (
+          <select value={wageType} onChange={(e) => setWageType(e.target.value)} className={`${selectStyle} mt-1`}>
+            <option value="hourly">Stundenlohn</option>
+            <option value="monthly">Monatslohn</option>
+          </select>
+        );
+      case 'hourlyRate':
+        return (
+          <input type="number" step={0.05} min={0} className={pIn} placeholder="z. B. 30.00" value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} />
+        );
+      case 'monthlyRate':
+        return (
+          <input type="number" step={1} min={0} className={pIn} placeholder="z. B. 2600" value={monthlyRate} onChange={(e) => setMonthlyRate(e.target.value)} />
+        );
+      case 'vacationWeeks':
+        return (
+          <select value={vacationWeeks} onChange={(e) => setVacationWeeks(e.target.value)} className={`${selectStyle} mt-1`}>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+          </select>
+        );
+      case 'vacationSurcharge':
+        return <input type="text" className={pIn} value={vacationSurcharge} onChange={(e) => setVacationSurcharge(e.target.value)} />;
+      case 'iban':
+        return (
+          <input type="text" className={pIn} placeholder="CH93 …" value={iban} onChange={(e) => setIban(formatIban(e.target.value))} />
+        );
+      case 'billingMethod':
+        return (
+          <select value={billingMethod} onChange={(e) => setBillingMethod(e.target.value)} className={`${selectStyle} mt-1`}>
+            <option value="">Bitte wählen…</option>
+            <option value="ordinary">Ordentlich</option>
+          </select>
+        );
+      case 'canton':
+        return (
+          <select value={canton} onChange={(e) => setCanton(e.target.value)} className={`${selectStyle} mt-1`}>
+            <option value="">Bitte wählen…</option>
+            {SWISS_CANTON_OPTIONS.map(([code, name]) => (
+              <option key={code} value={code}>
+                {name}
+              </option>
+            ))}
+          </select>
+        );
+      case 'nbuEmployer':
+        return (
+          <input
+            type="text"
+            className={pIn}
+            placeholder="z. B. 1.50"
+            value={nbuEmployer}
+            onChange={(e) => setNbuEmployer(e.target.value)}
+          />
+        );
+      case 'nbuEmployee':
+        return (
+          <input
+            type="text"
+            className={pIn}
+            placeholder="z. B. 1.50"
+            value={nbuEmployee}
+            onChange={(e) => setNbuEmployee(e.target.value)}
+          />
+        );
+      default:
+        return null;
+    }
+  };
 
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <button onClick={onClose} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-2 transition-colors">
-          <ArrowLeft className="w-4 h-4" /> Zurück zur Übersicht
-        </button>
-        <h1 className="text-2xl font-bold">{editAssistant ? 'Assistenzperson bearbeiten' : 'Assistenzperson erfassen'}</h1>
-        <p className="text-muted-foreground">
-          {editAssistant ? 'Überprüfen und ändern Sie die Stammdaten und Abrechnungsdetails.' : 'Laden Sie einen Arbeitsvertrag hoch. Unser KI-Agent liest die Stammdaten automatisch aus.'}
-        </p>
-      </div>
+      {step !== 'extracting' ? (
+        <div className="rounded-2xl p-[1px] bg-[linear-gradient(90deg,rgba(59,130,246,0.35),rgba(168,85,247,0.30),rgba(16,185,129,0.22))] shadow-[0_18px_60px_rgba(2,6,23,0.08)]">
+          <div className="rounded-2xl border border-transparent bg-card/95 backdrop-blur px-5 py-4 sm:px-6 sm:py-5">
+          <button onClick={onClose} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-2 transition-colors">
+            <ArrowLeft className="w-4 h-4" /> Zurück zur Übersicht
+          </button>
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+                <img src={asklepiosLogo} alt="Asklepios" className="w-7 h-7 object-contain" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                  Agentic Workflow
+                </p>
+                <h1 className="text-2xl font-bold leading-tight">
+                  {editAssistant ? 'Assistenzperson bearbeiten' : 'Neue Assistenzperson erfassen'}
+                </h1>
+                <p className="text-muted-foreground mt-1">
+                  {editAssistant
+                    ? 'Überprüfen und ändern Sie die Stammdaten und Abrechnungsdetails.'
+                    : 'Asklepios hilft dir bei der Anlage deiner Assistenzperson, indem er Stamm- und Vertragsdaten für dich aus dem Arbeitsvertrag ausliest.'}
+                </p>
+              </div>
+            </div>
+            {step === 'upload' ? (
+              <div className="hidden sm:block">
+                <span className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-foreground text-background font-bold text-sm shadow-sm">
+                  <UploadCloud className="w-4 h-4" />
+                  Vertrag hochladen & scannen
+                </span>
+              </div>
+            ) : null}
+          </div>
+          </div>
+        </div>
+      ) : null}
 
       {/* Upload */}
       {step === 'upload' && (
@@ -530,14 +1578,6 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                 />
                 Datei auswählen
               </label>
-
-
-
-              <div className="w-12 border-t my-2" />
-
-              <button type="button" onClick={loadDemoData} className="text-primary hover:underline font-medium text-sm">
-                Demo-Modus: Mustervertrag laden
-              </button>
             </div>
           </div>
         </div>
@@ -545,27 +1585,276 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
 
       {/* Extracting */}
       {step === 'extracting' && (
-        <div className="bg-card rounded-2xl border p-10">
-          <div className="text-center py-12">
-            <Loader2 className="w-14 h-14 text-primary mx-auto mb-5 animate-spin" />
-            <h3 className="text-lg font-bold mb-1">KI analysiert den Vertrag...</h3>
-            <p className="text-muted-foreground text-sm">
-              Stammdaten und Abrechnungsdaten werden automatisch extrahiert
-            </p>
+        <div className="bg-card rounded-2xl border overflow-hidden relative">
+          <style>{`
+            @keyframes ask-float {
+              0% { transform: translate3d(0, 0, 0) rotate(-2deg); }
+              50% { transform: translate3d(0, -10px, 0) rotate(2deg); }
+              100% { transform: translate3d(0, 0, 0) rotate(-2deg); }
+            }
+            @keyframes ask-orbit {
+              0% { transform: translate3d(-18px, 8px, 0) rotate(0deg); opacity: .45; }
+              30% { transform: translate3d(18px, -6px, 0) rotate(8deg); opacity: .8; }
+              65% { transform: translate3d(8px, 14px, 0) rotate(-6deg); opacity: .55; }
+              100% { transform: translate3d(-18px, 8px, 0) rotate(0deg); opacity: .45; }
+            }
+            @keyframes ask-dust {
+              0% { transform: translate3d(0,0,0); opacity: .45; }
+              50% { transform: translate3d(-10px,-6px,0); opacity: .65; }
+              100% { transform: translate3d(0,0,0); opacity: .45; }
+            }
+            @keyframes ask-spark {
+              0% { transform: translate3d(0, 0, 0) scale(1); opacity: .35; }
+              40% { transform: translate3d(10px, -6px, 0) scale(1.2); opacity: .7; }
+              100% { transform: translate3d(0, 0, 0) scale(1); opacity: .35; }
+            }
+            @keyframes ask-progress {
+              0% { transform: translateX(-60%); opacity: .25; }
+              30% { opacity: .7; }
+              100% { transform: translateX(140%); opacity: .25; }
+            }
+          `}</style>
+
+          {/* Gradient + AI dust backdrop */}
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute inset-0 bg-[radial-gradient(1200px_600px_at_15%_0%,rgba(59,130,246,0.25),transparent_55%),radial-gradient(900px_520px_at_85%_15%,rgba(168,85,247,0.25),transparent_50%),radial-gradient(700px_520px_at_40%_110%,rgba(16,185,129,0.18),transparent_55%),linear-gradient(to_bottom,rgba(2,6,23,0.92),rgba(2,6,23,0.78))]" />
+            <div
+              className="absolute inset-0 mix-blend-screen opacity-60"
+              style={{
+                backgroundImage:
+                  'radial-gradient(circle at 20% 30%, rgba(255,255,255,0.18) 0 1px, transparent 2px),' +
+                  'radial-gradient(circle at 70% 20%, rgba(147,197,253,0.18) 0 1px, transparent 2px),' +
+                  'radial-gradient(circle at 40% 70%, rgba(196,181,253,0.16) 0 1px, transparent 2px),' +
+                  'radial-gradient(circle at 85% 75%, rgba(110,231,183,0.14) 0 1px, transparent 2px)',
+                backgroundSize: '220px 220px, 260px 260px, 240px 240px, 280px 280px',
+                filter: 'blur(0.2px)',
+                animation: 'ask-dust 6.5s ease-in-out infinite',
+              }}
+            />
+            <div
+              className="absolute -left-10 -top-10 w-56 h-56 rounded-full blur-2xl opacity-50"
+              style={{
+                background:
+                  'radial-gradient(circle at 30% 30%, rgba(59,130,246,0.35), transparent 60%), radial-gradient(circle at 70% 70%, rgba(168,85,247,0.25), transparent 65%)',
+              }}
+            />
+          </div>
+          {/* Header */}
+          <div className="px-8 py-6 text-white relative">
+            <div className="flex items-center gap-4">
+              <div className="relative w-12 h-12">
+                <div className="absolute inset-0 rounded-2xl bg-white/10 backdrop-blur border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.35)]" />
+                <img
+                  src={asklepiosLogo}
+                  alt="Asklepios Agent"
+                  className="relative w-12 h-12 object-contain drop-shadow-[0_14px_26px_rgba(59,130,246,0.25)]"
+                  style={{ animation: 'ask-float 2.8s ease-in-out infinite' }}
+                />
+              </div>
+              <div>
+                <p className="text-[11px] font-semibold tracking-wide text-white/70 uppercase">
+                  Agentic Workflow aktiv
+                </p>
+                <h3 className="text-lg font-bold leading-tight">Asklepios legt deine Assistenzperson an</h3>
+                <p className="text-sm text-white/70">Vertrag wird analysiert und Stammdaten werden vorbereitet.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Pipeline Steps */}
+          <div className="p-8 relative">
+            <div className="max-w-md mx-auto space-y-0">
+              {/* Step 1 */}
+              <div className="relative flex gap-4">
+                <div className="flex flex-col items-center">
+                  <div className="w-10 h-10 rounded-xl bg-blue-500/15 border border-blue-300/30 flex items-center justify-center shadow-[0_10px_26px_rgba(59,130,246,0.22)] animate-pulse">
+                    <FileText className="w-5 h-5 text-blue-200" />
+                  </div>
+                  <div className="w-0.5 h-8 bg-gradient-to-b from-blue-300/70 to-white/10 my-1" />
+                </div>
+                <div className="pt-1.5 pb-6">
+                  <p className="text-sm font-bold text-white">Agent 1 – Datenextraktion</p>
+                  <p className="text-xs text-white/60 mt-0.5">Strukturierte Stammdaten & Vertragswerte werden erkannt.</p>
+                </div>
+              </div>
+
+              {/* Step 2 */}
+              <div className="relative flex gap-4">
+                <div className="flex flex-col items-center">
+                  <div className="w-10 h-10 rounded-xl bg-purple-500/15 border border-purple-300/30 flex items-center justify-center shadow-[0_10px_26px_rgba(168,85,247,0.20)]">
+                    <ShieldCheck className="w-5 h-5 text-purple-200" />
+                  </div>
+                  <div className="w-0.5 h-8 bg-gradient-to-b from-purple-200/70 to-white/10 my-1" />
+                </div>
+                <div className="pt-1.5 pb-6">
+                  <p className="text-sm font-bold text-white/90">Agent 2 – Qualitätscheck</p>
+                  <p className="text-xs text-white/60 mt-0.5">Unsichere Felder werden begründet markiert.</p>
+                </div>
+              </div>
+
+              {/* Step 3 */}
+              <div className="relative flex gap-4">
+                <div className="flex flex-col items-center">
+                  <div className="w-10 h-10 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center">
+                    <CheckCircle2 className="w-5 h-5 text-white/60" />
+                  </div>
+                </div>
+                <div className="pt-1.5">
+                  <p className="text-sm font-bold text-white/90">Schritt 3 Agentic Workflow: Manuelle Überprüfung</p>
+                  <p className="text-xs text-white/60 mt-0.5">
+                    Bitte prüfen und bestätigen Sie die markierten Felder, bevor Sie speichern.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Progress hint */}
+            <div className="mt-8 text-center">
+              <div className="inline-flex items-center gap-2.5 rounded-full bg-white/5 border border-white/10 px-4 py-2">
+                <Loader2 className="w-4 h-4 text-white/70 animate-spin" />
+                <div className="text-left">
+                  <p className="text-xs font-semibold text-white/80" aria-live="polite">
+                    Analyse läuft…
+                  </p>
+                  <p className="text-[11px] text-white/55">Das kann kurz dauern – bitte Fenster offen lassen.</p>
+                </div>
+              </div>
+
+              <div className="mt-3 flex justify-center">
+                <div
+                  className="relative h-1 w-56 overflow-hidden rounded-full bg-white/10"
+                  role="progressbar"
+                  aria-label="Analyse Fortschritt"
+                >
+                  <div
+                    className="absolute inset-y-0 left-0 w-1/3 rounded-full bg-[linear-gradient(90deg,rgba(59,130,246,0.70),rgba(168,85,247,0.65),rgba(16,185,129,0.55))]"
+                    style={{ animation: 'ask-progress 1.15s ease-in-out infinite' }}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
 
+      {/* Rejected – kein Arbeitsvertrag */}
+      {step === 'rejected' && (
+        <div className="bg-card rounded-2xl border overflow-hidden">
+          <div className="bg-gradient-to-r from-red-50 to-orange-50 px-8 py-6 border-b">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-red-100 flex items-center justify-center">
+                <AlertCircle className="w-6 h-6 text-red-500" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-red-900">Kein Arbeitsvertrag erkannt</h3>
+                <p className="text-sm text-red-700/70">Das Dokument konnte nicht als Arbeitsvertrag klassifiziert werden</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-8 space-y-6">
+            <div className="bg-white rounded-xl border p-5 space-y-3">
+              <div className="flex items-center gap-3">
+                <FileText className="w-5 h-5 text-slate-400" />
+                <div>
+                  <p className="text-sm font-medium">Hochgeladene Datei</p>
+                  <p className="text-xs text-muted-foreground">{rejectedFileName}</p>
+                </div>
+              </div>
+              <div className="border-t pt-3">
+                <p className="text-sm text-slate-600">
+                  Unser KI-Agent hat das Dokument analysiert und <strong>keinen gültigen Schweizer Arbeitsvertrag</strong> erkannt. 
+                  Das Document Classification Tool hat keine ausreichenden Vertragsindikatoren gefunden.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-blue-50 rounded-xl border border-blue-100 p-5">
+              <p className="text-sm font-semibold text-blue-800 mb-2">Was wird akzeptiert?</p>
+              <ul className="text-sm text-blue-700 space-y-1.5">
+                <li>• Schweizer Arbeitsverträge (Assistenzbeitrag IV)</li>
+                <li>• Anstellungsverträge mit Angaben zu Lohn, Pensum, Ferien</li>
+                <li>• PDF, Word, Bild oder Textdatei</li>
+              </ul>
+            </div>
+
+            <div className="flex gap-3 justify-center">
+              <button
+                type="button"
+                onClick={() => { setStep('upload'); setRejectedFileName(''); }}
+                className="px-6 py-2.5 rounded-full bg-foreground text-background font-bold text-sm hover:bg-foreground/90 transition-colors flex items-center gap-2"
+              >
+                <ArrowLeft className="w-4 h-4" /> Anderes Dokument hochladen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Review Popup */}
+      {showReviewPopup && (
+        <ReviewPopup
+          attentionFields={popupAttentionFields}
+          contractPreviewUrl={contractPreviewUrl}
+          contractFileName={contractFileName}
+          contractMimeType={contractMimeType}
+          renderFieldEditor={renderPopupFieldEditor}
+          onClose={() => setShowReviewPopup(false)}
+        />
+      )}
+
       {/* Review */}
       {step === 'review' && (
-        <form onSubmit={handleSave} className="space-y-3">
-          {/* AI Review Banner */}
+        <form
+          onSubmit={(e) => {
+            // Enter/implicit submit soll niemals speichern.
+            e.preventDefault();
+            setTab('abrechnungsdaten');
+            toast.info('Bitte auch die Abrechnungsdaten prüfen.', { duration: 2500 });
+          }}
+          className="space-y-3"
+        >
+          {/* Binary Status Banner */}
           {Object.keys(confidenceMap).length > 0 && (
-            <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5 flex items-center gap-3">
-              <AlertCircle className="w-4 h-4 text-blue-600 shrink-0" />
-              <p className="text-xs text-blue-700">
-                <span className="font-bold">KI-Daten bitte überprüfen</span> – Felder mit <span className="inline-flex items-center gap-0.5 px-1 py-px rounded-full bg-blue-100 text-blue-700 text-[9px] font-semibold mx-0.5"><CheckCircle2 className="w-2.5 h-2.5" />KI</span> wurden automatisch befüllt.
-              </p>
+            <div className={`border rounded-xl px-4 py-2.5 flex items-center gap-3 ${
+              popupAttentionFields.length > 0 
+                ? 'bg-amber-50 border-amber-200' 
+                : 'bg-emerald-50 border-emerald-200'
+            }`}>
+              {popupAttentionFields.length > 0 ? (
+                <>
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <p className="text-xs text-amber-700">
+                    <span className="font-bold">{popupAttentionFields.length} Felder prüfen oder ergänzen</span> – 
+                    Liste im Dialog; im Formular sind dieselben Felder orange – dort bitte einmal «Bestätigen», wenn die Werte stimmen.
+                    {reviewedAttentionCount > 0 && (
+                      <span className="ml-1">
+                        ({reviewedAttentionCount}/{attentionFormKeys.size} bestätigt)
+                      </span>
+                    )}
+                  </p>
+                  <button type="button" onClick={() => setShowReviewPopup(true)} className="text-xs text-amber-700 underline font-medium shrink-0 ml-auto">
+                    Dialog öffnen
+                  </button>
+                </>
+              ) : (
+                <>
+                  <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <p className="text-xs text-emerald-700 flex-1">
+                    <span className="font-bold">Alle Felder mit hoher Sicherheit erkannt</span> – 
+                    Trotzdem empfehlen wir eine kurze Überprüfung.
+                  </p>
+                  {contractPreviewUrl ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowReviewPopup(true)}
+                      className="text-xs text-emerald-800 underline font-medium shrink-0"
+                    >
+                      Vertrag anzeigen
+                    </button>
+                  ) : null}
+                </>
+              )}
             </div>
           )}
 
@@ -589,38 +1878,94 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
             </div>
           </div>
 
-          {/* Content */}
-          <div className="bg-card rounded-2xl border p-5">
+          {/* Content (Teil des Agentic Workflows) */}
+          <div className="rounded-2xl p-[1px] bg-[linear-gradient(90deg,rgba(59,130,246,0.55),rgba(168,85,247,0.50),rgba(16,185,129,0.38))] shadow-[0_22px_80px_rgba(2,6,23,0.18)]">
+            <div className="relative rounded-2xl border border-transparent p-5">
+              <div className="absolute inset-0 bg-[radial-gradient(900px_520px_at_15%_0%,rgba(59,130,246,0.12),transparent_60%),radial-gradient(780px_520px_at_85%_10%,rgba(168,85,247,0.12),transparent_55%),radial-gradient(620px_520px_at_45%_120%,rgba(16,185,129,0.09),transparent_55%),linear-gradient(to_bottom,rgba(2,6,23,0.92),rgba(2,6,23,0.82))] rounded-2xl" />
+              <div className="relative text-white">
+              <div className="mb-3">
+                <span className="inline-flex items-center rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wide bg-white/10 text-white border border-white/15 shadow-sm">
+                  Agentic Workflow: Prüfen & Ergänzen
+                </span>
+              </div>
             {tab === 'stammdaten' && (
               <div className="space-y-4 animate-in fade-in duration-200">
                 <h4 className="text-sm font-bold">Assistenzperson</h4>
                 
                 <div className="grid grid-cols-4 gap-3">
-                  <MiniField title="Vorname" aiDetected={isFieldAi('firstName')} required={isRequired('firstName')} hasValue={!!firstName}>
+                  <MiniField title="Vorname" {...fieldProps('firstName')} hasValue={!!firstName}>
                     <input type="text" placeholder="Bitte ergänzen..." value={firstName} onChange={e => setFirstName(e.target.value)} className={inputStyle} />
                   </MiniField>
-                  <MiniField title="Nachname" aiDetected={isFieldAi('lastName')} required={isRequired('lastName')} hasValue={!!lastName}>
+                  <MiniField title="Nachname" {...fieldProps('lastName')} hasValue={!!lastName}>
                     <input type="text" placeholder="Bitte ergänzen..." value={lastName} onChange={e => setLastName(e.target.value)} className={inputStyle} />
                   </MiniField>
-                  <MiniField title="Strasse" aiDetected={isFieldAi('street')} required={isRequired('street')} hasValue={!!street}>
-                    <input type="text" placeholder="Bitte ergänzen..." value={street} onChange={e => setStreet(e.target.value)} className={inputStyle} />
+                  <MiniField title="Strasse" {...fieldProps('street')} hasValue={!!street}>
+                    <input
+                      type="text"
+                      placeholder="Bitte ergänzen..."
+                      value={street}
+                      onChange={e => setStreet(e.target.value)}
+                      onBlur={() => {
+                        const next = normalizeStreetAndHouseNumber(street, houseNumber);
+                        setStreet(next.street);
+                        setHouseNumber(next.houseNumber);
+                      }}
+                      className={inputStyle}
+                    />
                   </MiniField>
-                  <MiniField title="PLZ" aiDetected={isFieldAi('plz')} required={isRequired('plz')} hasValue={!!plz} error={validatePlz(plz)} hint="Gültige PLZ">
-                    <input type="text" placeholder="z.B. 8000" maxLength={4} value={plz} onChange={e => { const v = e.target.value.replace(/\D/g, '').slice(0, 4); setPlz(v); }} className={inputStyle} />
+                  <MiniField title="Hausnummer" {...fieldProps('houseNumber')} hasValue={!!houseNumber}>
+                    <input type="text" inputMode="numeric" placeholder="z.B. 45" value={houseNumber} onChange={e => setHouseNumber(e.target.value)} className={inputStyle} />
                   </MiniField>
                 </div>
 
                 <div className="grid grid-cols-4 gap-3">
-                  <MiniField title="Ort" aiDetected={isFieldAi('city')} required={isRequired('city')} hasValue={!!city}>
+                  <MiniField title="PLZ" {...fieldProps('plz')} hasValue={!!plz} error={validatePlz(plz)} hint="Gültige PLZ">
+                    <input type="text" placeholder="z.B. 8000" maxLength={4} value={plz} onChange={e => { const v = e.target.value.replace(/\D/g, '').slice(0, 4); setPlz(v); }} className={inputStyle} />
+                  </MiniField>
+                  <MiniField title="Ort" {...fieldProps('city')} hasValue={!!city}>
                     <input type="text" placeholder="Bitte ergänzen..." value={city} onChange={e => setCity(e.target.value)} className={inputStyle} />
                   </MiniField>
-                  <MiniField title="Geburtsdatum" aiDetected={isFieldAi('birthDate')} required={isRequired('birthDate')} hasValue={!!birthDate}>
+                  <MiniField title="Geburtsdatum" {...fieldProps('birthDate')} hasValue={!!birthDate}>
                     <input type="date" value={birthDate} onChange={e => setBirthDate(e.target.value)} className={inputStyle} />
                   </MiniField>
-                  <MiniField title="AHV-Nummer" aiDetected={isFieldAi('ahvNumber')} required={isRequired('ahvNumber')} hasValue={!!ahvNumber} error={validateAhvNumber(ahvNumber)} hint="Format korrekt">
+                  <MiniField title="AHV-Nummer" {...fieldProps('ahvNumber')} hasValue={!!ahvNumber} error={validateAhvNumber(ahvNumber)} hint="Format korrekt">
                     <input type="text" placeholder="756.xxxx.xxxx.xx" value={ahvNumber} onChange={e => setAhvNumber(formatAhvNumber(e.target.value))} className={inputStyle} />
                   </MiniField>
-                  <MiniField title="Zivilstand" aiDetected={isFieldAi('civilStatus')} required={isRequired('civilStatus')} hasValue={!!civilStatus}>
+                </div>
+
+                <div className="grid grid-cols-4 gap-3">
+                  <MiniField title="Geschlecht" {...fieldProps('gender')} hasValue={!!gender}>
+                    <select value={gender} onChange={e => setGender(e.target.value)} className={selectStyle}>
+                      <option value="">Bitte wählen...</option>
+                      <option value="male">Männlich</option>
+                      <option value="female">Weiblich</option>
+                      <option value="diverse">Divers</option>
+                    </select>
+                  </MiniField>
+                  <MiniField title="Telefon" {...fieldProps('phone')} hasValue={!!phone}>
+                    <input type="text" placeholder="+41 ..." value={phone} onChange={e => setPhone(e.target.value)} className={inputStyle} />
+                  </MiniField>
+                  <MiniField title="E-Mail" {...fieldProps('email')} hasValue={!!email}>
+                    <input type="email" placeholder="name@domain.ch" value={email} onChange={e => setEmail(e.target.value)} className={inputStyle} />
+                  </MiniField>
+                  <MiniField title="Land" {...fieldProps('country')} hasValue={!!country}>
+                    <select
+                      value={country && COUNTRY_OPTIONS.some(o => o.value === country) ? country : 'OTHER'}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setCountry(v === 'OTHER' ? '' : v);
+                      }}
+                      className={selectStyle}
+                    >
+                      {COUNTRY_OPTIONS.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </MiniField>
+                </div>
+
+                <div className="grid grid-cols-4 gap-3">
+                  <MiniField title="Zivilstand" {...fieldProps('civilStatus')} hasValue={!!civilStatus}>
                     <select value={civilStatus} onChange={e => setCivilStatus(e.target.value)} className={selectStyle}>
                       <option value="">Bitte wählen...</option>
                       <option value="ledig">Ledig</option>
@@ -630,10 +1975,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                       <option value="eingetragene Partnerschaft">Eingetragene Partnerschaft</option>
                     </select>
                   </MiniField>
-                </div>
-
-                <div className="grid grid-cols-4 gap-3">
-                  <MiniField title="Aufenthaltsstatus" aiDetected={isFieldAi('residencePermit')} required={isRequired('residencePermit')} hasValue={!!residencePermit}>
+                  <MiniField title="Aufenthaltsstatus" {...fieldProps('residencePermit')} hasValue={!!residencePermit}>
                     <select value={residencePermit} onChange={e => setResidencePermit(e.target.value)} className={selectStyle}>
                       <option value="">Bitte wählen...</option>
                       <option value="CH">Schweizer/in</option>
@@ -645,9 +1987,6 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                       <option value="F">Ausweis F (Vorläufig Aufgenommene)</option>
                     </select>
                   </MiniField>
-                  <MiniField title="E-Mail" hasValue={!!email}>
-                    <input type="text" placeholder="Optional" value={email} onChange={e => setEmail(e.target.value)} className={inputStyle} />
-                  </MiniField>
                 </div>
               </div>
             )}
@@ -656,35 +1995,64 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
               <div className="space-y-4 animate-in fade-in duration-200">
                 <h4 className="text-sm font-bold">Vertragsdetails & Pensum</h4>
                 <div className="grid grid-cols-4 gap-4">
-                  <MiniField title="Vertragsbeginn" aiDetected={isFieldAi('contractStart')} required={isRequired('contractStart')} hasValue={!!contractStart}>
+                  <MiniField title="Vertragsbeginn" {...fieldProps('contractStart')} hasValue={!!contractStart}>
                     <input type="date" value={contractStart} onChange={e => setContractStart(e.target.value)} className={inputStyle} />
                   </MiniField>
-                  <MiniField title="Vertragsende" aiDetected={isFieldAi('contractEnd')} required={isRequired('contractEnd')} hasValue={!!contractEnd}>
-                    <input type="date" placeholder="Unbefristet" value={contractEnd} onChange={e => setContractEnd(e.target.value)} className={inputStyle} />
+                  <MiniField title="Unbefristet" {...fieldProps('contractUnbefristet')} hasValue={contractUnbefristet}>
+                    <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        className="w-5 h-5 rounded border-slate-300"
+                        checked={contractUnbefristet}
+                        onChange={(e) => {
+                          const v = e.target.checked;
+                          setContractUnbefristet(v);
+                          if (v) setContractEnd('');
+                        }}
+                      />
+                      <span>Kein fixes Vertragsende</span>
+                    </label>
                   </MiniField>
-                  <MiniField title="Stunden/Woche" aiDetected={isFieldAi('hoursPerWeek')} required={isRequired('hoursPerWeek')} hasValue={!!hoursPerWeek} error={validatePositiveNumber(hoursPerWeek, 'Stunden')}>
+                  <MiniField title="Vertragsende" {...fieldProps('contractEnd')} hasValue={contractUnbefristet || !!contractEnd}>
+                    {contractUnbefristet ? (
+                      <p className="text-xs text-slate-500 py-1.5">— nicht zutreffend —</p>
+                    ) : (
+                      <input type="date" value={contractEnd} onChange={e => setContractEnd(e.target.value)} className={inputStyle} />
+                    )}
+                  </MiniField>
+                  <MiniField title="Kündigungsfrist (Tage)" {...fieldProps('noticePeriodDays')} hasValue={!!noticePeriodDays}>
+                    <input
+                      type="number"
+                      min={0}
+                      placeholder="z. B. 30"
+                      value={noticePeriodDays}
+                      onChange={e => setNoticePeriodDays(e.target.value)}
+                      className={inputStyle}
+                    />
+                  </MiniField>
+                  <MiniField title="Stunden/Woche" {...fieldProps('hoursPerWeek')} hasValue={!!hoursPerWeek} error={validatePositiveNumber(hoursPerWeek, 'Stunden')}>
                     <input type="number" min="0" max="168" step="0.5" placeholder="z.B. 20" value={hoursPerWeek} onChange={e => setHoursPerWeek(e.target.value)} className={inputStyle} />
                   </MiniField>
-                  <MiniField title="Stunden/Monat" aiDetected={isFieldAi('hoursPerMonth')} required={isRequired('hoursPerMonth')} hasValue={!!hoursPerMonth} error={validatePositiveNumber(hoursPerMonth, 'Stunden')}>
+                  <MiniField title="Stunden/Monat" {...fieldProps('hoursPerMonth')} hasValue={!!hoursPerMonth} error={validatePositiveNumber(hoursPerMonth, 'Stunden')}>
                     <input type="number" min="0" max="744" step="0.5" placeholder="z.B. 86" value={hoursPerMonth} onChange={e => setHoursPerMonth(e.target.value)} className={inputStyle} />
                   </MiniField>
                 </div>
 
                 <h4 className="text-sm font-bold">Lohn</h4>
                 <div className="grid grid-cols-4 gap-4">
-                  <MiniField title="Lohnart" aiDetected={isFieldAi('wageType')} required={isRequired('wageType')} hasValue={!!wageType}>
+                  <MiniField title="Lohnart" {...fieldProps('wageType')} hasValue={!!wageType}>
                     <select value={wageType} onChange={e => setWageType(e.target.value)} className={selectStyle}>
                       <option value="hourly">Stundenlohn</option>
                       <option value="monthly">Monatslohn</option>
                     </select>
                   </MiniField>
-                  <MiniField title="Stundenlohn (CHF)" aiDetected={isFieldAi('hourlyRate')} required={isRequired('hourlyRate')} hasValue={!!hourlyRate} error={validatePositiveNumber(hourlyRate, 'Stundenlohn')}>
+                  <MiniField title="Stundenlohn (CHF)" {...fieldProps('hourlyRate')} hasValue={!!hourlyRate} error={validatePositiveNumber(hourlyRate, 'Stundenlohn')}>
                     <input type="number" step="0.05" min="0" placeholder="z.B. 30.00" value={hourlyRate} onChange={e => setHourlyRate(e.target.value)} className={inputStyle} />
                   </MiniField>
-                  <MiniField title="Monatslohn (ca.)" aiDetected={isFieldAi('monthlyRate')} required={isRequired('monthlyRate')} hasValue={!!monthlyRate} error={validatePositiveNumber(monthlyRate, 'Monatslohn')}>
+                  <MiniField title="Monatslohn (ca.)" {...fieldProps('monthlyRate')} hasValue={!!monthlyRate} error={validatePositiveNumber(monthlyRate, 'Monatslohn')}>
                     <input type="number" step="1" min="0" placeholder="z.B. 2600" value={monthlyRate} onChange={e => setMonthlyRate(e.target.value)} className={inputStyle} />
                   </MiniField>
-                  <MiniField title="Ferien (Wochen)" aiDetected={isFieldAi('vacationWeeks')} required={isRequired('vacationWeeks')} hasValue={!!vacationWeeks}>
+                  <MiniField title="Ferien (Wochen)" {...fieldProps('vacationWeeks')} hasValue={!!vacationWeeks}>
                     <select value={vacationWeeks} onChange={e => setVacationWeeks(e.target.value)} className={selectStyle}>
                       <option value="4">4</option>
                       <option value="5">5</option>
@@ -693,60 +2061,53 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                   </MiniField>
                 </div>
 
-                <h4 className="text-sm font-bold">Versicherung & Konto</h4>
-                <div className="grid grid-cols-4 gap-4">
-                  <MiniField title="Ferienzuschlag %" aiDetected={isFieldAi('vacationSurcharge')} required={isRequired('vacationSurcharge')} hasValue={!!vacationSurcharge}>
+                <div className="rounded-2xl border border-primary/25 bg-primary/5 p-3.5 relative">
+
+                  <div className="flex items-baseline justify-between gap-3 mb-3">
+                    <h4 className="text-sm font-bold">Versicherung & Konto</h4>
+                    <p className="text-[11px] text-muted-foreground">
+                      Aus dem Vertrag erkannt – bitte die markierten Felder prüfen.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-4 gap-4">
+                  <MiniField title="Ferienzuschlag %" {...fieldProps('vacationSurcharge')} hasValue={!!vacationSurcharge}>
                     <input type="text" value={vacationSurcharge} onChange={e => setVacationSurcharge(e.target.value)} className={inputStyle} />
                   </MiniField>
-                  <MiniField title="Lohnkonto (IBAN)" aiDetected={isFieldAi('iban')} required={isRequired('iban')} hasValue={!!iban} error={validateIban(iban)} hint="Gültige IBAN">
+                  <MiniField title="Lohnkonto (IBAN)" {...fieldProps('iban')} hasValue={!!iban} error={validateIban(iban)} hint="Gültige IBAN">
                     <input type="text" placeholder="CH93 0076 2011 6238 5295 7" value={iban} onChange={e => setIban(formatIban(e.target.value))} className={inputStyle} />
                   </MiniField>
-                  <MiniField title="Abrechnungsverfahren" aiDetected={isFieldAi('billingMethod')} required={isRequired('billingMethod')} hasValue={!!billingMethod}>
+                  <MiniField title="Abrechnungsverfahren" {...fieldProps('billingMethod')} hasValue={!!billingMethod}>
                     <select value={billingMethod} onChange={e => setBillingMethod(e.target.value)} className={selectStyle}>
-                      <option value="simplified">Vereinfacht</option>
-                      <option value="standard">Standard</option>
+                      <option value="">Bitte wählen…</option>
+                      <option value="ordinary">Ordentlich</option>
                     </select>
                   </MiniField>
-                  <MiniField title="Kanton" aiDetected={isFieldAi('canton')} required={isRequired('canton')} hasValue={!!canton}>
+                  <MiniField
+                    title="Wohnsitzkanton"
+                    {...fieldProps('canton')}
+                    hasValue={!!canton}
+                    hint="Wohnsitzkanton der Assistenzperson (aus PLZ/Adresse abgeleitet) – bitte prüfen"
+                  >
                     <select value={canton} onChange={e => setCanton(e.target.value)} className={selectStyle}>
                       <option value="">Bitte wählen...</option>
-                      <option value="AG">Aargau</option>
-                      <option value="AI">Appenzell Innerrhoden</option>
-                      <option value="AR">Appenzell Ausserrhoden</option>
                       <option value="BE">Bern</option>
-                      <option value="BL">Basel-Landschaft</option>
-                      <option value="BS">Basel-Stadt</option>
-                      <option value="FR">Freiburg</option>
-                      <option value="GE">Genf</option>
-                      <option value="GL">Glarus</option>
-                      <option value="GR">Graubünden</option>
-                      <option value="JU">Jura</option>
                       <option value="LU">Luzern</option>
-                      <option value="NE">Neuenburg</option>
-                      <option value="NW">Nidwalden</option>
-                      <option value="OW">Obwalden</option>
-                      <option value="SG">St. Gallen</option>
-                      <option value="SH">Schaffhausen</option>
-                      <option value="SO">Solothurn</option>
-                      <option value="SZ">Schwyz</option>
-                      <option value="TG">Thurgau</option>
-                      <option value="TI">Tessin</option>
-                      <option value="UR">Uri</option>
-                      <option value="VD">Waadt</option>
-                      <option value="VS">Wallis</option>
-                      <option value="ZG">Zug</option>
                       <option value="ZH">Zürich</option>
                     </select>
                   </MiniField>
-                  <MiniField title="NBU AG %" aiDetected={isFieldAi('nbuEmployer')} required={isRequired('nbuEmployer')} hasValue={!!nbuEmployer}>
+                  <MiniField title="Nichtberufsunfallversicherung (NBU) Arbeitgeber (%)" {...fieldProps('nbuEmployer')} hasValue={!!nbuEmployer}>
                     <input type="text" value={nbuEmployer} onChange={e => setNbuEmployer(e.target.value)} className={inputStyle} />
                   </MiniField>
-                  <MiniField title="NBU AN %" aiDetected={isFieldAi('nbuEmployee')} required={isRequired('nbuEmployee')} hasValue={!!nbuEmployee}>
+                  <MiniField title="Nichtberufsunfallversicherung (NBU) Arbeitnehmer (%)" {...fieldProps('nbuEmployee')} hasValue={!!nbuEmployee}>
                     <input type="text" value={nbuEmployee} onChange={e => setNbuEmployee(e.target.value)} className={inputStyle} />
                   </MiniField>
+                  </div>
                 </div>
               </div>
             )}
+              </div>
+            </div>
           </div>
 
           {/* Footer */}
@@ -767,7 +2128,10 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                   Weiter zu Abrechnungsdaten <ArrowRight className="w-4 h-4" />
                 </button>
               ) : (
-                <button type="submit" disabled={saving || !firstName || !lastName}
+                <button
+                  type="button"
+                  onClick={doSave}
+                  disabled={saving || !firstName || !lastName}
                   className="px-6 py-2.5 rounded-full bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 disabled:opacity-50 transition-colors flex items-center gap-2">
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><CheckCircle2 className="w-4 h-4" /> Speichern & Beenden</>}
                 </button>

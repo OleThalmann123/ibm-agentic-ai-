@@ -238,8 +238,8 @@ export function EmployerOnboarding({ onComplete }: Props) {
     if (e2) { toast.error('Fehler: ' + e2.message); setLoading(false); return; }
 
     await supabase.from('assistant').insert([
-      { employer_id: emp.id, name: 'Max Mustermann (Demo)', email: 'max@example.com', date_of_birth: '1990-01-15', hourly_rate: 35.30, vacation_weeks: 4, has_withholding_tax: false, has_bvg: false, is_active: true, time_entry_mode: 'manual' },
-      { employer_id: emp.id, name: 'Anna Schmidt (Demo)', email: 'anna@example.com', date_of_birth: '1985-06-20', hourly_rate: 42.00, vacation_weeks: 5, has_withholding_tax: false, has_bvg: true, is_active: true, time_entry_mode: 'manual' },
+      { employer_id: emp.id, name: 'Max Mustermann (Demo)', email: 'max@example.com', date_of_birth: '1990-01-15', hourly_rate: 35.30, vacation_weeks: 4, has_bvg: false, is_active: true, time_entry_mode: 'manual' },
+      { employer_id: emp.id, name: 'Anna Schmidt (Demo)', email: 'anna@example.com', date_of_birth: '1985-06-20', hourly_rate: 42.00, vacation_weeks: 5, has_bvg: true, is_active: true, time_entry_mode: 'manual' },
     ]);
 
     toast.success('Einrichtung abgeschlossen!');
