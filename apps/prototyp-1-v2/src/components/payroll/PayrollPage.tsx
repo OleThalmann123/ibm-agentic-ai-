@@ -951,83 +951,32 @@ export function PayrollPage() {
       {!loading && (
         <div
           className={cn(
-            'relative mb-5 overflow-hidden rounded-2xl p-[2px]',
-            monthlyPackageReady
-              ? 'animate-glow-asklepios shadow-[0_14px_50px_-14px_hsl(var(--success)/0.45),0_8px_32px_-8px_hsl(var(--primary)/0.2)]'
-              : 'shadow-[0_6px_28px_-10px_rgba(15,23,42,0.12)]',
+            'relative mb-5 overflow-hidden rounded-2xl border shadow-sm',
+            monthlyPackageReady ? 'border-success/40 bg-card' : 'border-border bg-card',
           )}
         >
-          <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl" aria-hidden>
-            <div
-              className={cn(
-                // Farbschema bewusst nur Primary/Success, damit es ins UI passt (kein "neues" Violett).
-                'absolute left-1/2 top-1/2 h-[200vmax] w-[200vmax] -translate-x-1/2 -translate-y-1/2 will-change-transform bg-[conic-gradient(from_0deg_at_50%_50%,hsl(var(--primary))_0deg,hsl(var(--primary)/0.6)_120deg,hsl(var(--success)/0.55)_240deg,hsl(var(--primary))_360deg)] motion-reduce:animate-none',
-                monthlyPackageReady
-                  ? 'opacity-[0.68] animate-[spin_15s_linear_infinite]'
-                  : 'opacity-[0.45] animate-[spin_28s_linear_infinite]',
-              )}
-            />
-          </div>
-
           <div
             className={cn(
-              'relative z-10 space-y-4 overflow-hidden rounded-[13px] border p-5 sm:p-6',
-              monthlyPackageReady
-                ? 'border-success/35 bg-gradient-to-br from-card from-35% via-card via-65% to-success/[0.07] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.65)]'
-                : 'border-border/70 bg-gradient-to-br from-card via-card to-primary/[0.035]',
+              'relative space-y-4 p-5 sm:p-6',
+              monthlyPackageReady && 'bg-success/[0.04]',
             )}
           >
-            {/* Mesh-Glows — nur Primary / Success (kein Violett), wie im Rest der Karte */}
-            {monthlyPackageReady ? (
-              <>
-                <div
-                  className="pointer-events-none absolute -left-16 -top-20 h-52 w-52 rounded-full bg-primary/30 blur-3xl motion-reduce:animate-none animate-iv-mesh-breathe"
-                  aria-hidden
-                />
-                <div
-                  className="pointer-events-none absolute -bottom-12 -right-10 h-60 w-60 rounded-full bg-success/25 blur-3xl motion-reduce:animate-none animate-iv-mesh-breathe-slow [animation-delay:1.2s]"
-                  aria-hidden
-                />
-                <div
-                  className="pointer-events-none absolute left-1/3 top-1/2 h-40 w-40 -translate-y-1/2 rounded-full bg-primary/15 blur-2xl motion-reduce:animate-none animate-iv-mesh-breathe [animation-delay:2.4s]"
-                  aria-hidden
-                />
-              </>
-            ) : (
-              <div
-                className="pointer-events-none absolute -right-8 top-0 h-36 w-36 rounded-full bg-primary/15 blur-3xl"
-                aria-hidden
-              />
-            )}
-            {monthlyPackageReady && (
-              <div
-                className="pointer-events-none absolute inset-0 rounded-[13px] bg-[radial-gradient(720px_420px_at_12%_-10%,hsl(var(--success)/0.16),transparent_58%),radial-gradient(620px_400px_at_92%_0%,hsl(var(--primary)/0.14),transparent_52%),radial-gradient(520px_360px_at_50%_115%,hsl(var(--primary)/0.08),transparent_55%)]"
-                aria-hidden
-              />
-            )}
             <div className="relative flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0 flex-1 space-y-3">
                 <div className="flex flex-wrap items-start gap-3">
                   <div
                     className={cn(
-                      'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border shadow-md transition-shadow duration-500',
+                      'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border',
                       monthlyPackageReady
-                        ? 'border-success/40 bg-success/15 text-success shadow-[0_0_24px_-8px_hsl(var(--success)/0.5)]'
-                        : 'border-primary/25 bg-primary/[0.07] text-primary shadow-[0_0_20px_-10px_hsl(var(--primary)/0.25)]',
+                        ? 'border-success/40 bg-success/10 text-success'
+                        : 'border-primary/25 bg-primary/[0.07] text-primary',
                     )}
                   >
                     <Package className="h-5 w-5" strokeWidth={2} aria-hidden />
                   </div>
                   <div className="min-w-0 space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p
-                        className={cn(
-                          'text-lg font-extrabold uppercase tracking-wide sm:text-xl',
-                          monthlyPackageReady
-                            ? 'bg-gradient-to-r from-primary via-primary to-success bg-clip-text text-transparent'
-                            : 'text-foreground',
-                        )}
-                      >
+                      <p className="text-lg font-extrabold uppercase tracking-wide text-foreground sm:text-xl">
                         Monatspaket (IV)
                       </p>
                       {monthlyPackageReady && (
@@ -1069,9 +1018,9 @@ export function PayrollPage() {
                 onClick={() => void downloadMonthlyPackagePdf()}
                 disabled={!monthlyPackageReady}
                 className={cn(
-                  'inline-flex shrink-0 items-center gap-2 rounded-xl px-5 py-3 text-sm font-extrabold transition-all sm:self-center',
+                  'inline-flex shrink-0 items-center gap-2 rounded-xl px-5 py-3 text-sm font-extrabold transition-colors sm:self-center',
                   monthlyPackageReady
-                    ? 'cursor-pointer bg-gradient-to-br from-primary via-primary to-primary/80 text-primary-foreground shadow-lg shadow-primary/35 ring-2 ring-primary/30 ring-offset-2 ring-offset-background before:pointer-events-none before:absolute before:inset-0 before:rounded-xl before:bg-gradient-to-t before:from-transparent before:to-white/15 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/45 relative overflow-hidden'
+                    ? 'cursor-pointer bg-primary text-primary-foreground shadow-md hover:bg-primary/90'
                     : 'cursor-not-allowed bg-muted/90 text-muted-foreground shadow-inner',
                 )}
                 title={monthlyPackageReady ? 'Monatspaket als PDF herunterladen' : 'Noch nicht verfügbar'}
@@ -1182,11 +1131,21 @@ export function PayrollPage() {
                       </button>
                     )}
                     {result ? (
-                      <div style={{ textAlign: 'right' }}>
-                        <p style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', margin: 0, fontVariantNumeric: 'tabular-nums' }}>
+                      <div style={{ textAlign: 'right', minWidth: 0 }}>
+                        <p style={{ fontSize: 12, fontWeight: 600, color: '#0f172a', margin: 0, letterSpacing: '-0.01em' }}>
+                          Gesamtkosten Arbeitgeber
+                        </p>
+                        <p style={{
+                          fontSize: 16,
+                          fontWeight: 700,
+                          color: '#0f172a',
+                          margin: '2px 0 0',
+                          fontVariantNumeric: 'tabular-nums',
+                          letterSpacing: '-0.02em',
+                        }}>
                           CHF {fmt(result.totalaufwandAG.perYear)}
                         </p>
-                        <p style={{ fontSize: 11, color: '#94a3b8', margin: '1px 0 0' }}>
+                        <p style={{ fontSize: 11, color: '#64748b', margin: '4px 0 0', lineHeight: 1.35 }}>
                           Auszuzahlender Nettolohn: CHF {fmt(result.nettolohn.perYear)}
                         </p>
                       </div>
@@ -1310,12 +1269,12 @@ export function PayrollPage() {
                           />
                           {/* Quick summary row */}
                           {result && (
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10, marginBottom: 16 }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
                               <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', border: '1px solid #e2e8f0' }}>
-                                <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b', margin: '0 0 4px' }}>Gesamtkosten Arbeitgebender</p>
+                                <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#475569', margin: '0 0 4px' }}>Gesamtkosten Arbeitgeber</p>
                                 <p style={{ fontSize: 17, fontWeight: 800, color: '#1e293b', margin: 0, fontVariantNumeric: 'tabular-nums' }}>CHF {fmt(result.totalaufwandAG.perYear)}</p>
-                                <p style={{ fontSize: 11, color: '#94a3b8', margin: '2px 0 0' }}>
-                                  Sozialversicherungsbeiträge Arbeitgebender + Bruttolohn
+                                <p style={{ fontSize: 11, color: '#64748b', margin: '2px 0 0', lineHeight: 1.35 }}>
+                                  Sozialversicherungsbeiträge Arbeitgeber + Bruttolohn
                                 </p>
                               </div>
                               <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', border: '1px solid #e2e8f0' }}>
@@ -1336,11 +1295,6 @@ export function PayrollPage() {
                                 <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b', margin: '0 0 4px' }}>Auszuzahlender Nettolohn</p>
                                 <p style={{ fontSize: 17, fontWeight: 800, color: '#1e293b', margin: 0, fontVariantNumeric: 'tabular-nums' }}>CHF {fmt(result.nettolohn.perYear)}</p>
                                 <p style={{ fontSize: 11, color: '#94a3b8', margin: '2px 0 0' }}>CHF {fmt(result.nettolohn.perHour)}/Std</p>
-                              </div>
-                              <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', border: '1px solid #e2e8f0' }}>
-                                <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b', margin: '0 0 4px' }}>Status</p>
-                                <p style={{ fontSize: 17, fontWeight: 800, color: '#1e293b', margin: 0 }}>{confirmed ? '✓ Bestätigt' : 'Offen'}</p>
-                                <p style={{ fontSize: 11, color: '#94a3b8', margin: '2px 0 0' }}>Einträge: {hours.entryCount}</p>
                               </div>
                             </div>
                           )}
