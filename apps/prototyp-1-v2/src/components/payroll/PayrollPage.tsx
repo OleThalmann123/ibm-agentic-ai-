@@ -882,11 +882,11 @@ export function PayrollPage() {
         }}>
           <div style={{ minWidth: 0 }}>
             <p style={{ margin: 0, fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#64748b' }}>
-              IV‑Dokumentenpaket (Monat)
+              Monatspaket (IV)
             </p>
-            <p style={{ margin: '4px 0 0', fontSize: 12, color: '#64748b', lineHeight: 1.35 }}>
-              Sobald alle Lohnabrechnungen bestätigt sind (oder Personen ohne Stunden als „keine Arbeit“ markiert wurden),
-              können Sie hier das komplette Dokumentenpaket für die IV generieren (Deckblatt + alle relevanten PDFs).
+            <p style={{ margin: '4px 0 0', fontSize: 13, color: '#64748b', lineHeight: 1.45 }}>
+              Sobald alle Lohnabrechnungen bestätigt sind oder Personen ohne Stunden als «Keine Arbeit» markiert wurden,
+              können Sie hier das komplette Paket für die IV erzeugen: Deckblatt plus alle relevanten PDFs.
             </p>
             <p style={{ margin: '6px 0 0', fontSize: 11, color: '#94a3b8' }}>
               Status: Bestätigt {confirmedCount}/{assistants.filter(a => (timeEntries[a.id]?.totalHours || 0) > 0).length} · Keine Arbeit {noWorkCount}/{assistants.filter(a => (timeEntries[a.id]?.totalHours || 0) <= 0).length}
@@ -912,10 +912,10 @@ export function PayrollPage() {
               gap: 8,
               boxShadow: canGenerateMonthlyPackage() ? '0 8px 22px rgba(37, 99, 235, 0.18)' : 'none',
             }}
-            title={canGenerateMonthlyPackage() ? 'IV‑Dokumentenpaket herunterladen' : 'Noch nicht verfügbar'}
+            title={canGenerateMonthlyPackage() ? 'Monatspaket als PDF herunterladen' : 'Noch nicht verfügbar'}
           >
             <Download style={{ width: 16, height: 16 }} />
-            IV‑Paket als PDF
+            Alles in 1 PDF
           </button>
         </div>
       )}
@@ -1133,6 +1133,20 @@ export function PayrollPage() {
                       {/* ── STEP 1: Stunden prüfen ── */}
                       {flowStep === 'stunden' && (
                         <div>
+                          <PayrollFlowStepChrome
+                            title="Stunden prüfen"
+                            hint={
+                              hours.entries.length === 0 ? (
+                                <>Für diesen Monat sind noch keine Zeiten erfasst. Personen ohne Einsatz können Sie in der Übersicht als «Keine Arbeit» markieren.</>
+                              ) : (
+                                <>Prüfen Sie die erfassten Zeiten der Assistenzperson und korrigieren Sie sie bei Bedarf. Erst danach wird die Lohnabrechnung berechnet.</>
+                              )
+                            }
+                            onBack={() => {
+                              setExpandedId(null);
+                              setFlowStep('stunden');
+                            }}
+                          />
                           {/* Quick summary row */}
                           {result && (
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10, marginBottom: 16 }}>
@@ -1294,51 +1308,36 @@ export function PayrollPage() {
                             </>
                           )}
 
-                          {/* Navigation buttons */}
-                          <div style={{
-                            display: 'grid',
-                            gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-                            gap: 12,
-                            alignItems: 'stretch',
-                          }}>
-                            {result && (
-                              <div style={{ display: 'grid', gap: 10 }}>
-                                <div style={{
-                                  display: 'flex',
-                                  gap: 10,
-                                  alignItems: 'flex-start',
-                                  padding: '12px 14px',
-                                  borderRadius: 12,
-                                  border: '1px solid #e2e8f0',
-                                  background: '#f8fafc',
-                                }}>
-                                  <Clock style={{ width: 18, height: 18, color: '#0f172a', flexShrink: 0, marginTop: 1 }} />
-                                  <div>
-                                    <p style={{ margin: 0, fontSize: 12, fontWeight: 800, color: '#0f172a' }}>
-                                      Bitte kurz prüfen
-                                    </p>
-                                    <p style={{ margin: '2px 0 0', fontSize: 12, color: '#64748b', lineHeight: 1.35 }}>
-                                      Prüfen Sie hier die erfassten Zeiten der Assistenzperson und korrigieren Sie sie bei Bedarf.
-                                      Erst danach wird die Lohnabrechnung berechnet.
-                                    </p>
-                                  </div>
-                                </div>
-
-                                <ActionButton
-                                  onClick={() => setFlowStep('abrechnung')}
-                                  icon={<ArrowRight style={{ width: 15, height: 15 }} />}
-                                  label="Weiter zur Lohnabrechnung"
-                                  variant="primary"
-                                />
-                              </div>
-                            )}
-                          </div>
+                          {/* Weiter */}
+                          {result && (
+                            <div style={{ marginTop: 4 }}>
+                              <ActionButton
+                                onClick={() => setFlowStep('abrechnung')}
+                                icon={<ArrowRight style={{ width: 15, height: 15 }} />}
+                                label="Weiter zur Lohnabrechnung"
+                                variant="primary"
+                              />
+                            </div>
+                          )}
                         </div>
                       )}
 
                       {/* ── STEP 2: Lohnabrechnung erstellen ── */}
                       {flowStep === 'abrechnung' && (
                         <div>
+                          <PayrollFlowStepChrome
+                            title="Lohnabrechnung"
+                            hint={
+                              result ? (
+                                <>
+                                  Hier sehen Sie die Berechnung. Mit Bestätigung werden die PDFs erzeugt und Sie gelangen zum Schritt «Dokumente».
+                                </>
+                              ) : (
+                                <>Ohne erfasste Stunden ist keine Lohnabrechnung möglich.</>
+                              )
+                            }
+                            onBack={() => setFlowStep('stunden')}
+                          />
                           {result ? (
                             <>
                               {(() => {
@@ -1443,28 +1442,6 @@ export function PayrollPage() {
                               {/* Confirm */}
                               {!confirmed ? (
                                 <div>
-                                  <div style={{
-                                    display: 'flex',
-                                    gap: 10,
-                                    alignItems: 'flex-start',
-                                    padding: '12px 14px',
-                                    borderRadius: 12,
-                                    border: '1px solid #e2e8f0',
-                                    background: '#f8fafc',
-                                    marginBottom: 10,
-                                  }}>
-                                    <ShieldCheck style={{ width: 18, height: 18, color: '#0f172a', flexShrink: 0, marginTop: 1 }} />
-                                    <div>
-                                      <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#0f172a' }}>
-                                        Hinweis
-                                      </p>
-                                      <p style={{ margin: '2px 0 0', fontSize: 12, color: '#64748b', lineHeight: 1.35 }}>
-                                        Wenn Sie bestätigen, erscheint die Lohnabrechnung automatisch im Dashboard und die relevanten Dokumente für diese Assistenzperson werden generiert.
-                                        Anschliessend gelangen Sie automatisch zu <span style={{ fontWeight: 700, color: '#334155' }}>„Dokumente“</span>.
-                                      </p>
-                                    </div>
-                                  </div>
-
                                   <button
                                     onClick={() => handleConfirm(a.id, a.name)}
                                     style={{
@@ -1507,17 +1484,6 @@ export function PayrollPage() {
                               <p style={{ color: '#94a3b8', fontSize: 14 }}>
                                 Keine Stunden erfasst – kein Lohnbudget möglich.
                               </p>
-                              <button
-                                onClick={() => setFlowStep('stunden')}
-                                style={{
-                                  marginTop: 12, padding: '8px 16px', borderRadius: 8,
-                                  border: '1px solid #e2e8f0', background: '#fff',
-                                  fontSize: 13, fontWeight: 500, color: '#3b82f6',
-                                  cursor: 'pointer',
-                                }}
-                              >
-                                Zu den Stunden
-                              </button>
                             </div>
                           )}
                         </div>
@@ -1526,75 +1492,45 @@ export function PayrollPage() {
                       {/* ── STEP 3: Dokumente ── */}
                       {flowStep === 'dokumente' && (
                         <div>
+                          <PayrollFlowStepChrome
+                            title="Dokumentenspeicher"
+                            hint={
+                              <>
+                                PDFs für <strong style={{ color: '#334155' }}>{a.name}</strong>: Lohnabrechnung sowie Arbeits- und Einsatzrapport.
+                                Das Monatspaket für die IV (Deckblatt und alle Assistenzpersonen) erstellen Sie im Kasten <strong style={{ color: '#334155' }}>über</strong> der Liste.
+                              </>
+                            }
+                            onBack={() => setFlowStep('abrechnung')}
+                          />
                           <div style={{
                             borderRadius: 14,
                             border: '1px solid #e2e8f0',
                             background: '#fff',
-                            overflow: 'hidden',
+                            padding: 12,
                           }}>
                             <div style={{
-                              padding: '10px 14px',
-                              background: '#f8fafc',
-                              borderBottom: '1px solid #e2e8f0',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              gap: 10,
+                              display: 'grid',
+                              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                              gap: 12,
+                              alignItems: 'stretch',
                             }}>
-                              <div>
-                                <p style={{ margin: 0, fontSize: 11, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#64748b' }}>
-                                  Dokumentenspeicher
-                                </p>
-                                <p style={{ margin: '6px 0 0', fontSize: 13, color: '#64748b', lineHeight: 1.45 }}>
-                                  Hier werden pro Assistenzperson die <span style={{ fontWeight: 800, color: '#334155' }}>Lohnabrechnung</span> und der
-                                  <span style={{ fontWeight: 800, color: '#334155' }}> Arbeits- und Einsatzrapport</span> gespeichert.
-                                  Das monatliche <span style={{ fontWeight: 800, color: '#334155' }}>Dokumentenpaket für die IV</span> kannst du separat generieren.
-                                  Sieh diesen Reiter als deine persönliche digitale Dokumentenablage pro Assistenzperson.
-                                </p>
-                              </div>
-                              <div style={{ display: 'flex', gap: 8 }}>
-                                <button
-                                  onClick={() => setFlowStep('abrechnung')}
-                                  style={{
-                                    border: '1px solid #e2e8f0',
-                                    background: '#fff',
-                                    borderRadius: 12,
-                                    padding: '8px 12px',
-                                    fontSize: 12,
-                                    fontWeight: 700,
-                                    color: '#334155',
-                                    cursor: 'pointer',
-                                  }}
-                                >
-                                  Zurück
-                                </button>
-                              </div>
-                            </div>
-                            <div style={{ padding: 12 }}>
-                              <div style={{
-                                display: 'grid',
-                                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-                                gap: 12,
-                                alignItems: 'stretch',
-                              }}>
-                                {result && (
-                                  <DocCard
-                                    title="Lohnabrechnung"
-                                    subtitle="PDF"
-                                    fileType="PDF"
-                                    icon={<Download style={{ width: 18, height: 18 }} />}
-                                    onClick={() => downloadPayslipPdf(a, result, hours)}
-                                  />
-                                )}
+                              {result && (
                                 <DocCard
-                                  title="Arbeits- und Einsatzrapport"
-                                  subtitle="Lohnabrechnung + Einsatzrapport (PDF)"
+                                  title="Lohnabrechnung"
+                                  subtitle="PDF"
                                   fileType="PDF"
                                   icon={<Download style={{ width: 18, height: 18 }} />}
-                                  disabled={hours.totalHours === 0}
-                                  onClick={() => void downloadLohnUndEinsatzrapportPdf(a, hours)}
+                                  onClick={() => downloadPayslipPdf(a, result, hours)}
                                 />
-                              </div>
+                              )}
+                              <DocCard
+                                title="Arbeits- und Einsatzrapport"
+                                subtitle="Lohnabrechnung + Einsatzrapport (PDF)"
+                                fileType="PDF"
+                                icon={<Download style={{ width: 18, height: 18 }} />}
+                                disabled={hours.totalHours === 0}
+                                onClick={() => void downloadLohnUndEinsatzrapportPdf(a, hours)}
+                              />
                             </div>
                           </div>
                         </div>
@@ -1637,6 +1573,77 @@ function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string
         <span style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
       </div>
       <p style={{ fontSize: 22, fontWeight: 800, color: '#fff', margin: 0, fontVariantNumeric: 'tabular-nums' }}>{value}</p>
+    </div>
+  );
+}
+
+/** Einheitlicher Kopfbereich für die drei Payroll-Schritte: Titel, Hinweistext, Zurück. */
+function PayrollFlowStepChrome({
+  title,
+  hint,
+  onBack,
+  backLabel = 'Zurück',
+}: {
+  title: string;
+  hint: React.ReactNode;
+  onBack?: () => void;
+  backLabel?: string;
+}) {
+  return (
+    <div style={{
+      borderRadius: 14,
+      border: '1px solid #e2e8f0',
+      background: '#f1f5f9',
+      marginBottom: 16,
+      overflow: 'hidden',
+    }}>
+      <div style={{
+        padding: '14px 16px',
+        display: 'flex',
+        alignItems: 'flex-start',
+        justifyContent: 'space-between',
+        gap: 12,
+      }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <p style={{
+            margin: 0,
+            fontSize: 11,
+            fontWeight: 800,
+            letterSpacing: '0.08em',
+            textTransform: 'uppercase',
+            color: '#64748b',
+          }}>
+            {title}
+          </p>
+          <div style={{ margin: '8px 0 0', fontSize: 14, color: '#475569', lineHeight: 1.55 }}>
+            {hint}
+          </div>
+        </div>
+        {onBack && (
+          <button
+            type="button"
+            onClick={onBack}
+            style={{
+              flexShrink: 0,
+              border: '1px solid #e2e8f0',
+              background: '#fff',
+              borderRadius: 12,
+              padding: '8px 14px',
+              fontSize: 13,
+              fontWeight: 700,
+              color: '#334155',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              boxShadow: '0 1px 2px rgba(15, 23, 42, 0.06)',
+            }}
+          >
+            <ChevronLeft style={{ width: 16, height: 16 }} />
+            {backLabel}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
