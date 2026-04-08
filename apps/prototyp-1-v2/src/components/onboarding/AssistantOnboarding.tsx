@@ -18,6 +18,22 @@ import { readFileContent } from '@asklepios/backend';
 import { runDocumentPipeline } from '@asklepios/backend';
 import { ContractExtractionResult, IDPField, ConfidenceLevel } from '@asklepios/backend';
 
+// Swiss PLZ → City mapping (minimal prototype set)
+const PLZ_CITY_MAP: Record<string, string> = {
+  '3000': 'Bern',
+  '8000': 'Zürich',
+  '4000': 'Basel',
+  '6000': 'Luzern',
+  '9000': 'St. Gallen',
+  '1200': 'Genève',
+};
+
+function getCityFromPLZ(plz: string): string | null {
+  const zip = plz.trim();
+  if (zip.length !== 4) return null;
+  return PLZ_CITY_MAP[zip] ?? null;
+}
+
 // Check if field was AI-extracted
 function isAiExtracted(confidence: string): boolean {
   return confidence === 'high' || confidence === 'medium';
@@ -169,6 +185,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
   const [street, setStreet] = useState('');
   const [plz, setPlz] = useState('');
   const [city, setCity] = useState('');
+  const [cityAutofill, setCityAutofill] = useState(false);
   const [birthDate, setBirthDate] = useState('');
   const [ahvNumber, setAhvNumber] = useState('');
   const [civilStatus, setCivilStatus] = useState('');
@@ -606,13 +623,37 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                     <input type="text" placeholder="Bitte ergänzen..." value={street} onChange={e => setStreet(e.target.value)} className={inputStyle} />
                   </MiniField>
                   <MiniField title="PLZ" aiDetected={isFieldAi('plz')} required={isRequired('plz')} hasValue={!!plz} error={validatePlz(plz)} hint="Gültige PLZ">
-                    <input type="text" placeholder="z.B. 8000" maxLength={4} value={plz} onChange={e => { const v = e.target.value.replace(/\D/g, '').slice(0, 4); setPlz(v); }} className={inputStyle} />
+                    <input
+                      type="text"
+                      placeholder="z.B. 8000"
+                      maxLength={4}
+                      value={plz}
+                      onChange={e => {
+                        const v = e.target.value.replace(/\D/g, '').slice(0, 4);
+                        setPlz(v);
+                        const inferred = getCityFromPLZ(v);
+                        if (inferred && (!city || cityAutofill)) {
+                          setCity(inferred);
+                          setCityAutofill(true);
+                        }
+                      }}
+                      className={inputStyle}
+                    />
                   </MiniField>
                 </div>
 
                 <div className="grid grid-cols-4 gap-3">
                   <MiniField title="Ort" aiDetected={isFieldAi('city')} required={isRequired('city')} hasValue={!!city}>
-                    <input type="text" placeholder="Bitte ergänzen..." value={city} onChange={e => setCity(e.target.value)} className={inputStyle} />
+                    <input
+                      type="text"
+                      placeholder="Bitte ergänzen..."
+                      value={city}
+                      onChange={e => {
+                        setCity(e.target.value);
+                        setCityAutofill(false);
+                      }}
+                      className={inputStyle}
+                    />
                   </MiniField>
                   <MiniField title="Geburtsdatum" aiDetected={isFieldAi('birthDate')} required={isRequired('birthDate')} hasValue={!!birthDate}>
                     <input type="date" value={birthDate} onChange={e => setBirthDate(e.target.value)} className={inputStyle} />

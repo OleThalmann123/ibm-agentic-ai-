@@ -90,6 +90,22 @@ function getCantonFromPLZ(plz: string): { code: string; name: string } | null {
   return null;
 }
 
+// Swiss PLZ → City mapping (minimal prototype set)
+const PLZ_CITY_MAP: Record<string, string> = {
+  '3000': 'Bern',
+  '8000': 'Zürich',
+  '4000': 'Basel',
+  '6000': 'Luzern',
+  '9000': 'St. Gallen',
+  '1200': 'Genève',
+};
+
+function getCityFromPLZ(plz: string): string | null {
+  const zip = plz.trim();
+  if (zip.length !== 4) return null;
+  return PLZ_CITY_MAP[zip] ?? null;
+}
+
 // ─── Stable sub-components ───
 
 const inputCls = "w-full px-4 py-3 rounded-lg border bg-background text-base focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary";
@@ -146,6 +162,7 @@ export function EmployerOnboarding({ onComplete }: Props) {
   const [cStreet, setCStreet] = useState('');
   const [cZip, setCZip] = useState('');
   const [cCity, setCCity] = useState('');
+  const [cCityAutofill, setCCityAutofill] = useState(false);
 
   // Affected person
   const [aFirst, setAFirst] = useState('');
@@ -153,6 +170,7 @@ export function EmployerOnboarding({ onComplete }: Props) {
   const [aStreet, setAStreet] = useState('');
   const [aZip, setAZip] = useState('');
   const [aCity, setACity] = useState('');
+  const [aCityAutofill, setACityAutofill] = useState(false);
   const [aEmail, setAEmail] = useState('');
 
   // Setup
@@ -166,8 +184,22 @@ export function EmployerOnboarding({ onComplete }: Props) {
     setCZip(zip);
     if (zip.length >= 4) {
       setDetectedCanton(getCantonFromPLZ(zip));
+      const city = getCityFromPLZ(zip);
+      if (city && (!cCity || cCityAutofill)) {
+        setCCity(city);
+        setCCityAutofill(true);
+      }
     } else {
       setDetectedCanton(null);
+    }
+  };
+
+  const handleAffectedZipChange = (zip: string) => {
+    setAZip(zip);
+    const city = getCityFromPLZ(zip);
+    if (city && (!aCity || aCityAutofill)) {
+      setACity(city);
+      setACityAutofill(true);
     }
   };
 
@@ -284,7 +316,14 @@ export function EmployerOnboarding({ onComplete }: Props) {
                 className={inputCls} />
             </div>
           </div>
-          <Field label="Ort" value={cCity} onChange={setCCity} />
+          <Field
+            label="Ort"
+            value={cCity}
+            onChange={(v) => {
+              setCCity(v);
+              setCCityAutofill(false);
+            }}
+          />
         </div>
         {detectedCanton && (
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/5 border border-primary/10">
@@ -306,8 +345,15 @@ export function EmployerOnboarding({ onComplete }: Props) {
         </div>
         <Field label="Strasse & Nr." value={aStreet} onChange={setAStreet} />
         <div className="grid grid-cols-[120px_1fr] gap-4">
-          <Field label="PLZ" value={aZip} onChange={setAZip} />
-          <Field label="Ort" value={aCity} onChange={setACity} />
+          <Field label="PLZ" value={aZip} onChange={handleAffectedZipChange} />
+          <Field
+            label="Ort"
+            value={aCity}
+            onChange={(v) => {
+              setACity(v);
+              setACityAutofill(false);
+            }}
+          />
         </div>
         <Field label="E-Mail (optional)" value={aEmail} onChange={setAEmail} type="email" placeholder="name@beispiel.ch" />
       </div>
