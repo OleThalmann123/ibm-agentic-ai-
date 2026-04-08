@@ -612,9 +612,6 @@ export function PayrollPage() {
                         <p style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', margin: 0, fontVariantNumeric: 'tabular-nums' }}>
                           CHF {fmt(result.nettolohn.perYear)}
                         </p>
-                        <p style={{ fontSize: 11, color: '#94a3b8', margin: '1px 0 0' }}>
-                          Netto · AG: CHF {fmt(result.totalaufwandAG.perYear)}
-                        </p>
                       </div>
                     ) : (
                       <p style={{ fontSize: 12, color: '#cbd5e1', fontStyle: 'italic' }}>Keine Stunden</p>
@@ -721,7 +718,12 @@ export function PayrollPage() {
                         <div>
                           {/* Quick summary row */}
                           {result && (
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 16 }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10, marginBottom: 16 }}>
+                              <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', border: '1px solid #e2e8f0' }}>
+                                <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b', margin: '0 0 4px' }}>Sozialversicherungsbeiträge Arbeitgebender</p>
+                                <p style={{ fontSize: 17, fontWeight: 800, color: '#1e293b', margin: 0, fontVariantNumeric: 'tabular-nums' }}>CHF {fmt(result.totalAG.perYear)}</p>
+                                <p style={{ fontSize: 11, color: '#94a3b8', margin: '2px 0 0' }}>Pro Std: CHF {fmt(result.totalAG.perHour)}</p>
+                              </div>
                               <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', border: '1px solid #e2e8f0' }}>
                                 <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b', margin: '0 0 4px' }}>Bruttolohn</p>
                                 <p style={{ fontSize: 17, fontWeight: 800, color: '#1e293b', margin: 0, fontVariantNumeric: 'tabular-nums' }}>CHF {fmt(result.bruttolohn.perYear)}</p>
@@ -735,7 +737,7 @@ export function PayrollPage() {
                               <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', border: '1px solid #e2e8f0' }}>
                                 <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b', margin: '0 0 4px' }}>Status</p>
                                 <p style={{ fontSize: 17, fontWeight: 800, color: '#1e293b', margin: 0 }}>{confirmed ? '✓ Bestätigt' : 'Offen'}</p>
-                                <p style={{ fontSize: 11, color: '#94a3b8', margin: '2px 0 0' }}>AG: CHF {fmt(result.totalaufwandAG.perYear)}</p>
+                                <p style={{ fontSize: 11, color: '#94a3b8', margin: '2px 0 0' }}>Einträge: {hours.entryCount}</p>
                               </div>
                             </div>
                           )}
