@@ -102,12 +102,19 @@ export default {
               "0 0 34px 4px hsl(var(--success) / 0.5), 0 0 52px -6px hsl(var(--primary) / 0.38), 0 1px 3px rgb(15 23 42 / 0.06)",
           },
         },
+        /** Sanftes Atmen für Mesh-Glows (IV-Monatspaket), nur Opacity — gleiche Palette wie Primary/Success */
+        "iv-mesh-breathe": {
+          "0%, 100%": { opacity: "0.38" },
+          "50%": { opacity: "0.62" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         "pulse-slow": "pulse-slow 2s ease-in-out infinite",
         "glow-asklepios": "glow-asklepios 2.75s ease-in-out infinite",
+        "iv-mesh-breathe": "iv-mesh-breathe 5.5s ease-in-out infinite",
+        "iv-mesh-breathe-slow": "iv-mesh-breathe 7.5s ease-in-out infinite",
       },
     },
   },

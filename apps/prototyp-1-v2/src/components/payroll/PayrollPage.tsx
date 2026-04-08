@@ -905,15 +905,37 @@ export function PayrollPage() {
 
           <div
             className={cn(
-              'relative z-10 space-y-4 rounded-[13px] border p-5 sm:p-6',
+              'relative z-10 space-y-4 overflow-hidden rounded-[13px] border p-5 sm:p-6',
               monthlyPackageReady
-                ? 'border-success/30 bg-gradient-to-br from-card from-40% via-card to-success/[0.06]'
-                : 'border-border/70 bg-card',
+                ? 'border-success/35 bg-gradient-to-br from-card from-35% via-card via-65% to-success/[0.07] shadow-[inset_0_1px_0_0_rgba(255,255,255,0.65)]'
+                : 'border-border/70 bg-gradient-to-br from-card via-card to-primary/[0.035]',
             )}
           >
+            {/* Spielerische Mesh-Glows — nur Primary / Success / Violet, wie im Rest der Karte */}
+            {monthlyPackageReady ? (
+              <>
+                <div
+                  className="pointer-events-none absolute -left-16 -top-20 h-52 w-52 rounded-full bg-primary/30 blur-3xl motion-reduce:animate-none animate-iv-mesh-breathe"
+                  aria-hidden
+                />
+                <div
+                  className="pointer-events-none absolute -bottom-12 -right-10 h-60 w-60 rounded-full bg-success/25 blur-3xl motion-reduce:animate-none animate-iv-mesh-breathe-slow [animation-delay:1.2s]"
+                  aria-hidden
+                />
+                <div
+                  className="pointer-events-none absolute left-1/3 top-1/2 h-40 w-40 -translate-y-1/2 rounded-full bg-violet-500/20 blur-2xl motion-reduce:animate-none animate-iv-mesh-breathe [animation-delay:2.4s]"
+                  aria-hidden
+                />
+              </>
+            ) : (
+              <div
+                className="pointer-events-none absolute -right-8 top-0 h-36 w-36 rounded-full bg-primary/15 blur-3xl"
+                aria-hidden
+              />
+            )}
             {monthlyPackageReady && (
               <div
-                className="pointer-events-none absolute inset-0 rounded-[13px] bg-[radial-gradient(720px_420px_at_12%_-10%,hsl(var(--success)/0.14),transparent_55%),radial-gradient(600px_380px_at_92%_0%,hsl(var(--primary)/0.12),transparent_50%)]"
+                className="pointer-events-none absolute inset-0 rounded-[13px] bg-[radial-gradient(720px_420px_at_12%_-10%,hsl(var(--success)/0.16),transparent_58%),radial-gradient(620px_400px_at_92%_0%,hsl(var(--primary)/0.14),transparent_52%),radial-gradient(480px_320px_at_50%_100%,hsl(270_65%_58%/0.08),transparent_55%)]"
                 aria-hidden
               />
             )}
@@ -922,10 +944,10 @@ export function PayrollPage() {
                 <div className="flex flex-wrap items-start gap-3">
                   <div
                     className={cn(
-                      'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border shadow-md',
+                      'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border shadow-md transition-shadow duration-500',
                       monthlyPackageReady
-                        ? 'border-success/35 bg-success/15 text-success'
-                        : 'border-primary/25 bg-primary/[0.07] text-primary',
+                        ? 'border-success/40 bg-success/15 text-success shadow-[0_0_24px_-8px_hsl(var(--success)/0.5)]'
+                        : 'border-primary/25 bg-primary/[0.07] text-primary shadow-[0_0_20px_-10px_hsl(var(--primary)/0.25)]',
                     )}
                   >
                     <Package className="h-5 w-5" strokeWidth={2} aria-hidden />
@@ -943,8 +965,8 @@ export function PayrollPage() {
                         Monatspaket (IV)
                       </p>
                       {monthlyPackageReady && (
-                        <Badge variant="success" className="gap-1 rounded-full border-0 pl-1.5 pr-2.5 shadow-md">
-                          <Sparkles className="h-3.5 w-3.5" aria-hidden />
+                        <Badge variant="success" className="gap-1 rounded-full border-0 pl-1.5 pr-2.5 shadow-md shadow-success/30 ring-2 ring-success/20">
+                          <Sparkles className="h-3.5 w-3.5 drop-shadow-sm" aria-hidden />
                           Freigeschaltet
                         </Badge>
                       )}
@@ -983,7 +1005,7 @@ export function PayrollPage() {
                 className={cn(
                   'inline-flex shrink-0 items-center gap-2 rounded-xl px-5 py-3 text-sm font-extrabold transition-all sm:self-center',
                   monthlyPackageReady
-                    ? 'cursor-pointer bg-gradient-to-br from-primary to-primary/88 text-primary-foreground shadow-lg shadow-primary/30 ring-2 ring-primary/25 ring-offset-2 ring-offset-background hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/40'
+                    ? 'cursor-pointer bg-gradient-to-br from-primary via-primary to-primary/80 text-primary-foreground shadow-lg shadow-primary/35 ring-2 ring-primary/30 ring-offset-2 ring-offset-background before:pointer-events-none before:absolute before:inset-0 before:rounded-xl before:bg-gradient-to-t before:from-transparent before:to-white/15 hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/45 relative overflow-hidden'
                     : 'cursor-not-allowed bg-muted/90 text-muted-foreground shadow-inner',
                 )}
                 title={monthlyPackageReady ? 'Monatspaket als PDF herunterladen' : 'Noch nicht verfügbar'}
