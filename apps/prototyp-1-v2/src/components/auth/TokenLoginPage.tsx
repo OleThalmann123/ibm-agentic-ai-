@@ -479,7 +479,7 @@ export function TokenLoginPage() {
                 <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1">
                   <Spinner value={startH} onChange={setStartH} max={23} />
                   <span className="text-2xl font-bold text-slate-300">:</span>
-                  <Spinner value={startM} onChange={setStartM} max={59} step={15} />
+                  <Spinner value={startM} onChange={setStartM} max={59} step={1} />
                 </div>
               </div>
               <div className="bg-white rounded-2xl shadow-sm border p-4">
@@ -487,7 +487,7 @@ export function TokenLoginPage() {
                 <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1">
                   <Spinner value={endH} onChange={setEndH} max={23} />
                   <span className="text-2xl font-bold text-slate-300">:</span>
-                  <Spinner value={endM} onChange={setEndM} max={59} step={15} />
+                  <Spinner value={endM} onChange={setEndM} max={59} step={1} />
                 </div>
               </div>
             </div>
@@ -510,6 +510,10 @@ export function TokenLoginPage() {
               >
                 <span className="inline-block h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-200 translate-x-1" />
               </button>
+            </div>
+
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              <span className="font-semibold">Hinweis (MVP 1):</span> Nachtdienst / Nachtzuschläge sind aktuell out of scope. Bitte erfasse die Zeiten ohne Nachtdienst-Markierung.
             </div>
 
             {/* Activity dropdown (only for day shifts, if required) */}

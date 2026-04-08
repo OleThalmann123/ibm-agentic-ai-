@@ -345,7 +345,7 @@ export function TokenLoginPage() {
                 <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1">
                   <Spinner value={startH} onChange={setStartH} max={23} />
                   <span className="text-2xl font-bold text-slate-300">:</span>
-                  <Spinner value={startM} onChange={v => setStartM(Math.round(v / 15) * 15 % 60)} max={45} />
+                  <Spinner value={startM} onChange={setStartM} max={59} />
                 </div>
               </div>
               <div className="bg-white rounded-2xl shadow-sm border p-4">
@@ -353,7 +353,7 @@ export function TokenLoginPage() {
                 <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1">
                   <Spinner value={endH} onChange={setEndH} max={23} />
                   <span className="text-2xl font-bold text-slate-300">:</span>
-                  <Spinner value={endM} onChange={v => setEndM(Math.round(v / 15) * 15 % 60)} max={45} />
+                  <Spinner value={endM} onChange={setEndM} max={59} />
                 </div>
               </div>
             </div>
@@ -367,16 +367,25 @@ export function TokenLoginPage() {
               </select>
             </div>
 
-            {/* Night shift toggle */}
-            <div className="bg-white rounded-2xl shadow-sm border px-5 py-4 flex items-center justify-between">
+            {/* Night shift toggle (MVP 1: intentionally disabled / out of scope) */}
+            <div className="bg-white rounded-2xl shadow-sm border px-5 py-4 flex items-center justify-between opacity-60">
               <div className="flex items-center gap-3">
                 <Moon className="w-5 h-5 text-slate-400" />
                 <span className="font-semibold text-base">Nachtdienst</span>
               </div>
-              <button type="button" onClick={() => setIsNight(!isNight)}
-                className={`relative inline-flex h-7 w-14 shrink-0 items-center rounded-full transition-colors ${isNight ? 'bg-primary' : 'bg-slate-300'}`}>
-                <span className={`inline-block h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-200 ${isNight ? 'translate-x-8' : 'translate-x-1'}`} />
+              <button
+                type="button"
+                disabled
+                aria-disabled="true"
+                title="MVP 1: Nachtzuschläge sind noch out of scope"
+                className="relative inline-flex h-7 w-14 shrink-0 items-center rounded-full transition-colors bg-slate-200 cursor-not-allowed"
+              >
+                <span className="inline-block h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-200 translate-x-1" />
               </button>
+            </div>
+
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              <span className="font-semibold">Hinweis (MVP 1):</span> Nachtdienst / Nachtzuschläge sind aktuell out of scope. Bitte erfasse die Zeiten ohne Nachtdienst-Markierung.
             </div>
 
             {/* Save button */}

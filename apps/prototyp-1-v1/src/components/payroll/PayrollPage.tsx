@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import {
   calculatePayroll, FAK_RATES, fmt, fmtPct, type PayrollResult
 } from '@asklepios/backend';
-import { generatePayslipPdf } from '@asklepios/backend';
+import { calculatePayslip, generatePayslipPdf, type PayslipAccountingMethod } from '@asklepios/backend';
 import { generateTimesheetPdf } from '@asklepios/backend';
 import {
   Calculator, FileText, ChevronLeft, ChevronRight, Users,
@@ -240,17 +240,49 @@ export function PayrollPage() {
   const downloadPayslipPdf = () => {
     if (!selectedAssistant || !selectedResult || !selectedHours) return;
     const cd = selectedAssistant.contract_data as any;
-    const kanton = cd?.canton || employer?.canton || 'ZH';
+    const kanton = employer?.canton || cd?.canton || 'ZH';
     const kantonName = FAK_RATES[kanton]?.name || kanton;
     const stundenlohn = selectedAssistant.hourly_rate || 0;
-    const verfahren = cd?.billing_method === 'standard' ? 'Ordentlich' : 'Vereinfacht';
+    const vacWeeks = selectedAssistant.vacation_weeks || 4;
+    const ferienzuschlagRate = vacWeeks === 5 ? 0.1064 : vacWeeks === 6 ? 0.1304 : 0.0833;
+    const ferienzuschlagLabel = vacWeeks === 5 ? '10.64%' : vacWeeks === 6 ? '13.04%' : '8.33%';
+
+    const bm = String(cd?.billing_method || 'ordinary').toLowerCase();
+    const accountingMethod: PayslipAccountingMethod =
+      bm === 'simplified' || bm === 'vereinfacht' ? 'simplified'
+        : (bm === 'ordinary_with_withholding' || bm === 'ordinary_quellensteuer') ? 'ordinary_with_withholding'
+          : 'ordinary';
+    const accountingMethodLabel =
+      accountingMethod === 'simplified'
+        ? 'Vereinfachtes'
+        : accountingMethod === 'ordinary_with_withholding'
+          ? 'Ordentliches mit Quellensteuer'
+          : 'Ordentliches';
+
+    const nbuRateEmployee = cd?.nbu_employee ? (parseFloat(cd.nbu_employee) / 100) : undefined;
+    const payslip = calculatePayslip({
+      canton,
+      accountingMethod,
+      hourlyRate: stundenlohn,
+      hours: selectedHours.totalHours,
+      vacationSurchargeRate: ferienzuschlagRate,
+      nbuRateEmployee,
+    });
 
     const doc = generatePayslipPdf({
-      month: monthLabel(currentMonth),
+      monthYearLabel: monthLabel(currentMonth),
+      placeDateLabel: '[Ort, Datum]',
       employer: getEmployerAddress(),
-      employee: getEmployeeAddress(selectedAssistant),
-      grundlagen: { kanton: `${kantonName} (${kanton})`, verfahren, stundenlohn, stunden: selectedHours.totalHours },
-      result: selectedResult,
+      employee: { ...getEmployeeAddress(selectedAssistant), ahvNumber: cd?.ahv_number || '' },
+      grundlagen: {
+        cantonLabel: `${kantonName}`,
+        accountingMethodLabel,
+        hourlyRate: stundenlohn,
+        hours: selectedHours.totalHours,
+        vacationSurchargeLabel: ferienzuschlagLabel,
+      },
+      accountingMethod,
+      result: payslip,
     });
 
     doc.save(`Lohnabrechnung_${selectedAssistant.name.replace(/\s/g, '_')}_${currentMonth}.pdf`);

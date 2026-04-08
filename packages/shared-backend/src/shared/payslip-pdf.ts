@@ -1,14 +1,31 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import type { PayrollResult } from '../backend/payroll';
-import { fmt, fmtPct } from '../backend/payroll';
+import type { PayslipAccountingMethod, PayslipResult } from '../backend/payslip';
 
-interface PayslipPdfData {
-  month: string; // e.g. "März 2026"
+export interface PayslipPdfData {
+  monthYearLabel?: string; // e.g. "[Monat, Jahr]" or "März 2026"
+  placeDateLabel?: string; // e.g. "[Ort, Datum]"
   employer: { name: string; street?: string; plzCity?: string };
-  employee: { name: string; street?: string; plzCity?: string };
-  grundlagen: { kanton: string; verfahren: string; stundenlohn: number; stunden: number };
-  result: PayrollResult;
+  employee: { name: string; street?: string; plzCity?: string; ahvNumber?: string };
+  grundlagen: {
+    cantonLabel: string;
+    accountingMethodLabel: string;
+    hourlyRate: number;
+    hours: number;
+    vacationSurchargeLabel: string;
+  };
+  accountingMethod: PayslipAccountingMethod;
+  result: PayslipResult;
+}
+
+function fmtMoney(n: number): string {
+  const value = Number.isFinite(n) ? n : 0;
+  return `Fr. ${value.toFixed(2).replace('.', ',')}`;
+}
+
+function fmtPct(n: number | null): string {
+  if (n == null) return '';
+  return `${(n * 100).toFixed(2).replace('.', ',')}%`;
 }
 
 export function generatePayslipPdf(data: PayslipPdfData): jsPDF {
@@ -16,77 +33,75 @@ export function generatePayslipPdf(data: PayslipPdfData): jsPDF {
   const W = 190;
   const LM = 10;
   let y = 15;
-  const money = (n: number) => `CHF ${fmt(n)}`;
 
-  // Title
+  // Header
   doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
   doc.text('Lohnabrechnung', LM, y);
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  doc.text(data.month, LM + W, y, { align: 'right' });
-  y += 10;
-
-  // Arbeitgebender / Arbeitnehmender boxes
-  const boxW = W / 2 - 3;
+  doc.text(data.monthYearLabel || '[Monat, Jahr]', LM + W, y, { align: 'right' });
+  doc.text(data.placeDateLabel || '[Ort, Datum]', LM + W, y + 6, { align: 'right' });
+  y += 12;
 
   // Arbeitgebender
-  doc.setFillColor(240, 245, 255);
-  doc.rect(LM, y, boxW, 22, 'F');
-  doc.setDrawColor(30, 64, 175);
-  doc.rect(LM, y, boxW, 22, 'S');
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Arbeitgebender', LM + 3, y + 5);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.text(data.employer.name || '–', LM + 3, y + 10);
-  if (data.employer.street) doc.text(data.employer.street, LM + 3, y + 14.5);
-  if (data.employer.plzCity) doc.text(data.employer.plzCity, LM + 3, y + 19);
+  autoTable(doc, {
+    startY: y,
+    head: [['Arbeitgebender', '']],
+    body: [
+      ['Vorname, Name', data.employer.name || ''],
+      ['Strasse', data.employer.street || ''],
+      ['PLZ, Wohnort', data.employer.plzCity || ''],
+    ],
+    theme: 'grid',
+    headStyles: { fillColor: [230, 238, 250], textColor: 20, fontSize: 9, fontStyle: 'bold' },
+    bodyStyles: { fontSize: 9 },
+    columnStyles: { 0: { cellWidth: 55 }, 1: { cellWidth: 125 } },
+    margin: { left: LM, right: LM },
+  });
+  y = (doc as any).lastAutoTable.finalY + 6;
 
   // Arbeitnehmender
-  const lm2 = LM + boxW + 6;
-  doc.setFillColor(240, 245, 255);
-  doc.rect(lm2, y, boxW, 22, 'F');
-  doc.setDrawColor(30, 64, 175);
-  doc.rect(lm2, y, boxW, 22, 'S');
-  doc.setFontSize(8);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Arbeitnehmender', lm2 + 3, y + 5);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  doc.text(data.employee.name || '–', lm2 + 3, y + 10);
-  if (data.employee.street) doc.text(data.employee.street, lm2 + 3, y + 14.5);
-  if (data.employee.plzCity) doc.text(data.employee.plzCity, lm2 + 3, y + 19);
-
-  y += 28;
+  autoTable(doc, {
+    startY: y,
+    head: [['Arbeitnehmender', '']],
+    body: [
+      ['Vorname, Name', data.employee.name || ''],
+      ['Strasse', data.employee.street || ''],
+      ['PLZ, Wohnort', data.employee.plzCity || ''],
+      ['AHV-Nummer', data.employee.ahvNumber || ''],
+    ],
+    theme: 'grid',
+    headStyles: { fillColor: [230, 238, 250], textColor: 20, fontSize: 9, fontStyle: 'bold' },
+    bodyStyles: { fontSize: 9 },
+    columnStyles: { 0: { cellWidth: 55 }, 1: { cellWidth: 125 } },
+    margin: { left: LM, right: LM },
+  });
+  y = (doc as any).lastAutoTable.finalY + 6;
 
   // Grundlagen
   autoTable(doc, {
     startY: y,
     head: [['Grundlagen', '']],
     body: [
-      ['Kanton', data.grundlagen.kanton],
-      ['Abrechnungsverfahren', data.grundlagen.verfahren],
-      ['Stundenlohn', money(data.grundlagen.stundenlohn)],
-      ['Anzahl Stunden', fmt(data.grundlagen.stunden)],
+      ['Kanton', data.grundlagen.cantonLabel || 'Auswählen'],
+      ['Abrechnungsverfahren', data.grundlagen.accountingMethodLabel || 'Auswählen'],
+      ['Stundenlohn', fmtMoney(data.grundlagen.hourlyRate)],
+      ['Anzahl Stunden', String(data.grundlagen.hours ?? 0)],
     ],
     theme: 'grid',
-    headStyles: { fillColor: [30, 64, 175], fontSize: 8, fontStyle: 'bold' },
+    headStyles: { fillColor: [230, 238, 250], textColor: 20, fontSize: 9, fontStyle: 'bold' },
     bodyStyles: { fontSize: 9 },
     columnStyles: { 0: { cellWidth: 80 }, 1: { halign: 'right' } },
     margin: { left: LM, right: LM },
   });
-  y = (doc as any).lastAutoTable.finalY + 5;
+  y = (doc as any).lastAutoTable.finalY + 6;
 
-  const r = data.result;
-
-  // Lohn table
+  // Lohn
   const lohnBody: any[][] = [
-    ['Arbeitslohn', '—', money(r.arbeitslohn.perHour), money(r.arbeitslohn.perYear)],
-    // Immer anzeigen, damit die Tabelle immer gleich aussieht (auch wenn 0.00).
-    ['Ferienzuschlag', r.ferienzuschlag.rate != null ? fmtPct(r.ferienzuschlag.rate) : '—', money(r.ferienzuschlag.perHour), money(r.ferienzuschlag.perYear)],
-    [{ content: 'Bruttolohn Arbeitnehmender', styles: { fontStyle: 'bold' } }, '', { content: money(r.bruttolohn.perHour), styles: { fontStyle: 'bold' } }, { content: money(r.bruttolohn.perYear), styles: { fontStyle: 'bold' } }],
+    ['Arbeitslohn', '', fmtMoney(data.result.wageLines.workWage.perHour), fmtMoney(data.result.wageLines.workWage.perMonth)],
+    ['Ferienzuschlag', data.grundlagen.vacationSurchargeLabel || 'Auswählen', fmtMoney(data.result.wageLines.vacationSurcharge.perHour), fmtMoney(data.result.wageLines.vacationSurcharge.perMonth)],
+    [{ content: 'Bruttolohn', styles: { fontStyle: 'bold' } }, '', { content: fmtMoney(data.result.wageLines.grossWage.perHour), styles: { fontStyle: 'bold' } }, { content: fmtMoney(data.result.wageLines.grossWage.perMonth), styles: { fontStyle: 'bold' } }],
   ];
 
   autoTable(doc, {
@@ -94,24 +109,48 @@ export function generatePayslipPdf(data: PayslipPdfData): jsPDF {
     head: [['Lohn', 'Sätze', 'Pro Stunde', 'Pro Monat']],
     body: lohnBody,
     theme: 'grid',
-    headStyles: { fillColor: [30, 64, 175], fontSize: 8, fontStyle: 'bold' },
+    headStyles: { fillColor: [230, 238, 250], textColor: 20, fontSize: 9, fontStyle: 'bold' },
     bodyStyles: { fontSize: 9 },
     columnStyles: { 0: { cellWidth: 80 }, 1: { halign: 'right', cellWidth: 25 }, 2: { halign: 'right', cellWidth: 35 }, 3: { halign: 'right', cellWidth: 35 } },
     margin: { left: LM, right: LM },
   });
-  y = (doc as any).lastAutoTable.finalY + 3;
+  y = (doc as any).lastAutoTable.finalY + 6;
 
-  // Abzüge Arbeitnehmender (keine arbeitgeberseitigen Beiträge anzeigen)
-  const anBody: any[][] = r.anLines.map(l => [l.label, l.rate != null ? fmtPct(l.rate) : '—', money(l.perHour), money(l.perYear)]);
-  anBody.push([{ content: 'Total Abzüge Arbeitnehmender', styles: { fontStyle: 'bold' } }, { content: r.totalAN.rate != null ? fmtPct(r.totalAN.rate) : '—', styles: { fontStyle: 'bold' } }, { content: money(r.totalAN.perHour), styles: { fontStyle: 'bold' } }, { content: money(r.totalAN.perYear), styles: { fontStyle: 'bold' } }]);
-  anBody.push([{ content: 'Nettolohn Arbeitnehmender', styles: { fontStyle: 'bold', fillColor: [240, 245, 255] } }, '', { content: money(r.nettolohn.perHour), styles: { fontStyle: 'bold', fillColor: [240, 245, 255] } }, { content: money(r.nettolohn.perYear), styles: { fontStyle: 'bold', fillColor: [240, 245, 255] } }]);
+  // Abzüge (immer gleiche Struktur)
+  const byLabel = new Map(data.result.deductionLines.map(l => [l.label, l]));
+  const row = (label: string) => {
+    const l = byLabel.get(label);
+    if (!l || l.enabled === false) return [label, '', '', ''];
+    return [label, l.rate != null ? fmtPct(l.rate) : '', fmtMoney(l.perHour), fmtMoney(l.perMonth)];
+  };
+
+  const abzuegeBody: any[][] = [
+    row('AHV/IV/EO'),
+    row('ALV'),
+    row('KTV'),
+    row('NBU'),
+    row('Quellensteuer'),
+    row('FAK'),
+    [
+      { content: 'Total Abzüge', styles: { fontStyle: 'bold' } },
+      { content: '', styles: { fontStyle: 'bold' } },
+      { content: fmtMoney(data.result.totalDeductions.perHour), styles: { fontStyle: 'bold' } },
+      { content: fmtMoney(data.result.totalDeductions.perMonth), styles: { fontStyle: 'bold' } },
+    ],
+    [
+      { content: 'Nettolohn', styles: { fontStyle: 'bold', fillColor: [230, 238, 250] } },
+      { content: '', styles: { fontStyle: 'bold', fillColor: [230, 238, 250] } },
+      { content: fmtMoney(data.result.netWage.perHour), styles: { fontStyle: 'bold', fillColor: [230, 238, 250] } },
+      { content: fmtMoney(data.result.netWage.perMonth), styles: { fontStyle: 'bold', fillColor: [230, 238, 250] } },
+    ],
+  ];
 
   autoTable(doc, {
     startY: y,
-    head: [['Beiträge Arbeitnehmender', 'Sätze', 'Pro Stunde', 'Pro Monat']],
-    body: anBody,
+    head: [['Abzüge', 'Sätze', 'Pro Stunde', 'Pro Monat']],
+    body: abzuegeBody,
     theme: 'grid',
-    headStyles: { fillColor: [30, 64, 175], fontSize: 8, fontStyle: 'bold' },
+    headStyles: { fillColor: [230, 238, 250], textColor: 20, fontSize: 9, fontStyle: 'bold' },
     bodyStyles: { fontSize: 9 },
     columnStyles: { 0: { cellWidth: 80 }, 1: { halign: 'right', cellWidth: 25 }, 2: { halign: 'right', cellWidth: 35 }, 3: { halign: 'right', cellWidth: 35 } },
     margin: { left: LM, right: LM },

@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import {
   calculatePayroll, FAK_RATES, fmt, fmtPct, type PayrollResult
 } from '@asklepios/backend';
-import { generatePayslipPdf } from '@asklepios/backend';
+import { calculatePayslip, generatePayslipPdf, type PayslipAccountingMethod } from '@asklepios/backend';
 import { generateTimesheetPdf } from '@asklepios/backend';
 import { generateEinsatzrapportPdf } from '@asklepios/backend';
 import {
@@ -277,19 +277,51 @@ export function PayrollPage() {
   };
 
   // PDF handlers
-  const downloadPayslipPdf = (assistant: Assistant, result: PayrollResult, hours: MonthlyHours) => {
+  const downloadPayslipPdf = (assistant: Assistant, _result: PayrollResult, hours: MonthlyHours) => {
     const cd = assistant.contract_data as any;
-    const kanton = cd?.canton || employer?.canton || 'ZH';
+    const kanton = employer?.canton || cd?.canton || 'ZH';
     const kantonName = FAK_RATES[kanton]?.name || kanton;
     const stundenlohn = assistant.hourly_rate || 0;
-    const verfahren = cd?.billing_method === 'standard' ? 'Ordentlich' : 'Vereinfacht';
+    const vacWeeks = assistant.vacation_weeks || 4;
+    const ferienzuschlagRate = vacWeeks === 5 ? 0.1064 : vacWeeks === 6 ? 0.1304 : 0.0833;
+    const ferienzuschlagLabel = vacWeeks === 5 ? '10.64%' : vacWeeks === 6 ? '13.04%' : '8.33%';
+
+    const bm = String(cd?.billing_method || 'ordinary').toLowerCase();
+    const accountingMethod: PayslipAccountingMethod =
+      bm === 'simplified' || bm === 'vereinfacht' ? 'simplified'
+        : (bm === 'ordinary_with_withholding' || bm === 'ordinary_quellensteuer') ? 'ordinary_with_withholding'
+          : 'ordinary';
+    const accountingMethodLabel =
+      accountingMethod === 'simplified'
+        ? 'Vereinfachtes'
+        : accountingMethod === 'ordinary_with_withholding'
+          ? 'Ordentliches mit Quellensteuer'
+          : 'Ordentliches';
+
+    const nbuRateEmployee = cd?.nbu_employee ? (parseFloat(cd.nbu_employee) / 100) : undefined;
+    const payslip = calculatePayslip({
+      canton,
+      accountingMethod,
+      hourlyRate: stundenlohn,
+      hours: hours.totalHours,
+      vacationSurchargeRate: ferienzuschlagRate,
+      nbuRateEmployee,
+    });
 
     const doc = generatePayslipPdf({
-      month: monthLabel(currentMonth),
+      monthYearLabel: monthLabel(currentMonth),
+      placeDateLabel: '[Ort, Datum]',
       employer: getEmployerAddress(),
-      employee: getEmployeeAddress(assistant),
-      grundlagen: { kanton: `${kantonName} (${kanton})`, verfahren, stundenlohn, stunden: hours.totalHours },
-      result,
+      employee: { ...getEmployeeAddress(assistant), ahvNumber: cd?.ahv_number || '' },
+      grundlagen: {
+        cantonLabel: `${kantonName}`,
+        accountingMethodLabel,
+        hourlyRate: stundenlohn,
+        hours: hours.totalHours,
+        vacationSurchargeLabel: ferienzuschlagLabel,
+      },
+      accountingMethod,
+      result: payslip,
     });
 
     doc.save(`Lohnabrechnung_${assistant.name.replace(/\s/g, '_')}_${currentMonth}.pdf`);
@@ -610,7 +642,10 @@ export function PayrollPage() {
                     {result ? (
                       <div style={{ textAlign: 'right' }}>
                         <p style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', margin: 0, fontVariantNumeric: 'tabular-nums' }}>
-                          CHF {fmt(result.nettolohn.perYear)}
+                          CHF {fmt(result.totalaufwandAG.perYear)}
+                        </p>
+                        <p style={{ fontSize: 11, color: '#94a3b8', margin: '1px 0 0' }}>
+                          Auszuzahlender Nettolohn: CHF {fmt(result.nettolohn.perYear)}
                         </p>
                       </div>
                     ) : (
@@ -720,9 +755,11 @@ export function PayrollPage() {
                           {result && (
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10, marginBottom: 16 }}>
                               <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', border: '1px solid #e2e8f0' }}>
-                                <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b', margin: '0 0 4px' }}>Sozialversicherungsbeiträge Arbeitgebender</p>
-                                <p style={{ fontSize: 17, fontWeight: 800, color: '#1e293b', margin: 0, fontVariantNumeric: 'tabular-nums' }}>CHF {fmt(result.totalAG.perYear)}</p>
-                                <p style={{ fontSize: 11, color: '#94a3b8', margin: '2px 0 0' }}>Pro Std: CHF {fmt(result.totalAG.perHour)}</p>
+                                <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b', margin: '0 0 4px' }}>Gesamtkosten Arbeitgebender</p>
+                                <p style={{ fontSize: 17, fontWeight: 800, color: '#1e293b', margin: 0, fontVariantNumeric: 'tabular-nums' }}>CHF {fmt(result.totalaufwandAG.perYear)}</p>
+                                <p style={{ fontSize: 11, color: '#94a3b8', margin: '2px 0 0' }}>
+                                  Sozialversicherungsbeiträge Arbeitgebender + Bruttolohn
+                                </p>
                               </div>
                               <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', border: '1px solid #e2e8f0' }}>
                                 <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b', margin: '0 0 4px' }}>Bruttolohn</p>
@@ -730,7 +767,7 @@ export function PayrollPage() {
                                 <p style={{ fontSize: 11, color: '#94a3b8', margin: '2px 0 0' }}>{fmt(hours.totalHours)} Std × CHF {fmt(a.hourly_rate || 0)}</p>
                               </div>
                               <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', border: '1px solid #e2e8f0' }}>
-                                <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b', margin: '0 0 4px' }}>Nettolohn</p>
+                                <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#64748b', margin: '0 0 4px' }}>Auszuzahlender Nettolohn</p>
                                 <p style={{ fontSize: 17, fontWeight: 800, color: '#1e293b', margin: 0, fontVariantNumeric: 'tabular-nums' }}>CHF {fmt(result.nettolohn.perYear)}</p>
                                 <p style={{ fontSize: 11, color: '#94a3b8', margin: '2px 0 0' }}>CHF {fmt(result.nettolohn.perHour)}/Std</p>
                               </div>

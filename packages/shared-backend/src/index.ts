@@ -11,6 +11,7 @@ export * from './agent/langsmith';
 // Export backend (Supabase & Payroll)
 export * from './backend/supabase';
 export * from './backend/payroll';
+export * from './backend/payslip';
 
 // Export shared types and utilities
 export * from './shared/types';
