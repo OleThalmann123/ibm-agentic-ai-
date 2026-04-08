@@ -146,6 +146,7 @@ export function PayrollPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [flowStep, setFlowStep] = useState<FlowStep>('stunden');
   const [confirmedMap, setConfirmedMap] = useState<Record<string, boolean>>({});
+  const [noWorkMap, setNoWorkMap] = useState<Record<string, boolean>>({});
 
   // Time entries for the month
   const [timeEntries, setTimeEntries] = useState<Record<string, MonthlyHours>>({});
@@ -163,6 +164,26 @@ export function PayrollPage() {
       loadData();
     }
   }, [employerAccess, currentMonth]);
+
+  // Persist "keine Arbeit" per month (client-side)
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(`payroll_no_work:${currentMonth}`);
+      setNoWorkMap(raw ? JSON.parse(raw) : {});
+    } catch {
+      setNoWorkMap({});
+    }
+  }, [currentMonth]);
+
+  const setNoWork = (assistantId: string, value: boolean) => {
+    setNoWorkMap((prev) => {
+      const next = { ...prev, [assistantId]: value };
+      try {
+        localStorage.setItem(`payroll_no_work:${currentMonth}`, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
 
   // Scroll expanded card into view
   useEffect(() => {
@@ -284,12 +305,15 @@ export function PayrollPage() {
 
   const canGenerateMonthlyPackage = () => {
     // Paket ist nur sinnvoll, wenn alle Assistent:innen entweder bestätigt sind
-    // oder in diesem Monat 0 Stunden haben.
+    // ODER explizit als "keine Arbeit in diesem Monat" markiert sind.
     if (assistants.length === 0) return false;
     for (const a of assistants) {
       const hours = timeEntries[a.id];
       const hasHours = (hours?.totalHours || 0) > 0;
-      if (!hasHours) continue;
+      if (!hasHours) {
+        if (!noWorkMap[a.id]) return false;
+        continue;
+      }
       const confirmed = confirmedMap[`${a.id}-${currentMonth}`] || false;
       if (!confirmed) return false;
     }
@@ -731,6 +755,7 @@ export function PayrollPage() {
   // Stats
   const totalHoursAll = Object.values(timeEntries).reduce((s, h) => s + h.totalHours, 0);
   const confirmedCount = assistants.filter(a => confirmedMap[`${a.id}-${currentMonth}`]).length;
+  const noWorkCount = assistants.filter(a => (timeEntries[a.id]?.totalHours || 0) <= 0 && noWorkMap[a.id]).length;
 
   const payrollResults = useMemo(() => {
     const results: Record<string, PayrollResult | null> = {};
@@ -842,6 +867,59 @@ export function PayrollPage() {
         </div>
       </div>
 
+      {/* ── IV Monatsdokument (global) ── */}
+      {!loading && (
+        <div style={{
+          background: '#fff',
+          borderRadius: 16,
+          border: '1px solid #e2e8f0',
+          padding: '14px 16px',
+          marginBottom: 14,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 14,
+        }}>
+          <div style={{ minWidth: 0 }}>
+            <p style={{ margin: 0, fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#64748b' }}>
+              IV‑Dokumentenpaket (Monat)
+            </p>
+            <p style={{ margin: '4px 0 0', fontSize: 12, color: '#64748b', lineHeight: 1.35 }}>
+              Sobald alle Lohnabrechnungen bestätigt sind (oder Personen ohne Stunden als „keine Arbeit“ markiert wurden),
+              können Sie hier das komplette Dokumentenpaket für die IV generieren (Deckblatt + alle relevanten PDFs).
+            </p>
+            <p style={{ margin: '6px 0 0', fontSize: 11, color: '#94a3b8' }}>
+              Status: Bestätigt {confirmedCount}/{assistants.filter(a => (timeEntries[a.id]?.totalHours || 0) > 0).length} · Keine Arbeit {noWorkCount}/{assistants.filter(a => (timeEntries[a.id]?.totalHours || 0) <= 0).length}
+            </p>
+          </div>
+          <button
+            onClick={() => void downloadMonthlyPackagePdf()}
+            disabled={!canGenerateMonthlyPackage()}
+            style={{
+              flexShrink: 0,
+              border: 'none',
+              borderRadius: 12,
+              padding: '10px 12px',
+              cursor: canGenerateMonthlyPackage() ? 'pointer' : 'not-allowed',
+              background: canGenerateMonthlyPackage()
+                ? 'linear-gradient(135deg, #3b82f6, #2563eb)'
+                : '#e2e8f0',
+              color: canGenerateMonthlyPackage() ? '#fff' : '#64748b',
+              fontSize: 12,
+              fontWeight: 800,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              boxShadow: canGenerateMonthlyPackage() ? '0 8px 22px rgba(37, 99, 235, 0.18)' : 'none',
+            }}
+            title={canGenerateMonthlyPackage() ? 'IV‑Dokumentenpaket herunterladen' : 'Noch nicht verfügbar'}
+          >
+            <Download style={{ width: 16, height: 16 }} />
+            IV‑Paket als PDF
+          </button>
+        </div>
+      )}
+
       {/* ── ASSISTANT CARDS (Flow) ── */}
       {loading ? (
         <div style={{ textAlign: 'center', padding: '60px 0', color: '#94a3b8' }}>
@@ -919,6 +997,30 @@ export function PayrollPage() {
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                    {hours.totalHours <= 0 && (
+                      <button
+                        type="button"
+                        onClick={(ev) => {
+                          ev.preventDefault();
+                          ev.stopPropagation();
+                          setNoWork(a.id, !noWorkMap[a.id]);
+                        }}
+                        style={{
+                          border: `1px solid ${noWorkMap[a.id] ? '#a7f3d0' : '#e2e8f0'}`,
+                          background: noWorkMap[a.id] ? '#ecfdf5' : '#fff',
+                          color: noWorkMap[a.id] ? '#047857' : '#64748b',
+                          borderRadius: 999,
+                          padding: '6px 10px',
+                          fontSize: 11,
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap',
+                        }}
+                        title="Markieren, dass diese Person in diesem Monat nicht gearbeitet hat"
+                      >
+                        {noWorkMap[a.id] ? '✓ Keine Arbeit' : 'Keine Arbeit?'}
+                      </button>
+                    )}
                     {result ? (
                       <div style={{ textAlign: 'right' }}>
                         <p style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', margin: 0, fontVariantNumeric: 'tabular-nums' }}>
