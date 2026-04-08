@@ -1015,7 +1015,9 @@ export function PayrollPage() {
                                       <PayRow label="KTV" rate={dKtv?.rate ?? null} perH={dKtv?.perHour} perM={dKtv?.perMonth ?? 0} />
                                       <PayRow label="NBU" rate={dNbu?.rate ?? null} perH={dNbu?.perHour} perM={dNbu?.perMonth ?? 0} />
                                       <PayRow label="Quellensteuer" rate={dQst?.rate ?? null} perH={dQst?.perHour} perM={dQst?.perMonth ?? 0} />
-                                      <PayRow label="FAK (nur Wallis)" rate={dFak?.rate ?? null} perH={dFak?.perHour} perM={dFak?.perMonth ?? 0} />
+                                      {dFak && (
+                                        <PayRow label="FAK (nur Wallis)" rate={dFak.rate ?? null} perH={dFak.perHour} perM={dFak.perMonth ?? 0} />
+                                      )}
                                       <PayRow label="Total Abzüge" perH={payslip.totalDeductions.perHour} perM={payslip.totalDeductions.perMonth} bold />
                                       <PayRow label="Nettolohn" perH={payslip.netWage.perHour} perM={payslip.netWage.perMonth} bold highlight />
                                     </PaySection>
