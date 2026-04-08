@@ -82,6 +82,15 @@ function monthFirstIsoFromDate(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
 }
 
+/** Erster Tag des Monats (Mittag, um TZ-Probleme zu vermeiden). */
+function startOfMonthDate(d: Date = new Date()): Date {
+  return new Date(d.getFullYear(), d.getMonth(), 1, 12, 0, 0, 0);
+}
+
+function addMonths(d: Date, delta: number): Date {
+  return new Date(d.getFullYear(), d.getMonth() + delta, 1, 12, 0, 0, 0);
+}
+
 function sanitizeFilenamePart(input: string): string {
   return (input || '')
     .trim()
@@ -667,10 +676,57 @@ function LohnTab({
   const contract = (cd || {}) as Record<string, any>;
   const employerName = employer?.name || '';
 
-  const now = new Date();
   const monthNames = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
-  const currentMonthLabel = `${monthNames[now.getMonth()]} ${now.getFullYear()}`;
-  const monthFirst = monthFirstIsoFromDate(now);
+
+  const [viewMonth, setViewMonth] = useState<Date>(() => startOfMonthDate());
+  const monthFirst = monthFirstIsoFromDate(viewMonth);
+  const currentMonthLabel = `${monthNames[viewMonth.getMonth()]} ${viewMonth.getFullYear()}`;
+
+  const thisMonthStart = startOfMonthDate(new Date());
+  const earliestNavMonth = addMonths(thisMonthStart, -60);
+  const canGoPrevMonth = viewMonth.getTime() > earliestNavMonth.getTime();
+  const canGoNextMonth = viewMonth.getTime() < thisMonthStart.getTime();
+
+  const shiftViewMonth = (dir: number) => {
+    setViewMonth((m) => {
+      const n = addMonths(m, dir);
+      if (n.getTime() < earliestNavMonth.getTime()) return earliestNavMonth;
+      if (n.getTime() > thisMonthStart.getTime()) return thisMonthStart;
+      return n;
+    });
+  };
+
+  const [monthEntries, setMonthEntries] = useState<TimeEntry[]>([]);
+  const [monthEntriesLoading, setMonthEntriesLoading] = useState(false);
+
+  useEffect(() => {
+    if (!lohnTabActive || !assistant.id) return;
+    let cancelled = false;
+    (async () => {
+      setMonthEntriesLoading(true);
+      const y = viewMonth.getFullYear();
+      const mo = viewMonth.getMonth();
+      const startDate = `${y}-${String(mo + 1).padStart(2, '0')}-01`;
+      const endDate = mo === 11 ? `${y + 1}-01-01` : `${y}-${String(mo + 2).padStart(2, '0')}-01`;
+      const { data, error } = await supabase
+        .from('time_entry')
+        .select('*')
+        .eq('assistant_id', assistant.id)
+        .gte('date', startDate)
+        .lt('date', endDate)
+        .order('date', { ascending: true })
+        .order('start_time', { ascending: true });
+      if (!cancelled) {
+        if (!error && data) {
+          setMonthEntries(data as TimeEntry[]);
+        } else {
+          setMonthEntries([]);
+        }
+        setMonthEntriesLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [assistant.id, viewMonth, lohnTabActive, entries.length]);
 
   const [payrollConfirmed, setPayrollConfirmed] = useState(false);
   const [confirmationLoading, setConfirmationLoading] = useState(true);
@@ -708,12 +764,7 @@ function LohnTab({
     return () => { cancelled = true; };
   }, [assistant.id, monthFirst, lohnTabActive, loginToken, entries.length]);
 
-  const currentMonthEntries = entries.filter(e => {
-    const d = new Date(e.date + 'T12:00:00');
-    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-  });
-
-  const trackedHours = currentMonthEntries.reduce((sum, e) => {
+  const trackedHours = monthEntries.reduce((sum, e) => {
     return sum + diffHours(e.start_time, e.end_time);
   }, 0);
 
@@ -818,7 +869,7 @@ function LohnTab({
 
   return (
     <>
-      {entries.length === 0 ? (
+      {!monthEntriesLoading && entries.length === 0 && monthEntries.length === 0 ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 flex items-start gap-2">
           <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
           <div>
@@ -832,9 +883,37 @@ function LohnTab({
 
       <div className="bg-white rounded-2xl shadow-sm border p-4 text-center">
         <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold">Lohnabrechnung</p>
-        <p className="text-lg font-bold">{currentMonthLabel}</p>
-        <p className="text-xs text-slate-500">{stunden} Stunden · CHF {fmt(stundenlohn)}/Std</p>
+        <div className="mt-1 flex items-center justify-center gap-0.5">
+          <button
+            type="button"
+            aria-label="Vorheriger Monat"
+            disabled={!canGoPrevMonth || monthEntriesLoading}
+            onClick={() => shiftViewMonth(-1)}
+            className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 disabled:pointer-events-none disabled:opacity-25"
+          >
+            <ChevronLeft className="h-5 w-5" aria-hidden />
+          </button>
+          <p className="min-w-0 flex-1 text-center text-lg font-bold leading-tight px-1">{currentMonthLabel}</p>
+          <button
+            type="button"
+            aria-label="Nächster Monat"
+            disabled={!canGoNextMonth || monthEntriesLoading}
+            onClick={() => shiftViewMonth(1)}
+            className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 disabled:pointer-events-none disabled:opacity-25"
+          >
+            <ChevronRight className="h-5 w-5" aria-hidden />
+          </button>
+        </div>
+        <p className="text-xs text-slate-500 mt-0.5">
+          {monthEntriesLoading ? 'Monat wird geladen…' : `${stunden} Stunden · CHF ${fmt(stundenlohn)}/Std`}
+        </p>
       </div>
+
+      {!monthEntriesLoading && monthEntries.length === 0 && entries.length > 0 ? (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-center text-xs text-slate-600">
+          In diesem Monat sind keine Stunden erfasst.
+        </div>
+      ) : null}
 
       <div className={`rounded-xl border p-3 flex items-center gap-3 ${
         payrollConfirmed
