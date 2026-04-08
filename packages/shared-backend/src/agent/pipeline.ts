@@ -1,90 +1,251 @@
-import { ContractExtractionResult, DocumentClassification } from './types';
-import { extractContractData, extractContractFromImages } from './openrouter';
-import { readFileContent } from './pdf-extractor';
-
 /**
- * IDP Pipeline – runs entirely in the browser.
+ * IDP Pipeline – Agentic Workflow
  * 
- * 1. Extracts text (and images for scanned docs) from the uploaded file via pdf.js
- * 2. Sends text/images to OpenRouter API directly from the browser
- * 3. Returns structured extraction result
+ * New architecture (Meeting Decisions #2, #4, #5, #10):
  * 
- * No separate Python backend needed – everything runs on localhost:5173.
+ * Step 1: PDF/Document Extraction (Tool: read_document)
+ * Step 2: Agent 1 – Data Extraction with Tools (validate_swiss, lookup_canton)
+ * Step 3: Classification – Is this a contract?
+ * Step 4: Agent 2 – LLM-as-a-Judge (reviews extraction, assigns confidence)
+ * Step 5: Binary Mapping – confidence → ok / review_required
+ * Step 6: Return result with full trace (observability)
+ * 
+ * Everything runs in the browser – no separate backend needed.
  */
 
-export async function runDocumentPipeline(file?: File, text?: string | null): Promise<{
+import { ContractExtractionResult, DocumentClassification } from './types';
+import {
+  extractContractData,
+  extractContractFromImages,
+  mergeWithJudgeResult,
+} from './openrouter';
+import { readFileContent } from './pdf-extractor';
+import { runJudge } from './judge';
+import {
+  startTrace,
+  addTraceStep,
+  completeTraceStep,
+  failTraceStep,
+  completeTrace,
+  failTrace,
+  type PipelineTrace,
+} from './trace';
+import { RunTree } from 'langsmith/run_trees';
+import {
+  getLangSmithClient,
+  isLangSmithEnabled,
+  setPipelineLangSmithRoot,
+} from './langsmith';
+
+export interface PipelineResult {
   classification: DocumentClassification;
   extraction?: ContractExtractionResult;
   requiresReview: boolean;
+  reviewFields: string[];
+  trace: PipelineTrace;
   assistant_id?: string;
-}> {
-  if (!file && !text) {
-    throw new Error('No file or text to analyze.');
-  }
+}
 
-  // Step 1: Get text content (and images for scanned PDFs)
-  let documentText = text || '';
-  let images: string[] | undefined;
+async function runDocumentPipelineImpl(
+  file?: File,
+  text?: string | null,
+): Promise<PipelineResult> {
+  const trace = startTrace();
 
-  if (file && !documentText) {
-    const fileContent = await readFileContent(file);
-    documentText = fileContent.text;
-    images = fileContent.images;
-  }
+  try {
+    if (!file && !text) {
+      throw new Error('No file or text to analyze.');
+    }
 
-  if (!documentText && !images?.length) {
-    throw new Error('Konnte keinen Text oder Bilder aus dem Dokument extrahieren.');
-  }
+    // ── Step 1: Document Extraction ──
+    const step1 = addTraceStep('pdf_extraction', 'Dokument lesen', {
+      fileName: file?.name,
+      fileType: file?.type,
+      hasText: !!text,
+    });
 
-  // Step 2: Call OpenRouter directly from browser
-  let result;
+    let documentText = text || '';
+    let images: string[] | undefined;
 
-  if (images && images.length > 0) {
-    // Scanned PDF or image upload → use vision model
-    result = await extractContractFromImages(images);
-  } else {
-    // Text-based PDF → use text extraction
-    result = await extractContractData(documentText);
-  }
+    if (file && !documentText) {
+      const fileContent = await readFileContent(file);
+      documentText = fileContent.text;
+      images = fileContent.images;
+    }
 
-  // Step 3: Determine classification
-  const hasContracts = result.contracts &&
-    (result.contracts.employer || result.contracts.assistant || result.contracts.contract_terms);
+    if (!documentText && !images?.length) {
+      throw new Error(
+        'Konnte keinen Text oder Bilder aus dem Dokument extrahieren.',
+      );
+    }
 
-  if (!hasContracts) {
+    completeTraceStep(step1, {
+      textLength: documentText.length,
+      imageCount: images?.length ?? 0,
+      isScanned: !!images?.length,
+    });
+
+    // ── Step 2: Agent 1 – Extraction with Tools ──
+    const step2 = addTraceStep('agent_extraction', 'Agent 1: Datenextraktion', {
+      mode: images?.length ? 'vision' : 'text',
+    });
+
+    let rawResult;
+    let toolCalls: string[] = [];
+
+    if (images && images.length > 0) {
+      const extracted = await extractContractFromImages(images);
+      rawResult = extracted.raw;
+      toolCalls = extracted.toolCalls;
+    } else {
+      const extracted = await extractContractData(documentText);
+      rawResult = extracted.raw;
+      toolCalls = extracted.toolCalls;
+    }
+
+    completeTraceStep(step2, {
+      fieldsExtracted: rawResult.extraction_metadata.fields_extracted,
+      fieldsMissing: rawResult.extraction_metadata.fields_missing,
+      warnings: rawResult.extraction_metadata.warnings,
+      toolsUsed: toolCalls,
+    });
+
+    // ── Step 3: Classification ──
+    const step3 = addTraceStep('classification', 'Dokumentklassifikation');
+
+    const hasContracts =
+      rawResult.contracts &&
+      (rawResult.contracts.employer ||
+        rawResult.contracts.assistant ||
+        rawResult.contracts.contract_terms);
+
+    if (!hasContracts) {
+      completeTraceStep(step3, { classification: 'other' });
+      const finalTrace = completeTrace({
+        fieldsExtracted: 0,
+        fieldsMissing: 0,
+        fieldsRequiringReview: 0,
+        overallConfidence: 0,
+        modelUsed: images?.length ? 'gemini-2.0-flash' : 'openrouter/auto',
+        judgeModelUsed: 'n/a',
+        toolsCalled: toolCalls,
+      });
+
+      return {
+        classification: 'other',
+        requiresReview: false,
+        reviewFields: [],
+        trace: finalTrace,
+      };
+    }
+
+    completeTraceStep(step3, { classification: 'contract' });
+
+    // ── Step 4: Agent 2 – LLM-as-a-Judge ──
+    const step4 = addTraceStep('agent_judge', 'Agent 2: Qualitätsprüfung (LLM-as-a-Judge)', {
+      inputFields: Object.keys(rawResult.contracts),
+    });
+
+    const sourceText = images?.length
+      ? '[Vision-basierte Extraktion aus gescanntem Dokument]'
+      : documentText;
+
+    const judgeResult = await runJudge(sourceText, rawResult.contracts);
+
+    completeTraceStep(step4, {
+      overallConfidence: judgeResult.overall_confidence,
+      overallStatus: judgeResult.overall_status,
+      reviewRequiredFields: judgeResult.review_required_fields,
+      summary: judgeResult.summary,
+    });
+
+    // ── Step 5: Merge & Binary Mapping ──
+    const step5 = addTraceStep('binary_mapping', 'Binäre Statuszuordnung');
+
+    const finalExtraction = mergeWithJudgeResult(rawResult, judgeResult) as unknown as ContractExtractionResult;
+
+    completeTraceStep(step5, {
+      overallStatus: finalExtraction.extraction_metadata.overall_status,
+      fieldsRequiringReview: finalExtraction.extraction_metadata.fields_requiring_review,
+      reviewFields: finalExtraction.extraction_metadata.review_required_fields,
+    });
+
+    // ── Step 6: Complete ──
+    const requiresReview =
+      finalExtraction.extraction_metadata.overall_status === 'review_required';
+
+    const finalTrace = completeTrace({
+      fieldsExtracted: finalExtraction.extraction_metadata.fields_extracted,
+      fieldsMissing: finalExtraction.extraction_metadata.fields_missing,
+      fieldsRequiringReview: finalExtraction.extraction_metadata.fields_requiring_review ?? 0,
+      overallConfidence: finalExtraction.extraction_metadata.overall_confidence,
+      modelUsed: images?.length ? 'gemini-2.0-flash' : 'openrouter/auto',
+      judgeModelUsed: 'gemini-2.0-flash',
+      toolsCalled: toolCalls,
+    });
+
     return {
-      classification: 'other',
-      requiresReview: false,
+      classification: 'contract',
+      extraction: finalExtraction,
+      requiresReview,
+      reviewFields: finalExtraction.extraction_metadata.review_required_fields ?? [],
+      trace: finalTrace,
     };
+  } catch (error: any) {
+    const errorTrace = failTrace(error?.message || 'Unknown error');
+    throw Object.assign(error, { trace: errorTrace });
+  }
+}
+
+/**
+ * Öffentliche Pipeline: legt bei aktivem LangSmith einen Root-Run an, damit alle
+ * Agent-/LLM-Spans in der UI unter einem Trace hängen (statt vieler Root-Zeilen).
+ */
+export async function runDocumentPipeline(
+  file?: File,
+  text?: string | null,
+): Promise<PipelineResult> {
+  const client = isLangSmithEnabled() ? getLangSmithClient() : null;
+  let rootRun: RunTree | undefined;
+
+  if (client) {
+    const project =
+      import.meta.env.VITE_LANGSMITH_PROJECT || 'asklepios-agent';
+    rootRun = new RunTree({
+      name: 'Asklepios: Dokument-Pipeline',
+      client,
+      project_name: project,
+      run_type: 'chain',
+      tracingEnabled: true,
+      tags: ['asklepios', 'pipeline', 'idp'],
+      inputs: {
+        fileName: file?.name ?? null,
+        hasText: !!text,
+      },
+    });
+    await rootRun.postRun();
+    setPipelineLangSmithRoot(rootRun);
   }
 
-  // Step 4: Check confidence for review
-  const meta = result.extraction_metadata;
-  const overallConfidence = meta?.overall_confidence ?? 0;
-  const ahvValue = result.contracts?.assistant?.ahv_number?.value;
-  const firstNameValue = result.contracts?.assistant?.first_name?.value;
-
-  const requiresReview =
-    overallConfidence < 0.85 ||
-    ahvValue === null ||
-    ahvValue === undefined ||
-    firstNameValue === null ||
-    firstNameValue === undefined;
-
-  const extraction: ContractExtractionResult = {
-    contracts: result.contracts as any,
-    extraction_metadata: {
-      document_language: meta?.document_language ?? 'de',
-      overall_confidence: overallConfidence,
-      fields_extracted: meta?.fields_extracted ?? 0,
-      fields_missing: meta?.fields_missing ?? 0,
-      warnings: meta?.warnings ?? [],
-    },
-  };
-
-  return {
-    classification: 'contract',
-    extraction,
-    requiresReview,
-  };
+  try {
+    const result = await runDocumentPipelineImpl(file, text);
+    if (rootRun) {
+      await rootRun.end({
+        classification: result.classification,
+        requiresReview: result.requiresReview,
+        reviewFieldCount: result.reviewFields.length,
+      });
+      await rootRun.patchRun();
+    }
+    return result;
+  } catch (e: unknown) {
+    if (rootRun) {
+      const msg = e instanceof Error ? e.message : String(e);
+      await rootRun.end(undefined, msg);
+      await rootRun.patchRun().catch(() => {});
+    }
+    throw e;
+  } finally {
+    setPipelineLangSmithRoot(null);
+  }
 }

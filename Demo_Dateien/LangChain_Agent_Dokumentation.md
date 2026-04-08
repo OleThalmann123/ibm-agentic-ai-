@@ -596,7 +596,7 @@ Wenn der Vertrag nur "4 Wochen Ferien" erwähnt, soll das LLM den Prozentsatz se
   oder «Ordentliches Verfahren mit Quellensteuer» ableiten
 ```
 
-**Regel 8 - Abrechnungsverfahren:** Je nach Vertragsformulierung soll das richtige Verfahren auf einen der drei technischen Werte gemappt werden: `simplified`, `ordinary`, oder `ordinary_quellensteuer`.
+**Regel 8 - Abrechnungsverfahren (MVP Scope):** Aktuell wird in der Software nur `ordinary` (Ordentlich) unterstützt. Das LLM soll deshalb `accounting_method` immer als `ordinary` extrahieren, falls im Vertrag ein Abrechnungsverfahren erwähnt wird.
 
 ---
 
@@ -798,7 +798,7 @@ Hier das **vollständige JSON-Schema** mit Erklärungen:
 
 ```json
     "social_insurance": {
-      "accounting_method": { ..., "note": "simplified, ordinary, ordinary_quellensteuer" },
+      "accounting_method": { ..., "note": "ordinary" },
       "canton":            { ..., "note": "2-stelliges Kürzel" },
       "nbu_employer_pct":  { ..., "note": "Dezimal (0.005 = 0.5%)" },
       "nbu_employee_pct":  { ..., "note": "Dezimal" }

@@ -245,9 +245,6 @@ export function AssistantsPage() {
                       {a.has_bvg && (
                         <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">BVG</span>
                       )}
-                      {a.has_withholding_tax && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">QST</span>
-                      )}
                     </div>
                   </td>
                   <td className="px-6 py-4">

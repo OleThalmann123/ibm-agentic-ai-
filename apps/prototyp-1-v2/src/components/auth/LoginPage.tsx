@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@asklepios/backend';
 import { toast } from 'sonner';
 import { Eye, EyeOff, LogIn, User } from 'lucide-react';
+import asklepiosLogo from '@/assets/asklepios-logo.png';
 
 export function LoginPage({ autoDemo }: { autoDemo?: boolean }) {
   const { signIn, signUp, refreshProfile } = useAuth();
@@ -100,8 +101,8 @@ export function LoginPage({ autoDemo }: { autoDemo?: boolean }) {
             });
 
             await supabase.from('assistant').insert([
-              { employer_id: emp.id, name: 'Max Mustermann (Demo)', email: 'max@example.com', date_of_birth: '1990-01-15', hourly_rate: 35.30, vacation_weeks: 4, has_withholding_tax: false, has_bvg: false, is_active: true, time_entry_mode: 'manual' },
-              { employer_id: emp.id, name: 'Anna Schmidt (Demo)', email: 'anna@example.com', date_of_birth: '1985-06-20', hourly_rate: 42.00, vacation_weeks: 5, has_withholding_tax: false, has_bvg: true, is_active: true, time_entry_mode: 'manual' },
+              { employer_id: emp.id, name: 'Max Mustermann (Demo)', email: 'max@example.com', date_of_birth: '1990-01-15', hourly_rate: 35.30, vacation_weeks: 4, has_bvg: false, is_active: true, time_entry_mode: 'manual' },
+              { employer_id: emp.id, name: 'Anna Schmidt (Demo)', email: 'anna@example.com', date_of_birth: '1985-06-20', hourly_rate: 42.00, vacation_weeks: 5, has_bvg: true, is_active: true, time_entry_mode: 'manual' },
             ]);
           }
         }
@@ -117,7 +118,7 @@ export function LoginPage({ autoDemo }: { autoDemo?: boolean }) {
       }
     } else {
       setLoading(false);
-      toast.success('Willkommen im Demo-Modus!');
+      toast.success('Willkommen!');
       navigate('/assistants');
     }
   };
@@ -136,8 +137,8 @@ export function LoginPage({ autoDemo }: { autoDemo?: boolean }) {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center mx-auto mb-4 shadow-lg shadow-primary/20">
-            <span className="text-primary-foreground font-bold text-2xl">A</span>
+          <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto mb-4 shadow-sm shadow-primary/10">
+            <img src={asklepiosLogo} alt="Asklepios" className="w-12 h-12 object-contain" />
           </div>
           <h1 className="text-2xl font-bold">Asklepios</h1>
           <p className="text-muted-foreground mt-1">Verwaltung des IV-Assistenzbeitrags</p>
