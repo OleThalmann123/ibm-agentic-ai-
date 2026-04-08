@@ -1604,27 +1604,24 @@ export function PayrollPage() {
                             background: '#fff',
                             padding: 12,
                           }}>
-                            <div style={{
-                              display: 'grid',
-                              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-                              gap: 12,
-                              alignItems: 'stretch',
-                            }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                               {result && (
                                 <DocCard
-                                  title="Lohnabrechnung"
-                                    subtitle=""
+                                  title={`Lohnabrechnung · ${monthLabel(currentMonth)} · ${a.name}`}
+                                  subtitle=""
                                   fileType="PDF"
                                   icon={<Download style={{ width: 18, height: 18 }} />}
+                                  layout="row"
                                   onClick={() => downloadPayslipPdf(a, result, hours)}
                                 />
                               )}
                               <DocCard
-                                title="Arbeits- und Einsatzrapport"
-                                  subtitle=""
+                                title={`Arbeits- und Einsatzrapport · ${monthLabel(currentMonth)} · ${a.name}`}
+                                subtitle=""
                                 fileType="PDF"
                                 icon={<Download style={{ width: 18, height: 18 }} />}
                                 disabled={hours.totalHours === 0}
+                                layout="row"
                                 onClick={() => void downloadLohnUndEinsatzrapportPdf(a, hours)}
                               />
                             </div>
@@ -1876,6 +1873,7 @@ function DocCard({
   icon,
   disabled,
   tone,
+  layout = 'card',
   onClick,
 }: {
   title: string;
@@ -1885,10 +1883,12 @@ function DocCard({
   icon: React.ReactNode;
   disabled?: boolean;
   tone?: 'default' | 'primary';
+  layout?: 'card' | 'row';
   onClick: () => void;
 }) {
   const isPrimary = tone === 'primary';
   const typeColor = fileType === 'PDF' ? { fg: '#1d4ed8', bg: '#eef2ff', border: '#c7d2fe' } : { fg: '#0f766e', bg: '#ecfeff', border: '#a5f3fc' };
+  const isRow = layout === 'row';
 
   return (
     <button
@@ -1899,16 +1899,17 @@ function DocCard({
         borderRadius: 16,
         border: isPrimary ? '1px solid rgba(59, 130, 246, 0.28)' : '1px solid #e2e8f0',
         background: '#fff',
-        padding: 14,
+        padding: isRow ? 12 : 14,
         cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.45 : 1,
         textAlign: 'left',
         transition: 'box-shadow 0.18s, background 0.18s',
         boxShadow: '0 1px 2px rgba(15, 23, 42, 0.06)',
         display: 'flex',
-        flexDirection: 'column',
-        gap: 12,
-        minHeight: 160,
+        flexDirection: isRow ? 'row' : 'column',
+        gap: isRow ? 12 : 12,
+        minHeight: isRow ? 86 : 160,
+        alignItems: isRow ? 'center' : 'stretch',
       }}
       onMouseEnter={(e) => {
         if (disabled) return;
@@ -1920,12 +1921,43 @@ function DocCard({
         e.currentTarget.style.background = '#fff';
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
-        <div style={{ display: 'flex', gap: 12, minWidth: 0 }}>
+      {/* Left preview (small, passive) */}
+      <div style={{
+        width: isRow ? 92 : '100%',
+        height: isRow ? 62 : 'auto',
+        borderRadius: 14,
+        border: isPrimary ? '1px solid rgba(59,130,246,0.18)' : '1px solid #e2e8f0',
+        background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
+        position: 'relative',
+        overflow: 'hidden',
+        flexShrink: 0,
+      }}>
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          background: 'radial-gradient(120px 80px at 25% 20%, rgba(59,130,246,0.08), transparent 62%), radial-gradient(140px 90px at 80% 60%, rgba(99,102,241,0.06), transparent 62%)',
+          pointerEvents: 'none',
+        }} />
+        <div style={{ padding: 10, position: 'relative' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <div style={{ height: 8, width: '62%', borderRadius: 999, background: '#e2e8f0' }} />
+            <div style={{ height: 8, width: 28, borderRadius: 999, background: '#e2e8f0' }} />
+          </div>
+          <div style={{ display: 'grid', gap: 6 }}>
+            <div style={{ height: 7, width: '92%', borderRadius: 999, background: '#e2e8f0' }} />
+            <div style={{ height: 7, width: '84%', borderRadius: 999, background: '#e2e8f0' }} />
+            <div style={{ height: 7, width: '74%', borderRadius: 999, background: '#e2e8f0' }} />
+          </div>
+        </div>
+      </div>
+
+      {/* Right meta */}
+      <div style={{ minWidth: 0, flex: 1, display: 'grid', gap: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <div style={{
-            width: 44,
-            height: 44,
-            borderRadius: 14,
+            width: 36,
+            height: 36,
+            borderRadius: 12,
             background: isPrimary ? 'rgba(59,130,246,0.10)' : '#f1f5f9',
             display: 'flex',
             alignItems: 'center',
@@ -1972,48 +2004,8 @@ function DocCard({
             )}
           </div>
         </div>
-      </div>
-
-      {/* Document preview */}
-      <div style={{
-        flex: 1,
-        borderRadius: 14,
-        border: isPrimary ? '1px solid rgba(59,130,246,0.22)' : '1px solid #e2e8f0',
-        background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
-        position: 'relative',
-        overflow: 'hidden',
-      }}>
-        <div style={{
-          position: 'absolute',
-          inset: 0,
-          background: 'radial-gradient(120px 80px at 25% 20%, rgba(59,130,246,0.10), transparent 60%), radial-gradient(140px 90px at 80% 60%, rgba(99,102,241,0.08), transparent 60%)',
-          pointerEvents: 'none',
-        }} />
-        <div style={{ padding: 12, position: 'relative' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <div style={{
-              height: 10,
-              width: '44%',
-              borderRadius: 999,
-              background: '#e2e8f0',
-            }} />
-            <div style={{
-              height: 10,
-              width: 54,
-              borderRadius: 999,
-              background: isPrimary ? 'rgba(37,99,235,0.18)' : '#e2e8f0',
-            }} />
-          </div>
-          <div style={{ display: 'grid', gap: 7 }}>
-            <div style={{ height: 9, width: '92%', borderRadius: 999, background: '#e2e8f0' }} />
-            <div style={{ height: 9, width: '86%', borderRadius: 999, background: '#e2e8f0' }} />
-            <div style={{ height: 9, width: '90%', borderRadius: 999, background: '#e2e8f0' }} />
-            <div style={{ height: 9, width: '78%', borderRadius: 999, background: '#e2e8f0' }} />
-          </div>
-          <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <div style={{ height: 32, borderRadius: 12, background: '#eef2ff', border: '1px solid #c7d2fe' }} />
-            <div style={{ height: 32, borderRadius: 12, background: '#f1f5f9', border: '1px solid #e2e8f0' }} />
-          </div>
+        <div style={{ fontSize: 12, color: '#94a3b8' }}>
+          Klick zum Herunterladen
         </div>
       </div>
     </button>
