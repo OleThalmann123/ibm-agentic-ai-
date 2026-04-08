@@ -8,6 +8,7 @@ import { calculatePayslip, generatePayslipPdf, type PayslipAccountingMethod } fr
 import { generateTimesheetPdf } from '@asklepios/backend';
 import { generateEinsatzrapportPdf } from '@asklepios/backend';
 import { generateIvInvoicePdf, type IvInvoiceLine } from '@asklepios/backend';
+import { PDFDocument } from 'pdf-lib';
 import {
   Calculator, FileText, ChevronLeft, ChevronRight, Users,
   ShieldCheck, Clock, Eye, Download, Pencil, Save, X,
@@ -15,7 +16,6 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Assistant } from '@asklepios/backend';
-import { generateEinsatzrapportDocx } from '@/utils/einsatzrapport-docx';
 
 // ─── Types ───
 interface MonthlyHours {
@@ -260,6 +260,20 @@ export function PayrollPage() {
     setFlowStep('dokumente');
   };
 
+  const canGenerateMonthlyPackage = () => {
+    // Paket ist nur sinnvoll, wenn alle Assistent:innen entweder bestätigt sind
+    // oder in diesem Monat 0 Stunden haben.
+    if (assistants.length === 0) return false;
+    for (const a of assistants) {
+      const hours = timeEntries[a.id];
+      const hasHours = (hours?.totalHours || 0) > 0;
+      if (!hasHours) continue;
+      const confirmed = confirmedMap[`${a.id}-${currentMonth}`] || false;
+      if (!confirmed) return false;
+    }
+    return true;
+  };
+
   // Edit entry
   const startEditing = (entry: { id: string; start_time: string; end_time: string }) => {
     setEditingEntryId(entry.id);
@@ -388,6 +402,192 @@ export function PayrollPage() {
 
     doc.save(`IV_Rechnung_Assistenzbeitrag_${currentMonth}.pdf`);
     toast.success('IV-Rechnung (Deckblatt) heruntergeladen');
+  };
+
+  const downloadMonthlyPackagePdf = async () => {
+    if (!canGenerateMonthlyPackage()) {
+      toast.error('Monatspaket noch nicht verfügbar', {
+        description: 'Bitte bestätigen Sie zuerst alle Abrechnungen mit Stunden (oder lassen Sie Personen ohne Stunden unverändert).',
+      });
+      return;
+    }
+
+    try {
+      // 1) IV Deckblatt (global)
+      const cd = employer?.contact_data as any;
+      const insuredName = employer?.name || `${cd?.first_name || ''} ${cd?.last_name || ''}`.trim() || '–';
+      const issuerName =
+        employer?.representation === 'guardian'
+          ? `${cd?.first_name || ''} ${cd?.last_name || ''}`.trim() || insuredName
+          : insuredName;
+
+      const invoiceIssuerEmailPhone = [cd?.email || '', cd?.phone || ''].filter(Boolean).join(' · ');
+      const rate = Number(String(employer?.iv_rate ?? 35.30).replace(',', '.')) || 35.30;
+
+      const ivLines: IvInvoiceLine[] = [];
+      for (const a of assistants) {
+        const hours = timeEntries[a.id];
+        if (!hours || hours.totalHours <= 0) continue;
+        const byCat = new Map<string, number>();
+        for (const e of hours.entries) {
+          const cat = (e.category || '').trim() || 'Ohne Kategorie';
+          byCat.set(cat, (byCat.get(cat) || 0) + (e.hours || 0));
+        }
+        for (const [cat, h] of byCat.entries()) {
+          const rounded = Number(h.toFixed(2));
+          if (rounded <= 0) continue;
+          const amount = Number((rounded * rate).toFixed(2));
+          ivLines.push({
+            assistantName: a.name || '—',
+            activityLabel: cat === 'Ohne Kategorie' ? cat : activityLabelFromCode(cat),
+            hours: rounded,
+            rateCHF: rate,
+            amountCHF: amount,
+          });
+        }
+      }
+      ivLines.sort((x, y) => (x.assistantName + x.activityLabel).localeCompare(y.assistantName + y.activityLabel));
+      const ivTotalCHF = Number(ivLines.reduce((s, l) => s + (l.amountCHF || 0), 0).toFixed(2));
+
+      const ivDoc = generateIvInvoicePdf({
+        invoiceDateLabel: new Date().toLocaleDateString('de-CH'),
+        monthLabel: monthLabel(currentMonth),
+        insuredPerson: {
+          name: insuredName,
+          ahvNumber: cd?.insured_ahv_number || '',
+          street: cd?.affected_street || cd?.insured_street || cd?.street || '',
+          plzCity: (cd?.affected_plz && cd?.affected_city)
+            ? `${cd.affected_plz} ${cd.affected_city}`
+            : (cd?.insured_plz && cd?.insured_city)
+              ? `${cd.insured_plz} ${cd.insured_city}`
+              : (cd?.plz && cd?.city ? `${cd.plz} ${cd.city}` : ''),
+        },
+        invoiceIssuer: {
+          name: issuerName,
+          emailPhone: invoiceIssuerEmailPhone,
+          street: cd?.street || '',
+          plzCity: cd?.plz && cd?.city ? `${cd.plz} ${cd.city}` : '',
+        },
+        billing: {
+          gln: cd?.billing_gln || '',
+          referenceNumber: cd?.billing_reference_number || '',
+          iban: cd?.billing_iban || '',
+          accountHolderName: cd?.billing_account_holder_name || '',
+          accountHolderStreet: cd?.billing_account_holder_street || '',
+          accountHolderPlzCity: (cd?.billing_account_holder_plz && cd?.billing_account_holder_city)
+            ? `${cd.billing_account_holder_plz} ${cd.billing_account_holder_city}`
+            : '',
+          paymentTermsDays: Number(cd?.payment_terms_days) || 30,
+          bankName: cd?.bank_name || '',
+        },
+        lines: ivLines,
+        totalCHF: ivTotalCHF,
+      });
+
+      const merged = await PDFDocument.create();
+
+      const appendJsPdf = async (jsPdfDoc: any) => {
+        const buf = jsPdfDoc.output('arraybuffer');
+        const src = await PDFDocument.load(buf);
+        const pages = await merged.copyPages(src, src.getPageIndices());
+        for (const p of pages) merged.addPage(p);
+      };
+
+      await appendJsPdf(ivDoc);
+
+      // 2) Per assistant: Payslip + Timesheet + Einsatzrapport (Standard) – nur wenn Stunden > 0
+      for (const a of assistants) {
+        const hours = timeEntries[a.id];
+        if (!hours || hours.totalHours <= 0) continue;
+
+        const result = payrollResults[a.id];
+        if (result) {
+          // reuse existing generator to build the PDF
+          const cd2 = a.contract_data as any;
+          const kanton = employer?.canton || cd2?.canton || 'ZH';
+          const kantonName = FAK_RATES[kanton]?.name || kanton;
+          const stundenlohn = a.hourly_rate || 0;
+          const vacWeeks = a.vacation_weeks || 4;
+          const ferienzuschlagRate = vacWeeks === 5 ? 0.1064 : vacWeeks === 6 ? 0.1304 : 0.0833;
+          const ferienzuschlagLabel = vacWeeks === 5 ? '10.64%' : vacWeeks === 6 ? '13.04%' : '8.33%';
+
+          const bm = String(cd2?.billing_method || 'ordinary').toLowerCase();
+          const accountingMethod: PayslipAccountingMethod =
+            bm === 'simplified' || bm === 'vereinfacht' ? 'simplified'
+              : (bm === 'ordinary_with_withholding' || bm === 'ordinary_quellensteuer') ? 'ordinary_with_withholding'
+                : 'ordinary';
+          const accountingMethodLabel =
+            accountingMethod === 'simplified'
+              ? 'Vereinfachtes'
+              : accountingMethod === 'ordinary_with_withholding'
+                ? 'Ordentliches mit Quellensteuer'
+                : 'Ordentliches';
+
+          const nbuRateEmployee = cd2?.nbu_employee ? (parseFloat(cd2.nbu_employee) / 100) : undefined;
+          const payslip = calculatePayslip({
+            canton: kanton,
+            accountingMethod,
+            hourlyRate: stundenlohn,
+            hours: hours.totalHours,
+            vacationSurchargeRate: ferienzuschlagRate,
+            nbuRateEmployee,
+          });
+
+          const payslipDoc = generatePayslipPdf({
+            monthYearLabel: monthLabel(currentMonth),
+            placeDateLabel: formatPlaceDateLabel(),
+            employer: getEmployerAddress(),
+            employee: { ...getEmployeeAddress(a), ahvNumber: (a.contract_data as any)?.ahv_number || '' },
+            grundlagen: {
+              cantonLabel: `${kantonName}`,
+              accountingMethodLabel,
+              hourlyRate: stundenlohn,
+              hours: hours.totalHours,
+              vacationSurchargeLabel: ferienzuschlagLabel,
+            },
+            accountingMethod,
+            result: payslip,
+          });
+          await appendJsPdf(payslipDoc);
+        }
+
+        const timesheetDoc = generateTimesheetPdf({
+          month: monthLabel(currentMonth),
+          employer: getEmployerAddress(),
+          employee: getEmployeeAddress(a),
+          entries: hours.entries,
+          totalHours: hours.totalHours,
+          nightHours: hours.nightHours,
+        });
+        await appendJsPdf(timesheetDoc);
+
+        const einsatzDoc = generateEinsatzrapportPdf({
+          monthLabel: monthLabel(currentMonth),
+          assistantName: a.name || '—',
+          employerName: employer?.name || '—',
+          includeActivities: false,
+          rows: buildEinsatzrapportRows(hours),
+          totalHours: Number(hours.totalHours.toFixed(2)),
+          totalNights: Math.round(hours.nightHours),
+        });
+        await appendJsPdf(einsatzDoc);
+      }
+
+      const bytes = await merged.save();
+      const blob = new Blob([bytes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const aEl = document.createElement('a');
+      aEl.href = url;
+      aEl.download = `Dokumentenspeicher_${currentMonth}.pdf`;
+      document.body.appendChild(aEl);
+      aEl.click();
+      aEl.remove();
+      URL.revokeObjectURL(url);
+      toast.success('Monatspaket heruntergeladen');
+    } catch (e) {
+      console.error(e);
+      toast.error('Monatspaket konnte nicht erstellt werden');
+    }
   };
 
   const formatPlaceDateLabel = () => {
@@ -522,51 +722,6 @@ export function PayrollPage() {
     });
     doc.save(`Einsatzrapport_${assistant.name.replace(/\\s/g, '_')}_${currentMonth}.pdf`);
     toast.success('Einsatzrapport PDF heruntergeladen');
-  };
-
-  const downloadEinsatzrapportDocx = async (assistant: Assistant, hours: MonthlyHours, includeActivities: boolean) => {
-    const cd = (assistant.contract_data as any) || {};
-    await supabase
-      .from('assistant')
-      .update({ contract_data: { ...cd, time_entry_requires_activity_breakdown: includeActivities } })
-      .eq('id', assistant.id);
-
-    const parts = currentMonth.split('-').map(Number);
-    const year = parts[0] ?? new Date().getFullYear();
-    const month = parts[1] ?? new Date().getMonth() + 1;
-    const rows = buildEinsatzrapportRows(hours).map((r: any) => ({
-      dateLabel: `${String(new Date(r.date + 'T00:00:00').getDate()).padStart(2, '0')}.${String(month).padStart(2, '0')}.`,
-      time1_from: r.time1_from,
-      time1_to: r.time1_to,
-      time1_hours: r.time1_hours != null ? String(r.time1_hours.toFixed(2)) : '',
-      time1_activity: r.time1_activity ? (ACTIVITY_LABELS[r.time1_activity] || r.time1_activity) : '',
-      time2_from: r.time2_from,
-      time2_to: r.time2_to,
-      time2_hours: r.time2_hours != null ? String(r.time2_hours.toFixed(2)) : '',
-      time2_activity: r.time2_activity ? (ACTIVITY_LABELS[r.time2_activity] || r.time2_activity) : '',
-      day_hours: r.day_hours != null ? String(r.day_hours.toFixed(2)) : '',
-      night_hours: r.night_hours != null ? String(r.night_hours.toFixed(2)) : '',
-    }));
-
-    const blob = await generateEinsatzrapportDocx({
-      title: `Einsatzrapport für geleistete persönliche Assistenz für die Lohnabrechnung für ${MONTH_NAMES[month - 1]} ${year}`,
-      assistantName: assistant.name || '—',
-      employerName: employer?.name || '—',
-      includeActivities,
-      rows,
-      totalHoursLabel: Number(hours.totalHours.toFixed(2)).toFixed(2),
-      totalNightsLabel: String(Math.round(hours.nightHours)),
-    });
-
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `Einsatzrapport_${assistant.name.replace(/\\s/g, '_')}_${currentMonth}.docx`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    toast.success('Einsatzrapport DOCX heruntergeladen');
   };
 
   // Stats
@@ -1265,10 +1420,10 @@ export function PayrollPage() {
                             }}>
                               <div>
                                 <p style={{ margin: 0, fontSize: 11, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#64748b' }}>
-                                  Dokumente für IV / Ablage
+                                  Dokumentenspeicher
                                 </p>
                                 <p style={{ margin: '2px 0 0', fontSize: 12, color: '#94a3b8' }}>
-                                  Optional – nach dem Freigeben exportieren
+                                  Hier liegen die Dokumente (Lohnabrechnung, Stundenzettel und Einsatzrapport) pro Monat. Nur PDF.
                                 </p>
                               </div>
                               <div style={{ display: 'flex', gap: 8 }}>
@@ -1287,6 +1442,15 @@ export function PayrollPage() {
                                 gap: 12,
                                 alignItems: 'stretch',
                               }}>
+                                <DocCard
+                                  title="Monatspaket (alles in 1 PDF)"
+                                  subtitle="Deckblatt + alle PDFs (nur wenn alle bestätigt sind)"
+                                  fileType="PDF"
+                                  icon={<Download style={{ width: 18, height: 18 }} />}
+                                  tone="primary"
+                                  disabled={!canGenerateMonthlyPackage()}
+                                  onClick={() => void downloadMonthlyPackagePdf()}
+                                />
                                 <DocCard
                                   title="IV-Rechnung (Deckblatt)"
                                   subtitle="Monatliche Rechnung über alle Assistenzpersonen"
@@ -1314,28 +1478,13 @@ export function PayrollPage() {
                                   disabled={hours.totalHours === 0}
                                   onClick={() => downloadTimesheetPdf(a, hours)}
                                 />
-                                <DocCardMulti
+                                <DocCard
                                   title="Einsatzrapport"
-                                  subtitle="Mit Tätigkeiten"
-                                  badge="Tätigkeiten"
+                                  subtitle="Standard (PDF)"
+                                  fileType="PDF"
                                   icon={<Download style={{ width: 18, height: 18 }} />}
                                   disabled={hours.totalHours === 0}
-                                  primaryAction={() => downloadEinsatzrapportPdf(a, hours, true)}
-                                  actions={[
-                                    { kind: 'PDF', onClick: () => downloadEinsatzrapportPdf(a, hours, true) },
-                                    { kind: 'DOCX', onClick: () => downloadEinsatzrapportDocx(a, hours, true) },
-                                  ]}
-                                />
-                                <DocCardMulti
-                                  title="Einsatzrapport"
-                                  subtitle="Standard"
-                                  icon={<Download style={{ width: 18, height: 18 }} />}
-                                  disabled={hours.totalHours === 0}
-                                  primaryAction={() => downloadEinsatzrapportPdf(a, hours, false)}
-                                  actions={[
-                                    { kind: 'PDF', onClick: () => downloadEinsatzrapportPdf(a, hours, false) },
-                                    { kind: 'DOCX', onClick: () => downloadEinsatzrapportDocx(a, hours, false) },
-                                  ]}
+                                  onClick={() => downloadEinsatzrapportPdf(a, hours, false)}
                                 />
                               </div>
                             </div>
@@ -1667,216 +1816,6 @@ function DocCard({
         </div>
       </div>
     </button>
-  );
-}
-
-function DocCardMulti({
-  title,
-  subtitle,
-  badge,
-  icon,
-  disabled,
-  tone,
-  primaryAction,
-  actions,
-}: {
-  title: string;
-  subtitle: string;
-  badge?: string;
-  icon: React.ReactNode;
-  disabled?: boolean;
-  tone?: 'default' | 'primary';
-  primaryAction: () => void;
-  actions: Array<{ kind: 'PDF' | 'DOCX'; onClick: () => void }>;
-}) {
-  const isPrimary = tone === 'primary';
-  const btnBase: React.CSSProperties = {
-    fontSize: 10,
-    fontWeight: 800,
-    letterSpacing: '0.08em',
-    padding: '4px 8px',
-    borderRadius: 999,
-    cursor: disabled ? 'not-allowed' : 'pointer',
-    border: '1px solid #e2e8f0',
-    background: '#fff',
-    color: '#475569',
-    transition: 'background 0.15s, border-color 0.15s, color 0.15s',
-  };
-
-  const typeStyles = (kind: 'PDF' | 'DOCX') => {
-    return kind === 'PDF'
-      ? { fg: '#1d4ed8', bg: '#eef2ff', border: '#c7d2fe' }
-      : { fg: '#0f766e', bg: '#ecfeff', border: '#a5f3fc' };
-  };
-
-  return (
-    <div
-      role="button"
-      tabIndex={disabled ? -1 : 0}
-      onClick={() => { if (!disabled) primaryAction(); }}
-      onKeyDown={(e) => {
-        if (disabled) return;
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          primaryAction();
-        }
-      }}
-      style={{
-        width: '100%',
-        borderRadius: 16,
-        border: isPrimary ? '1px solid rgba(59, 130, 246, 0.35)' : '1px solid #e2e8f0',
-        background: isPrimary ? 'linear-gradient(135deg, rgba(59,130,246,0.16), rgba(37,99,235,0.08))' : '#fff',
-        padding: 14,
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        opacity: disabled ? 0.45 : 1,
-        textAlign: 'left',
-        transition: 'transform 0.18s, box-shadow 0.18s, background 0.18s',
-        boxShadow: isPrimary ? '0 10px 28px rgba(37, 99, 235, 0.12)' : '0 1px 2px rgba(15, 23, 42, 0.06)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 12,
-        minHeight: 170,
-        userSelect: 'none',
-        outline: 'none',
-      }}
-      onMouseEnter={(e) => {
-        if (disabled) return;
-        e.currentTarget.style.transform = 'translateY(-2px)';
-        e.currentTarget.style.boxShadow = isPrimary
-          ? '0 16px 34px rgba(37, 99, 235, 0.18)'
-          : '0 14px 30px rgba(15, 23, 42, 0.10)';
-        if (!isPrimary) e.currentTarget.style.background = '#f8fafc';
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = 'translateY(0)';
-        e.currentTarget.style.boxShadow = isPrimary
-          ? '0 10px 28px rgba(37, 99, 235, 0.12)'
-          : '0 1px 2px rgba(15, 23, 42, 0.06)';
-        if (!isPrimary) e.currentTarget.style.background = '#fff';
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
-        <div style={{ display: 'flex', gap: 12, minWidth: 0 }}>
-          <div style={{
-            width: 44,
-            height: 44,
-            borderRadius: 14,
-            background: isPrimary ? 'rgba(59,130,246,0.18)' : '#f1f5f9',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: isPrimary ? '#2563eb' : '#334155',
-            flexShrink: 0,
-          }}>
-            {icon}
-          </div>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 14, fontWeight: 800, color: '#0f172a', letterSpacing: '-0.01em' }}>{title}</span>
-              {badge && (
-                <span style={{
-                  fontSize: 10,
-                  fontWeight: 700,
-                  letterSpacing: '0.06em',
-                  padding: '4px 8px',
-                  borderRadius: 999,
-                  border: '1px solid #e2e8f0',
-                  background: '#fff',
-                  color: '#475569',
-                }}>
-                  {badge}
-                </span>
-              )}
-            </div>
-            <div style={{ fontSize: 12, color: '#64748b', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {subtitle}
-            </div>
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-          {actions.map((a) => {
-            const s = typeStyles(a.kind);
-            return (
-              <button
-                key={a.kind}
-                type="button"
-                disabled={disabled}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  if (!disabled) a.onClick();
-                }}
-                style={{
-                  ...btnBase,
-                  border: `1px solid ${s.border}`,
-                  background: s.bg,
-                  color: s.fg,
-                }}
-              >
-                {a.kind}
-              </button>
-            );
-          })}
-          <div style={{
-            width: 32,
-            height: 32,
-            borderRadius: 12,
-            background: isPrimary ? 'rgba(37,99,235,0.12)' : '#eef2ff',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#1d4ed8',
-            flexShrink: 0,
-          }}>
-            <ArrowRight style={{ width: 16, height: 16 }} />
-          </div>
-        </div>
-      </div>
-
-      {/* Document preview (same visual language as DocCard) */}
-      <div style={{
-        flex: 1,
-        borderRadius: 14,
-        border: isPrimary ? '1px solid rgba(59,130,246,0.22)' : '1px solid #e2e8f0',
-        background: 'linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)',
-        position: 'relative',
-        overflow: 'hidden',
-      }}>
-        <div style={{
-          position: 'absolute',
-          inset: 0,
-          background: 'radial-gradient(120px 80px at 25% 20%, rgba(59,130,246,0.10), transparent 60%), radial-gradient(140px 90px at 80% 60%, rgba(99,102,241,0.08), transparent 60%)',
-          pointerEvents: 'none',
-        }} />
-        <div style={{ padding: 12, position: 'relative' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <div style={{
-              height: 10,
-              width: '44%',
-              borderRadius: 999,
-              background: '#e2e8f0',
-            }} />
-            <div style={{
-              height: 10,
-              width: 54,
-              borderRadius: 999,
-              background: isPrimary ? 'rgba(37,99,235,0.18)' : '#e2e8f0',
-            }} />
-          </div>
-          <div style={{ display: 'grid', gap: 7 }}>
-            <div style={{ height: 9, width: '92%', borderRadius: 999, background: '#e2e8f0' }} />
-            <div style={{ height: 9, width: '86%', borderRadius: 999, background: '#e2e8f0' }} />
-            <div style={{ height: 9, width: '90%', borderRadius: 999, background: '#e2e8f0' }} />
-            <div style={{ height: 9, width: '78%', borderRadius: 999, background: '#e2e8f0' }} />
-          </div>
-          <div style={{ marginTop: 10, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <div style={{ height: 32, borderRadius: 12, background: '#eef2ff', border: '1px solid #c7d2fe' }} />
-            <div style={{ height: 32, borderRadius: 12, background: '#f1f5f9', border: '1px solid #e2e8f0' }} />
-          </div>
-        </div>
-      </div>
-    </div>
   );
 }
 
