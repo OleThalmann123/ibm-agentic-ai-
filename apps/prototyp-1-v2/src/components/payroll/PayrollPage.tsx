@@ -936,87 +936,92 @@ export function PayrollPage() {
                         <div>
                           {result ? (
                             <>
-                              {/* Grundlagen */}
                               {(() => {
-                                const cd = a.contract_data as any;
-                                const kanton = cd?.canton || employer?.canton || 'ZH';
+                                const cd = (a.contract_data as any) || {};
+                                // Kanton kommt vom Arbeitgeber-Profil (betroffene Person), nicht aus den Assistenzperson-Daten.
+                                const kanton = employer?.canton || cd?.canton || 'ZH';
                                 const kantonName = FAK_RATES[kanton]?.name || kanton;
                                 const stundenlohn = a.hourly_rate || 0;
-                                const verfahren = cd?.billing_method === 'standard' ? 'Ordentlich' : 'Vereinfacht';
+                                const vacWeeks = a.vacation_weeks || 4;
+                                const ferienzuschlagRate = vacWeeks === 5 ? 0.1064 : vacWeeks === 6 ? 0.1304 : 0.0833;
+                                const ferienzuschlagLabel = vacWeeks === 5 ? '10.64%' : vacWeeks === 6 ? '13.04%' : '8.33%';
+
+                                const bm = String(cd?.billing_method || 'ordinary').toLowerCase();
+                                const accountingMethod: PayslipAccountingMethod =
+                                  bm === 'simplified' || bm === 'vereinfacht' ? 'simplified'
+                                    : (bm === 'ordinary_with_withholding' || bm === 'ordinary_quellensteuer') ? 'ordinary_with_withholding'
+                                      : 'ordinary';
+                                const accountingMethodLabel =
+                                  accountingMethod === 'simplified'
+                                    ? 'Vereinfachtes'
+                                    : accountingMethod === 'ordinary_with_withholding'
+                                      ? 'Ordentliches mit Quellensteuer'
+                                      : 'Ordentliches';
+
+                                const ktvRateEmployee = cd?.ktv_employee ? (parseFloat(cd.ktv_employee) / 100) : undefined;
+                                const nbuRateEmployee = cd?.nbu_employee ? (parseFloat(cd.nbu_employee) / 100) : undefined;
+                                const withholdingTaxRate = cd?.withholding_tax_rate ? (parseFloat(cd.withholding_tax_rate) / 100) : undefined;
+
+                                const payslip = calculatePayslip({
+                                  canton: kanton,
+                                  accountingMethod,
+                                  hourlyRate: stundenlohn,
+                                  hours: hours.totalHours,
+                                  vacationSurchargeRate: ferienzuschlagRate,
+                                  ktvRateEmployee,
+                                  nbuRateEmployee,
+                                  withholdingTaxRate,
+                                });
+
+                                const findDeduction = (label: string) => payslip.deductionLines.find(l => l.label === label && l.enabled !== false) || null;
+                                const dAhv = findDeduction('AHV/IV/EO');
+                                const dAlv = findDeduction('ALV');
+                                const dKtv = findDeduction('KTV');
+                                const dNbu = findDeduction('NBU');
+                                const dQst = findDeduction('Quellensteuer');
+                                const dFak = findDeduction('FAK');
+
                                 return (
-                                  <div style={{
-                                    borderRadius: 10, border: '1px solid #e2e8f0',
-                                    overflow: 'hidden', marginBottom: 16,
-                                  }}>
-                                    <div style={{ background: '#f8fafc', padding: '8px 14px', borderBottom: '1px solid #e2e8f0' }}>
-                                      <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748b', margin: 0 }}>
-                                        Grundlagen
-                                      </p>
+                                  <>
+                                    {/* Grundlagen (template-like) */}
+                                    <div style={{
+                                      borderRadius: 10, border: '1px solid #e2e8f0',
+                                      overflow: 'hidden', marginBottom: 16,
+                                    }}>
+                                      <div style={{ background: '#f8fafc', padding: '8px 14px', borderBottom: '1px solid #e2e8f0' }}>
+                                        <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748b', margin: 0 }}>
+                                          Grundlagen
+                                        </p>
+                                      </div>
+                                      <div style={{ fontSize: 13 }}>
+                                        <InfoRow label="Kanton" value={`${kantonName} (${kanton})`} />
+                                        <InfoRow label="Abrechnungsverfahren" value={accountingMethodLabel} alt />
+                                        <InfoRow label="Stundenlohn" value={`Fr. ${fmt(stundenlohn)}`} />
+                                        <InfoRow label="Anzahl Stunden" value={fmt(hours.totalHours)} alt />
+                                      </div>
                                     </div>
-                                    <div style={{ fontSize: 13 }}>
-                                      <InfoRow label="Kanton" value={`${kantonName} (${kanton})`} />
-                                      <InfoRow label="Verfahren" value={verfahren} alt />
-                                      <InfoRow label="Stundenlohn" value={`Fr. ${fmt(stundenlohn)}`} />
-                                      <InfoRow label="Stunden" value={fmt(hours.totalHours)} alt />
-                                    </div>
-                                  </div>
+
+                                    {/* Lohn (template rows, always same structure) */}
+                                    <PaySection title="Lohn">
+                                      <PayRow label="Arbeitslohn" perH={payslip.wageLines.workWage.perHour} perM={payslip.wageLines.workWage.perMonth} />
+                                      <PayRow label="Ferienzuschlag" rate={payslip.wageLines.vacationSurcharge.rate} perH={payslip.wageLines.vacationSurcharge.perHour} perM={payslip.wageLines.vacationSurcharge.perMonth} />
+                                      <PayRow label="Bruttolohn" perH={payslip.wageLines.grossWage.perHour} perM={payslip.wageLines.grossWage.perMonth} bold />
+                                    </PaySection>
+
+                                    {/* Abzüge (template rows, only employee-side) */}
+                                    <PaySection title="Abzüge">
+                                      <PayRow label="AHV/IV/EO" rate={dAhv?.rate ?? null} perH={dAhv?.perHour} perM={dAhv?.perMonth ?? 0} />
+                                      <PayRow label="ALV" rate={dAlv?.rate ?? null} perH={dAlv?.perHour} perM={dAlv?.perMonth ?? 0} />
+                                      <PayRow label="KTV" rate={dKtv?.rate ?? null} perH={dKtv?.perHour} perM={dKtv?.perMonth ?? 0} />
+                                      <PayRow label="NBU" rate={dNbu?.rate ?? null} perH={dNbu?.perHour} perM={dNbu?.perMonth ?? 0} />
+                                      <PayRow label="Quellensteuer" rate={dQst?.rate ?? null} perH={dQst?.perHour} perM={dQst?.perMonth ?? 0} />
+                                      <PayRow label="FAK (nur Wallis)" rate={dFak?.rate ?? null} perH={dFak?.perHour} perM={dFak?.perMonth ?? 0} />
+                                      <PayRow label="Total Abzüge" perH={payslip.totalDeductions.perHour} perM={payslip.totalDeductions.perMonth} bold />
+                                      <PayRow label="Nettolohn" perH={payslip.netWage.perHour} perM={payslip.netWage.perMonth} bold highlight />
+                                    </PaySection>
+                                  </>
                                 );
                               })()}
-
-                              {/* Lohn table */}
-                              <PaySection title="Lohn">
-                                <PayRow label="Arbeitslohn" perH={result.arbeitslohn.perHour} perM={result.arbeitslohn.perYear} />
-                                {result.ferienzuschlag.perYear > 0 && (
-                                  <PayRow label="Ferienzuschlag" rate={result.ferienzuschlag.rate} perH={result.ferienzuschlag.perHour} perM={result.ferienzuschlag.perYear} />
-                                )}
-                                <PayRow label="Bruttolohn AN" perH={result.bruttolohn.perHour} perM={result.bruttolohn.perYear} bold />
-                              </PaySection>
-
-                              {/* AG Beiträge */}
-                              <PaySection title="Beiträge AG">
-                                {result.agLines.map((l, i) => (
-                                  <PayRow key={i} label={l.label} rate={l.rate} perH={l.perHour} perM={l.perYear} />
-                                ))}
-                                <PayRow label="Total AG" rate={result.totalAG.rate} perH={result.totalAG.perHour} perM={result.totalAG.perYear} bold />
-                                <PayRow label="Totalaufwand AG" perH={result.totalaufwandAG.perHour} perM={result.totalaufwandAG.perYear} bold highlight />
-                              </PaySection>
-
-                              {/* AN Beiträge */}
-                              <PaySection title="Beiträge AN">
-                                {result.anLines.map((l, i) => (
-                                  <PayRow key={i} label={l.label} rate={l.rate} perH={l.perHour} perM={l.perYear} />
-                                ))}
-                                <PayRow label="Total AN" rate={result.totalAN.rate} perH={result.totalAN.perHour} perM={result.totalAN.perYear} bold />
-                                <PayRow label="Nettolohn AN" perH={result.nettolohn.perHour} perM={result.nettolohn.perYear} bold highlight />
-                              </PaySection>
-
-                              {/* Adressaten */}
-                              <div style={{
-                                borderRadius: 10, border: '1px solid #e2e8f0',
-                                overflow: 'hidden', marginBottom: 16,
-                              }}>
-                                <div style={{ background: '#f8fafc', padding: '8px 14px', borderBottom: '1px solid #e2e8f0' }}>
-                                  <p style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#64748b', margin: 0 }}>
-                                    Leistungen nach Adressaten
-                                  </p>
-                                </div>
-                                {result.adressaten.map((ad, i) => (
-                                  <div key={i} style={{
-                                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                                    padding: '8px 14px',
-                                    borderBottom: i < result.adressaten.length - 1 ? '1px solid #f1f5f9' : 'none',
-                                    fontSize: 13,
-                                  }}>
-                                    <div>
-                                      <span style={{ color: '#334155' }}>{ad.label}</span>
-                                      <span style={{ color: '#94a3b8', fontSize: 11, marginLeft: 6 }}>({ad.details})</span>
-                                    </div>
-                                    <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: '#1e293b' }}>
-                                      Fr. {fmt(ad.perYear)}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
 
                               {/* Action buttons */}
                               <div style={{

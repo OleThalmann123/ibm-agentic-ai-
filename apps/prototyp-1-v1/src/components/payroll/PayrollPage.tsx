@@ -499,18 +499,29 @@ export function PayrollPage() {
                     </div>
                     <div className="divide-y text-sm">
                       {(() => {
-                        const cd = selectedAssistant?.contract_data as any;
-                        const kanton = cd?.canton || employer?.canton || 'ZH';
+                        const cd = (selectedAssistant?.contract_data as any) || {};
+                        // Kanton kommt vom Arbeitgeber-Profil (betroffene Person), nicht aus den Assistenzperson-Daten.
+                        const kanton = employer?.canton || cd?.canton || 'ZH';
                         const kantonName = FAK_RATES[kanton]?.name || kanton;
                         const stundenlohn = selectedAssistant?.hourly_rate || 0;
-                        const verfahren = cd?.billing_method === 'standard' ? 'Ordentlich' : 'Vereinfacht';
+                        const bm = String(cd?.billing_method || 'ordinary').toLowerCase();
+                        const accountingMethod: PayslipAccountingMethod =
+                          bm === 'simplified' || bm === 'vereinfacht' ? 'simplified'
+                            : (bm === 'ordinary_with_withholding' || bm === 'ordinary_quellensteuer') ? 'ordinary_with_withholding'
+                              : 'ordinary';
+                        const accountingMethodLabel =
+                          accountingMethod === 'simplified'
+                            ? 'Vereinfachtes'
+                            : accountingMethod === 'ordinary_with_withholding'
+                              ? 'Ordentliches mit Quellensteuer'
+                              : 'Ordentliches';
                         return (
                           <>
                             <div className="flex justify-between px-3 py-1.5">
                               <span>Kanton</span><span className="font-medium">{kantonName} ({kanton})</span>
                             </div>
                             <div className="flex justify-between px-3 py-1.5">
-                              <span>Abrechnungsverfahren</span><span className="font-medium">{verfahren}</span>
+                              <span>Abrechnungsverfahren</span><span className="font-medium">{accountingMethodLabel}</span>
                             </div>
                             <div className="flex justify-between px-3 py-1.5">
                               <span>Stundenlohn</span><span className="font-medium tabular-nums">Fr. {fmt(stundenlohn)}</span>
@@ -524,87 +535,89 @@ export function PayrollPage() {
                     </div>
                   </div>
 
-                  {selectedResult ? (
+                  {selectedAssistant && selectedHours ? (
                     <>
-                      {/* ── LOHN TABLE ── */}
-                      <table className="w-full text-sm border-collapse">
-                        <thead>
-                          <tr className="bg-blue-50/60 border-y">
-                            <th className="text-left px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold text-blue-900">Lohn</th>
-                            <th className="text-right px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold text-blue-900 w-20">Sätze</th>
-                            <th className="text-right px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold text-blue-900 w-28">Pro Stunde</th>
-                            <th className="text-right px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold text-blue-900 w-28">Pro Monat</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <PayTr label="Arbeitslohn" perH={selectedResult.arbeitslohn.perHour} perM={selectedResult.arbeitslohn.perYear} />
-                          {selectedResult.ferienzuschlag.perYear > 0 && (
-                            <PayTr label="Ferienzuschlag" rate={selectedResult.ferienzuschlag.rate} perH={selectedResult.ferienzuschlag.perHour} perM={selectedResult.ferienzuschlag.perYear} />
-                          )}
-                          <PayTr label="Bruttolohn Arbeitnehmender" perH={selectedResult.bruttolohn.perHour} perM={selectedResult.bruttolohn.perYear} bold border />
-                        </tbody>
-                      </table>
+                      {(() => {
+                        const cd = (selectedAssistant.contract_data as any) || {};
+                        const kanton = employer?.canton || cd?.canton || 'ZH';
 
-                      {/* ── BEITRÄGE AG TABLE ── */}
-                      <table className="w-full text-sm border-collapse">
-                        <thead>
-                          <tr className="bg-blue-50/60 border-y">
-                            <th className="text-left px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold text-blue-900">Beiträge Arbeitgebender</th>
-                            <th className="text-right px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold text-blue-900 w-20">Sätze</th>
-                            <th className="text-right px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold text-blue-900 w-28">Pro Stunde</th>
-                            <th className="text-right px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold text-blue-900 w-28">Pro Monat</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {selectedResult.agLines.map((l, i) => (
-                            <PayTr key={`ag-${i}`} label={l.label} rate={l.rate} perH={l.perHour} perM={l.perYear} />
-                          ))}
-                          <PayTr label="Total Beiträge Arbeitgebender" rate={selectedResult.totalAG.rate} perH={selectedResult.totalAG.perHour} perM={selectedResult.totalAG.perYear} bold border />
-                          <tr className="h-1" />
-                          <PayTr label="Totalaufwand Arbeitgebender" perH={selectedResult.totalaufwandAG.perHour} perM={selectedResult.totalaufwandAG.perYear} bold border highlight />
-                        </tbody>
-                      </table>
+                        const stundenlohn = selectedAssistant.hourly_rate || 0;
+                        const vacWeeks = selectedAssistant.vacation_weeks || 4;
+                        const ferienzuschlagRate = vacWeeks === 5 ? 0.1064 : vacWeeks === 6 ? 0.1304 : 0.0833;
 
-                      {/* ── BEITRÄGE AN TABLE ── */}
-                      <table className="w-full text-sm border-collapse">
-                        <thead>
-                          <tr className="bg-blue-50/60 border-y">
-                            <th className="text-left px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold text-blue-900">Beiträge Arbeitnehmender</th>
-                            <th className="text-right px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold text-blue-900 w-20">Sätze</th>
-                            <th className="text-right px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold text-blue-900 w-28">Pro Stunde</th>
-                            <th className="text-right px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold text-blue-900 w-28">Pro Monat</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {selectedResult.anLines.map((l, i) => (
-                            <PayTr key={`an-${i}`} label={l.label} rate={l.rate} perH={l.perHour} perM={l.perYear} />
-                          ))}
-                          <PayTr label="Total Beiträge Arbeitnehmender" rate={selectedResult.totalAN.rate} perH={selectedResult.totalAN.perHour} perM={selectedResult.totalAN.perYear} bold border />
-                          <tr className="h-1" />
-                          <PayTr label="Nettolohn Arbeitnehmender" perH={selectedResult.nettolohn.perHour} perM={selectedResult.nettolohn.perYear} bold border highlight />
-                        </tbody>
-                      </table>
+                        const bm = String(cd?.billing_method || 'ordinary').toLowerCase();
+                        const accountingMethod: PayslipAccountingMethod =
+                          bm === 'simplified' || bm === 'vereinfacht' ? 'simplified'
+                            : (bm === 'ordinary_with_withholding' || bm === 'ordinary_quellensteuer') ? 'ordinary_with_withholding'
+                              : 'ordinary';
 
-                      {/* ── LEISTUNGEN NACH ADRESSATEN ── */}
-                      <table className="w-full text-sm border-collapse">
-                        <thead>
-                          <tr className="bg-blue-50/60 border-y">
-                            <th className="text-left px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold text-blue-900">Leistungen nach Adressaten</th>
-                            <th className="text-right px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold text-blue-900 w-28">Pro Monat</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {selectedResult.adressaten.map((a, i) => (
-                            <tr key={i} className="border-b border-slate-100">
-                              <td className="px-3 py-1.5">
-                                <span>{a.label}</span>
-                                <span className="text-xs text-muted-foreground ml-2">({a.details})</span>
-                              </td>
-                              <td className="px-3 py-1.5 text-right tabular-nums font-medium">Fr. {fmt(a.perYear)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                        const ktvRateEmployee = cd?.ktv_employee ? (parseFloat(cd.ktv_employee) / 100) : undefined;
+                        const nbuRateEmployee = cd?.nbu_employee ? (parseFloat(cd.nbu_employee) / 100) : undefined;
+                        const withholdingTaxRate = cd?.withholding_tax_rate ? (parseFloat(cd.withholding_tax_rate) / 100) : undefined;
+
+                        const payslip = calculatePayslip({
+                          canton: kanton,
+                          accountingMethod,
+                          hourlyRate: stundenlohn,
+                          hours: selectedHours.totalHours,
+                          vacationSurchargeRate: ferienzuschlagRate,
+                          ktvRateEmployee,
+                          nbuRateEmployee,
+                          withholdingTaxRate,
+                        });
+
+                        const findDeduction = (label: string) => payslip.deductionLines.find(l => l.label === label && l.enabled !== false) || null;
+                        const dAhv = findDeduction('AHV/IV/EO');
+                        const dAlv = findDeduction('ALV');
+                        const dKtv = findDeduction('KTV');
+                        const dNbu = findDeduction('NBU');
+                        const dQst = findDeduction('Quellensteuer');
+                        const dFak = findDeduction('FAK');
+
+                        return (
+                          <>
+                            {/* ── LOHN TABLE ── */}
+                            <table className="w-full text-sm border-collapse">
+                              <thead>
+                                <tr className="bg-blue-50/60 border-y">
+                                  <th className="text-left px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold text-blue-900">Lohn</th>
+                                  <th className="text-right px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold text-blue-900 w-20">Sätze</th>
+                                  <th className="text-right px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold text-blue-900 w-28">Pro Stunde</th>
+                                  <th className="text-right px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold text-blue-900 w-28">Pro Monat</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <PayTr label="Arbeitslohn" perH={payslip.wageLines.workWage.perHour} perM={payslip.wageLines.workWage.perMonth} />
+                                <PayTr label="Ferienzuschlag" rate={payslip.wageLines.vacationSurcharge.rate} perH={payslip.wageLines.vacationSurcharge.perHour} perM={payslip.wageLines.vacationSurcharge.perMonth} />
+                                <PayTr label="Bruttolohn" perH={payslip.wageLines.grossWage.perHour} perM={payslip.wageLines.grossWage.perMonth} bold border />
+                              </tbody>
+                            </table>
+
+                            {/* ── ABZÜGE TABLE (nur Arbeitnehmender) ── */}
+                            <table className="w-full text-sm border-collapse">
+                              <thead>
+                                <tr className="bg-blue-50/60 border-y">
+                                  <th className="text-left px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold text-blue-900">Abzüge</th>
+                                  <th className="text-right px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold text-blue-900 w-20">Sätze</th>
+                                  <th className="text-right px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold text-blue-900 w-28">Pro Stunde</th>
+                                  <th className="text-right px-3 py-1.5 text-[10px] uppercase tracking-widest font-bold text-blue-900 w-28">Pro Monat</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                <PayTr label="AHV/IV/EO" rate={dAhv?.rate ?? null} perH={dAhv?.perHour || 0} perM={dAhv?.perMonth || 0} />
+                                <PayTr label="ALV" rate={dAlv?.rate ?? null} perH={dAlv?.perHour || 0} perM={dAlv?.perMonth || 0} />
+                                <PayTr label="KTV" rate={dKtv?.rate ?? null} perH={dKtv?.perHour || 0} perM={dKtv?.perMonth || 0} />
+                                <PayTr label="NBU" rate={dNbu?.rate ?? null} perH={dNbu?.perHour || 0} perM={dNbu?.perMonth || 0} />
+                                <PayTr label="Quellensteuer" rate={dQst?.rate ?? null} perH={dQst?.perHour || 0} perM={dQst?.perMonth || 0} />
+                                <PayTr label="FAK (nur Wallis)" rate={dFak?.rate ?? null} perH={dFak?.perHour || 0} perM={dFak?.perMonth || 0} />
+                                <PayTr label="Total Abzüge" perH={payslip.totalDeductions.perHour} perM={payslip.totalDeductions.perMonth} bold border />
+                                <tr className="h-1" />
+                                <PayTr label="Nettolohn" perH={payslip.netWage.perHour} perM={payslip.netWage.perMonth} bold border highlight />
+                              </tbody>
+                            </table>
+                          </>
+                        );
+                      })()}
                     </>
                   ) : (
                     <div className="py-10 text-center">
