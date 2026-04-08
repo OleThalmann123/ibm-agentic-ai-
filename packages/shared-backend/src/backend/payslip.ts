@@ -40,7 +40,7 @@ const RATES = {
   FAK_WALLIS_EMPLOYEE: 0.0017,
 } as const;
 
-export function round5(value: number): number {
+function round5(value: number): number {
   return Math.round(value * 20) / 20;
 }
 
