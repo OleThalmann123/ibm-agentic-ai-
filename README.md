@@ -160,6 +160,8 @@ Freigabestatus einer Monatsabrechnung.
 | `confirmed` | boolean | Freigabestatus |
 | `confirmed_at` | timestamptz | Zeitpunkt der Freigabe |
 
+**Anlage in Supabase:** SQL-Migration `supabase/migrations/20260408120000_payroll_confirmation.sql` im SQL-Editor ausführen oder via Supabase CLI migrieren. Ohne diese Tabelle schlägt „Abrechnung bestätigen & freigeben“ mit einem Schema-Cache-Fehler fehl.
+
 ---
 
 ## Agent Skills
