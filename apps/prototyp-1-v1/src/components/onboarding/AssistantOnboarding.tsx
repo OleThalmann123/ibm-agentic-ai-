@@ -6,6 +6,22 @@ import { UploadCloud, CheckCircle2, FileText, ArrowRight, AlertCircle, HelpCircl
 import { extractContractData, extractContractFromImages, confidenceToStatus, confidenceMessage, type ExtractionField, type ExtractionResult } from '@asklepios/backend';
 import { readFileContent } from '@asklepios/backend';
 
+// Swiss PLZ → City mapping (minimal prototype set)
+const PLZ_CITY_MAP: Record<string, string> = {
+  '3000': 'Bern',
+  '8000': 'Zürich',
+  '4000': 'Basel',
+  '6000': 'Luzern',
+  '9000': 'St. Gallen',
+  '1200': 'Genève',
+};
+
+function getCityFromPLZ(plz: string): string | null {
+  const zip = plz.trim();
+  if (zip.length !== 4) return null;
+  return PLZ_CITY_MAP[zip] ?? null;
+}
+
 interface AssistantOnboardingProps {
   onComplete: () => void;
   onClose: () => void;
@@ -75,6 +91,7 @@ export function AssistantOnboarding({ onComplete, onClose }: AssistantOnboarding
   const [street, setStreet] = useState('');
   const [plz, setPlz] = useState('');
   const [city, setCity] = useState('');
+  const [cityAutofill, setCityAutofill] = useState(false);
   const [birthDate, setBirthDate] = useState('');
   const [ahvNumber, setAhvNumber] = useState('');
   const [civilStatus, setCivilStatus] = useState('');
@@ -422,13 +439,37 @@ export function AssistantOnboarding({ onComplete, onClose }: AssistantOnboarding
                     <input type="text" placeholder="Bitte ergänzen..." value={street} onChange={e => setStreet(e.target.value)} className={inputStyle} />
                   </MiniField>
                   <MiniField status={getStatus('plz', plz)} title="PLZ" message={getMessage('plz', plz)}>
-                    <input type="text" placeholder="Bitte ergänzen..." value={plz} onChange={e => setPlz(e.target.value)} className={inputStyle} />
+                    <input
+                      type="text"
+                      placeholder="z.B. 3000"
+                      maxLength={4}
+                      value={plz}
+                      onChange={e => {
+                        const v = e.target.value.replace(/\D/g, '').slice(0, 4);
+                        setPlz(v);
+                        const inferred = getCityFromPLZ(v);
+                        if (inferred && (!city || cityAutofill)) {
+                          setCity(inferred);
+                          setCityAutofill(true);
+                        }
+                      }}
+                      className={inputStyle}
+                    />
                   </MiniField>
                 </div>
 
                 <div className="grid grid-cols-4 gap-4">
                   <MiniField status={getStatus('city', city)} title="Ort" message={getMessage('city', city)}>
-                    <input type="text" placeholder="Bitte ergänzen..." value={city} onChange={e => setCity(e.target.value)} className={inputStyle} />
+                    <input
+                      type="text"
+                      placeholder="Bitte ergänzen..."
+                      value={city}
+                      onChange={e => {
+                        setCity(e.target.value);
+                        setCityAutofill(false);
+                      }}
+                      className={inputStyle}
+                    />
                   </MiniField>
                   <MiniField status={getStatus('birthDate', birthDate)} title="Geburtsdatum" message={getMessage('birthDate', birthDate)}>
                     <input type="text" placeholder="YYYY-MM-DD" value={birthDate} onChange={e => setBirthDate(e.target.value)} className={inputStyle} />

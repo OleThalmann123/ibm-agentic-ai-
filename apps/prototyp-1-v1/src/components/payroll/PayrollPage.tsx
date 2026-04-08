@@ -573,20 +573,42 @@ export function PayrollPage() {
               </div>
 
               {/* PDF Download buttons */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <button
                   onClick={downloadPayslipPdf}
                   disabled={!selectedResult}
-                  className="flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-900 font-bold text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="group flex items-center justify-between gap-3 px-4 py-4 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-900 font-bold text-sm transition-all shadow-sm hover:shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  <Download className="w-4 h-4" /> Lohnabrechnung PDF
+                  <span className="flex items-center gap-3 min-w-0">
+                    <span className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-700 flex-shrink-0">
+                      <Download className="w-4 h-4" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate">Lohnabrechnung PDF</span>
+                      <span className="block text-[11px] font-semibold text-slate-500">Offizielles Dokument</span>
+                    </span>
+                  </span>
+                  <span className="w-9 h-9 rounded-xl bg-slate-100 group-hover:bg-slate-200 flex items-center justify-center text-slate-700 transition-colors flex-shrink-0">
+                    <ChevronRight className="w-4 h-4" />
+                  </span>
                 </button>
                 <button
                   onClick={downloadTimesheetPdf}
                   disabled={!selectedHours || selectedHours.totalHours === 0}
-                  className="flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-900 font-bold text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="group flex items-center justify-between gap-3 px-4 py-4 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-900 font-bold text-sm transition-all shadow-sm hover:shadow-md disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  <FileText className="w-4 h-4" /> Stundenzettel PDF
+                  <span className="flex items-center gap-3 min-w-0">
+                    <span className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-700 flex-shrink-0">
+                      <FileText className="w-4 h-4" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate">Stundenzettel PDF</span>
+                      <span className="block text-[11px] font-semibold text-slate-500">Für Ablage & Prüfung</span>
+                    </span>
+                  </span>
+                  <span className="w-9 h-9 rounded-xl bg-slate-100 group-hover:bg-slate-200 flex items-center justify-center text-slate-700 transition-colors flex-shrink-0">
+                    <ChevronRight className="w-4 h-4" />
+                  </span>
                 </button>
               </div>
 
