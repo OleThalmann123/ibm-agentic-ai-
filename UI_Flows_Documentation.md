@@ -29,6 +29,7 @@
 ## Phase 3: Assistant Time Tracking (`time_tracking_assistant`)
 **Goal: Enable mobile-first time entry and transparent payroll tracking.**
 
-*   **Log Working Hours:** Enter daily start and end times, activity descriptors, and specific modifiers (e.g., night shift) via the mobile interface (`01_time_entry_mobile.png`).
+*   **Log Working Hours:** Enter daily start and end times and (optional) activity descriptors via the mobile interface (`01_time_entry_mobile.png`).  
+    **Note (MVP 1 / out of scope):** Night surcharges are not implemented yet. The “Nachtdienst” toggle is intentionally shown but disabled/greyed out in MVP 1. Night markings may still appear in exported timesheets.
 *   **Review Time Logs:** Check the weekly overview of submitted time entries and verify transmission status to the employer (`02_time_log_mobile.png`).
 *   **Audit Monthly Payroll:** Access the preliminary monthly payslip detailing working hours, base wage, deductions, and net pay before employer confirmation (`03_payroll_mobile.png`).
