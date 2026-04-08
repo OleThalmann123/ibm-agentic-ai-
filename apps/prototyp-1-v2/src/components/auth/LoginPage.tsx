@@ -216,24 +216,30 @@ export function LoginPage({ autoDemo }: { autoDemo?: boolean }) {
         </p>
       </div>
 
-      {/* Floating Demo Quick-Login Button */}
-      <button
-        onClick={handleQuickLogin}
-        disabled={loading}
-        className="fixed bottom-6 right-6 p-3 bg-secondary border border-border shadow-lg rounded-full text-foreground hover:bg-secondary/80 hover:scale-105 active:scale-95 transition-all z-50 group flex items-center justify-center cursor-pointer disabled:opacity-50"
-        aria-label="Demo Zugang"
-      >
-        <div className="relative">
-          <User className="w-5 h-5 opacity-80 group-hover:opacity-100" />
-          <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary"></span>
+      {/* Floating Demo Quick-Login Button (bottom-centered, clearer) */}
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[min(520px,calc(100vw-2rem))]">
+        <button
+          onClick={handleQuickLogin}
+          disabled={loading}
+          className="w-full flex items-center justify-center gap-3 px-5 py-3.5 rounded-2xl bg-primary text-primary-foreground font-semibold shadow-xl shadow-primary/25 hover:bg-primary/90 active:scale-[0.99] transition-all border border-primary/30 disabled:opacity-50"
+          aria-label="Demo starten"
+        >
+          <span className="relative">
+            <span className="absolute -inset-1 rounded-full bg-primary-foreground/15 blur-sm" />
+            <span className="relative inline-flex items-center justify-center w-10 h-10 rounded-xl bg-primary-foreground/10 border border-primary-foreground/15">
+              <User className="w-5 h-5" />
+            </span>
+            <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-foreground opacity-70"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary-foreground"></span>
+            </span>
           </span>
-        </div>
-        <span className="absolute right-full mr-4 top-1/2 -translate-y-1/2 px-2.5 py-1.5 bg-popover text-popover-foreground text-xs font-medium rounded-md shadow-sm border border-border opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap">
-          Schnellzugriff (Demo)
-        </span>
-      </button>
+          <span className="text-left leading-tight">
+            <span className="block text-sm">Demo starten</span>
+            <span className="block text-xs opacity-85 font-medium">Auto-Login inkl. Demo-Daten</span>
+          </span>
+        </button>
+      </div>
     </div>
   );
 }
