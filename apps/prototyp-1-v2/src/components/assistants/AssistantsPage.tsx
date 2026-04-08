@@ -142,39 +142,48 @@ export function AssistantsPage() {
         </div>
       </div>
 
-      {/* Prominent CTA Card */}
-      <div className="relative overflow-hidden rounded-2xl p-[1px] bg-[linear-gradient(90deg,rgba(59,130,246,0.55),rgba(168,85,247,0.50),rgba(16,185,129,0.38))] shadow-[0_20px_70px_rgba(2,6,23,0.18)]">
-        <div className="relative rounded-2xl border border-transparent p-8 text-white">
-          <div className="absolute inset-0 bg-[radial-gradient(900px_520px_at_15%_0%,rgba(59,130,246,0.25),transparent_60%),radial-gradient(780px_520px_at_85%_10%,rgba(168,85,247,0.25),transparent_55%),radial-gradient(620px_520px_at_45%_120%,rgba(16,185,129,0.18),transparent_55%),linear-gradient(to_bottom,rgba(2,6,23,0.92),rgba(2,6,23,0.78))] rounded-2xl" />
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2" />
-        <div className="relative flex items-center justify-between">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <div className="w-10 h-10 rounded-2xl bg-white/10 border border-white/15 flex items-center justify-center">
-                <img src={asklepiosLogo} alt="Asklepios" className="w-7 h-7 object-contain" />
-              </div>
-              <h2 className="text-xl font-bold">Neue Assistenzperson erfassen</h2>
-            </div>
-            <p className="text-white/70 max-w-md">
-              Asklepios hilft dir bei der Anlage deiner Assistenzperson, indem er Stamm- und Vertragsdaten für dich aus dem Arbeitsvertrag ausliest.
-            </p>
-          </div>
-          <label className="flex items-center gap-2 px-6 py-3.5 rounded-xl bg-white text-slate-900 text-sm font-bold hover:bg-white/90 transition-all shadow-lg hover:shadow-xl hover:scale-[1.02] cursor-pointer">
-            <UploadCloud className="w-5 h-5" />
-            Vertrag hochladen & scannen
-            <input 
-              type="file" 
-              accept=".pdf,.doc,.docx,.txt,image/*,application/pdf"
-              className="hidden"
-              onChange={(e) => {
-                if (e.target.files && e.target.files[0]) {
-                  setInitialUploadFile(e.target.files[0]);
-                  setShowAssistantOnboarding(true);
-                }
-              }}
-            />
-          </label>
+      {/* Prominent CTA Card — dezent animierter Gradient-Rahmen (läuft im Kreis) */}
+      <div className="relative overflow-hidden rounded-2xl p-[2px] shadow-[0_20px_70px_rgba(2,6,23,0.18)]">
+        <div
+          className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl"
+          aria-hidden
+        >
+          <div
+            className="absolute left-1/2 top-1/2 h-[200vmax] w-[200vmax] -translate-x-1/2 -translate-y-1/2 opacity-[0.55] will-change-transform animate-[spin_22s_linear_infinite] motion-reduce:animate-none bg-[conic-gradient(from_0deg_at_50%_50%,hsl(var(--primary))_0deg,hsl(270_65%_58%)_115deg,hsl(160_55%_42%)_235deg,hsl(var(--primary))_360deg)]"
+          />
         </div>
+
+        <div className="relative z-10 overflow-hidden rounded-[14px] p-8 text-white">
+          <div className="absolute inset-0 rounded-[14px] bg-[radial-gradient(900px_520px_at_15%_0%,rgba(59,130,246,0.25),transparent_60%),radial-gradient(780px_520px_at_85%_10%,rgba(168,85,247,0.25),transparent_55%),radial-gradient(620px_520px_at_45%_120%,rgba(16,185,129,0.18),transparent_55%),linear-gradient(to_bottom,rgba(2,6,23,0.92),rgba(2,6,23,0.78))]" />
+          <div className="absolute top-0 right-0 h-64 w-64 -translate-y-1/2 translate-x-1/2 rounded-full bg-white/5" />
+          <div className="relative flex flex-wrap items-center justify-between gap-6">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/15 bg-white/10">
+                  <img src={asklepiosLogo} alt="Asklepios" className="h-7 w-7 object-contain" />
+                </div>
+                <h2 className="text-xl font-bold">Neue Assistenzperson erfassen</h2>
+              </div>
+              <p className="max-w-md text-white/70">
+                Asklepios hilft dir bei der Anlage deiner Assistenzperson, indem er Stamm- und Vertragsdaten für dich aus dem Arbeitsvertrag ausliest.
+              </p>
+            </div>
+            <label className="flex cursor-pointer items-center gap-2 rounded-xl bg-white px-6 py-3.5 text-sm font-bold text-slate-900 shadow-lg transition-all hover:scale-[1.02] hover:bg-white/90 hover:shadow-xl">
+              <UploadCloud className="h-5 w-5" />
+              Vertrag hochladen & scannen
+              <input
+                type="file"
+                accept=".pdf,.doc,.docx,.txt,image/*,application/pdf"
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    setInitialUploadFile(e.target.files[0]);
+                    setShowAssistantOnboarding(true);
+                  }
+                }}
+              />
+            </label>
+          </div>
         </div>
       </div>
 
