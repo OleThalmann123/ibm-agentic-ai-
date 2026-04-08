@@ -133,8 +133,20 @@ export function LoginPage({ autoDemo }: { autoDemo?: boolean }) {
   }, [autoDemo, searchParams]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 px-4">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen relative flex items-center justify-center px-4">
+      {/* Background image */}
+      <div
+        className="absolute inset-0 bg-center bg-cover"
+        style={{ backgroundImage: "url('/login-bg.png')" }}
+        aria-hidden="true"
+      />
+      {/* Readability overlay */}
+      <div
+        className="absolute inset-0 bg-gradient-to-b from-background/70 via-background/85 to-background/95 backdrop-blur-[2px]"
+        aria-hidden="true"
+      />
+
+      <div className="w-full max-w-md relative z-10">
         {/* Logo */}
         <div className="text-center mb-8">
           <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto mb-4 shadow-sm shadow-primary/10">
