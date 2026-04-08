@@ -271,8 +271,30 @@ export function SettingsPage() {
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
         className="w-full px-3.5 py-2.5 rounded-xl border bg-background text-sm font-medium
-          focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+          shadow-sm shadow-black/5 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
       />
+    </div>
+  );
+
+  const Section = ({ title, subtitle, icon: Icon, children }: {
+    title: string;
+    subtitle?: string;
+    icon: typeof User;
+    children: React.ReactNode;
+  }) => (
+    <div className="rounded-2xl border bg-gradient-to-b from-background to-muted/10 p-4 space-y-3 shadow-sm">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-2xl bg-primary/10 border border-primary/10 flex items-center justify-center">
+            <Icon className="w-4.5 h-4.5 text-primary" />
+          </div>
+          <div>
+            <p className="text-sm font-semibold leading-tight">{title}</p>
+            {subtitle && <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{subtitle}</p>}
+          </div>
+        </div>
+      </div>
+      <div className="space-y-3">{children}</div>
     </div>
   );
 
@@ -310,10 +332,26 @@ export function SettingsPage() {
   return (
     <div className="space-y-6 w-full max-w-7xl mx-auto pb-10">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Einstellungen</h1>
-          <p className="text-muted-foreground text-sm mt-1">Konto- und Profil-Einstellungen verwalten</p>
+      <div className="rounded-3xl border bg-[radial-gradient(900px_520px_at_15%_0%,rgba(59,130,246,0.10),transparent_60%),radial-gradient(780px_520px_at_85%_10%,rgba(168,85,247,0.10),transparent_55%),linear-gradient(to_bottom,rgba(255,255,255,0.92),rgba(255,255,255,0.86))] p-6 shadow-sm">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-primary/10 border border-primary/10 flex items-center justify-center">
+              <SettingsIcon className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">Einstellungen</h1>
+              <p className="text-muted-foreground text-sm mt-0.5">Konto, betroffene Person und Rechnungsdaten</p>
+            </div>
+          </div>
+          <div className="hidden md:flex items-center gap-2">
+            {detectedCanton && (
+              <div className="inline-flex items-center gap-2 px-3 py-2 rounded-2xl bg-blue-500/5 border border-blue-500/10 text-blue-700">
+                <MapPin className="w-4 h-4" />
+                <span className="text-sm font-semibold">{detectedCanton.code}</span>
+                <span className="text-sm text-blue-700/70">{detectedCanton.name}</span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -390,9 +428,13 @@ export function SettingsPage() {
                 </div>
               </div>
 
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {/* Versicherte / betroffene Person */}
-              <div className="rounded-2xl border bg-muted/10 p-4 space-y-3">
-                <p className="text-sm font-semibold">Betroffene Person (versicherte Person)</p>
+              <Section
+                title="Betroffene Person (versicherte Person)"
+                subtitle={representation === 'guardian' ? 'Diese Daten werden auf dem IV-Deckblatt verwendet.' : 'Diese Daten werden auf dem IV-Deckblatt verwendet.'}
+                icon={User}
+              >
                 {representation === 'guardian' ? (
                   <>
                     <div className="grid grid-cols-2 gap-3">
@@ -416,11 +458,14 @@ export function SettingsPage() {
                   </>
                 )}
                 <EditableField label="AHV-Nummer" value={insuredAhvNumber} onChange={setInsuredAhvNumber} placeholder="756.xxxx.xxxx.xx" />
-              </div>
+              </Section>
 
               {/* Rechnungssteller / Kontaktperson */}
-              <div className="rounded-2xl border bg-muted/10 p-4 space-y-3">
-                <p className="text-sm font-semibold">Rechnungssteller / Kontaktperson</p>
+              <Section
+                title="Rechnungssteller / Kontaktperson"
+                subtitle="Kontaktperson bei Rückfragen (kann abweichen)."
+                icon={Mail}
+              >
                 <div className="grid grid-cols-2 gap-3">
                   <EditableField label="Vorname" value={issuerFirstName} onChange={setIssuerFirstName} />
                   <EditableField label="Nachname" value={issuerLastName} onChange={setIssuerLastName} />
@@ -434,21 +479,20 @@ export function SettingsPage() {
                   <EditableField label="Telefon (für Rückfragen)" value={issuerPhone} onChange={setIssuerPhone} placeholder="+41 ..." />
                   <ReadOnlyField label="E-Mail" value={user?.email ?? ''} />
                 </div>
+              </Section>
               </div>
 
-              {detectedCanton && (
-                <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-blue-500/5 border border-blue-500/10 text-blue-700">
-                  <MapPin className="w-5 h-5" />
-                  <span className="text-sm font-medium">Kanton: <span className="font-bold">{detectedCanton.code}</span> – {detectedCanton.name}</span>
+              <Section
+                title="IV-Deckblatt / Rechnung"
+                subtitle="Auszahlungsdaten für die monatliche Rechnung."
+                icon={CreditCard}
+              >
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                  <ReadOnlyField label="IV-Ansatz (CHF/Std)" value="35.30" />
+                  <EditableField label="IBAN (Auszahlung)" value={billingIban} onChange={setBillingIban} placeholder="CH.." />
+                  <EditableField label="Verfügungsnummer (optional)" value={billingReferenceNumber} onChange={setBillingReferenceNumber} placeholder="…" />
                 </div>
-              )}
-
-              <div className="rounded-2xl border bg-muted/10 p-4 space-y-3">
-                <p className="text-sm font-semibold">IV-Deckblatt / Rechnung</p>
-                <ReadOnlyField label="IV-Ansatz (CHF/Std)" value="35.30" />
-                <EditableField label="IBAN (Auszahlung)" value={billingIban} onChange={setBillingIban} placeholder="CH.." />
-                <EditableField label="Mitteilungs-/Verfügungsnummer (optional)" value={billingReferenceNumber} onChange={setBillingReferenceNumber} placeholder="…" />
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                   <EditableField label="Kontoinhaber:in" value={billingAccountHolderName} onChange={setBillingAccountHolderName} placeholder="Vorname Name" />
                   <EditableField label="Adresse Kontoinhaber:in" value={billingAccountHolderStreet} onChange={setBillingAccountHolderStreet} placeholder="Strasse Nr." />
                 </div>
@@ -457,25 +501,32 @@ export function SettingsPage() {
                   <EditableField label="Ort" value={billingAccountHolderCity} onChange={setBillingAccountHolderCity} placeholder="Zürich" />
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Diese Angaben werden im Download „IV-Rechnung (Deckblatt)“ verwendet.
+                  Wird im Download „IV‑Rechnung (Deckblatt)“ verwendet.
                 </p>
-              </div>
+              </Section>
 
-              <button
-                onClick={saveEmployer}
-                disabled={saving}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 disabled:opacity-50
-                  bg-gradient-to-r from-primary to-[hsl(240_70%_55%)] text-white shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:translate-y-[-1px]"
-              >
-                {saving ? (
-                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white/30 border-t-white" />
-                ) : (
-                  <>
-                    <Save className="w-4 h-4" />
-                    Speichern
-                  </>
-                )}
-              </button>
+              <div className="sticky bottom-4 z-10">
+                <div className="rounded-2xl border bg-background/80 backdrop-blur px-4 py-3 shadow-lg flex items-center justify-between gap-3">
+                  <div className="text-xs text-muted-foreground">
+                    Änderungen werden erst nach dem Speichern übernommen.
+                  </div>
+                  <button
+                    onClick={saveEmployer}
+                    disabled={saving}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 disabled:opacity-50
+                      bg-gradient-to-r from-primary to-[hsl(240_70%_55%)] text-white shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:translate-y-[-1px]"
+                  >
+                    {saving ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-white/30 border-t-white" />
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4" />
+                        Speichern
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
             </SettingsCard>
           )}
         </div>
