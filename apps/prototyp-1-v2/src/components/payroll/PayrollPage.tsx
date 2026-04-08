@@ -11,7 +11,7 @@ import { PDFDocument } from 'pdf-lib';
 import {
   Calculator, FileText, ChevronLeft, ChevronRight, Users,
   ShieldCheck, Clock, Eye, Download, Pencil, Save, X,
-  ChevronDown, TrendingUp, Banknote, ArrowRight, ArrowLeft, Sparkles,
+  ChevronDown, TrendingUp, Banknote, ArrowRight, ArrowLeft, Sparkles, Package,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Assistant } from '@asklepios/backend';
@@ -886,71 +886,112 @@ export function PayrollPage() {
       {!loading && (
         <div
           className={cn(
-            'relative mb-3.5 overflow-hidden rounded-2xl border bg-card p-4 transition-[border-color,box-shadow] duration-500',
+            'relative mb-5 overflow-hidden rounded-2xl p-[2px]',
             monthlyPackageReady
-              ? 'border-success/40 animate-glow-asklepios shadow-sm'
-              : 'border-border shadow-sm',
+              ? 'animate-glow-asklepios shadow-[0_14px_50px_-14px_hsl(var(--success)/0.45),0_8px_32px_-8px_hsl(var(--primary)/0.2)]'
+              : 'shadow-[0_6px_28px_-10px_rgba(15,23,42,0.12)]',
           )}
         >
-          {monthlyPackageReady && (
+          <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl" aria-hidden>
             <div
-              className="pointer-events-none absolute inset-0 bg-gradient-to-br from-success/[0.07] via-transparent to-primary/[0.12]"
-              aria-hidden
+              className={cn(
+                'absolute left-1/2 top-1/2 h-[200vmax] w-[200vmax] -translate-x-1/2 -translate-y-1/2 will-change-transform bg-[conic-gradient(from_0deg_at_50%_50%,hsl(var(--primary))_0deg,hsl(270_65%_58%)_115deg,hsl(160_55%_42%)_235deg,hsl(var(--primary))_360deg)] motion-reduce:animate-none',
+                monthlyPackageReady
+                  ? 'opacity-[0.68] animate-[spin_15s_linear_infinite]'
+                  : 'opacity-[0.45] animate-[spin_28s_linear_infinite]',
+              )}
             />
-          )}
-          <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0 flex-1 space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="text-base font-extrabold uppercase tracking-wide text-muted-foreground">
-                  Monatspaket (IV)
-                </p>
-                {monthlyPackageReady && (
-                  <Badge variant="success" className="gap-1 rounded-full border-0 pl-1.5 pr-2.5 shadow-sm">
-                    <Sparkles className="h-3.5 w-3.5" aria-hidden />
-                    Freigeschaltet
-                  </Badge>
-                )}
-              </div>
-              <p className="text-sm leading-relaxed text-muted-foreground">
-                Sobald alle Lohnabrechnungen bestätigt sind oder Personen ohne Stunden als «Keine Arbeit» markiert wurden,
-                können Sie hier das komplette Paket für die IV erzeugen: Deckblatt plus alle relevanten PDFs.
-              </p>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-semibold text-muted-foreground">Status</span>
-                {assistantsWithHoursList.length > 0 && (
-                  <Badge variant="secondary" className="rounded-full font-mono tabular-nums">
-                    Bestätigt {confirmedAmongWithHours}/{assistantsWithHoursList.length}
-                  </Badge>
-                )}
-                {assistantsWithoutHoursList.length > 0 && (
-                  <Badge
-                    variant="outline"
+          </div>
+
+          <div
+            className={cn(
+              'relative z-10 space-y-4 rounded-[13px] border p-5 sm:p-6',
+              monthlyPackageReady
+                ? 'border-success/30 bg-gradient-to-br from-card from-40% via-card to-success/[0.06]'
+                : 'border-border/70 bg-card',
+            )}
+          >
+            {monthlyPackageReady && (
+              <div
+                className="pointer-events-none absolute inset-0 rounded-[13px] bg-[radial-gradient(720px_420px_at_12%_-10%,hsl(var(--success)/0.14),transparent_55%),radial-gradient(600px_380px_at_92%_0%,hsl(var(--primary)/0.12),transparent_50%)]"
+                aria-hidden
+              />
+            )}
+            <div className="relative flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0 flex-1 space-y-3">
+                <div className="flex flex-wrap items-start gap-3">
+                  <div
                     className={cn(
-                      'rounded-full border-dashed font-mono tabular-nums',
-                      noWorkAmongWithoutHours >= assistantsWithoutHoursList.length &&
-                        'border-success/50 bg-success/10 text-success',
+                      'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border shadow-md',
+                      monthlyPackageReady
+                        ? 'border-success/35 bg-success/15 text-success'
+                        : 'border-primary/25 bg-primary/[0.07] text-primary',
                     )}
                   >
-                    Keine Arbeit {noWorkAmongWithoutHours}/{assistantsWithoutHoursList.length}
-                  </Badge>
-                )}
+                    <Package className="h-5 w-5" strokeWidth={2} aria-hidden />
+                  </div>
+                  <div className="min-w-0 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p
+                        className={cn(
+                          'text-lg font-extrabold uppercase tracking-wide sm:text-xl',
+                          monthlyPackageReady
+                            ? 'bg-gradient-to-r from-primary via-violet-600 to-emerald-600 bg-clip-text text-transparent'
+                            : 'text-foreground',
+                        )}
+                      >
+                        Monatspaket (IV)
+                      </p>
+                      {monthlyPackageReady && (
+                        <Badge variant="success" className="gap-1 rounded-full border-0 pl-1.5 pr-2.5 shadow-md">
+                          <Sparkles className="h-3.5 w-3.5" aria-hidden />
+                          Freigeschaltet
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-[0.9375rem]">
+                      Sobald alle Lohnabrechnungen bestätigt sind oder Personen ohne Stunden als «Keine Arbeit» markiert wurden,
+                      können Sie hier das komplette Paket für die IV erzeugen: Deckblatt plus alle relevanten PDFs.
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                      <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Status</span>
+                      {assistantsWithHoursList.length > 0 && (
+                        <Badge variant="secondary" className="rounded-full px-2.5 py-0.5 font-mono text-xs tabular-nums shadow-sm">
+                          Bestätigt {confirmedAmongWithHours}/{assistantsWithHoursList.length}
+                        </Badge>
+                      )}
+                      {assistantsWithoutHoursList.length > 0 && (
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            'rounded-full border-dashed px-2.5 py-0.5 font-mono text-xs tabular-nums shadow-sm',
+                            noWorkAmongWithoutHours >= assistantsWithoutHoursList.length &&
+                              'border-success/55 bg-success/12 text-success',
+                          )}
+                        >
+                          Keine Arbeit {noWorkAmongWithoutHours}/{assistantsWithoutHoursList.length}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
+              <button
+                type="button"
+                onClick={() => void downloadMonthlyPackagePdf()}
+                disabled={!monthlyPackageReady}
+                className={cn(
+                  'inline-flex shrink-0 items-center gap-2 rounded-xl px-5 py-3 text-sm font-extrabold transition-all sm:self-center',
+                  monthlyPackageReady
+                    ? 'cursor-pointer bg-gradient-to-br from-primary to-primary/88 text-primary-foreground shadow-lg shadow-primary/30 ring-2 ring-primary/25 ring-offset-2 ring-offset-background hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/40'
+                    : 'cursor-not-allowed bg-muted/90 text-muted-foreground shadow-inner',
+                )}
+                title={monthlyPackageReady ? 'Monatspaket als PDF herunterladen' : 'Noch nicht verfügbar'}
+              >
+                <Download className="h-5 w-5 shrink-0" />
+                Alles in 1 PDF
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => void downloadMonthlyPackagePdf()}
-              disabled={!monthlyPackageReady}
-              className={cn(
-                'inline-flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-extrabold transition-all',
-                monthlyPackageReady
-                  ? 'cursor-pointer bg-gradient-to-br from-primary to-primary/90 text-primary-foreground shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/35'
-                  : 'cursor-not-allowed bg-muted text-muted-foreground',
-              )}
-              title={monthlyPackageReady ? 'Monatspaket als PDF herunterladen' : 'Noch nicht verfügbar'}
-            >
-              <Download className="h-4 w-4 shrink-0" />
-              Alles in 1 PDF
-            </button>
           </div>
         </div>
       )}
