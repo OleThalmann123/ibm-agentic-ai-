@@ -5,7 +5,6 @@ import {
   calculatePayroll, FAK_RATES, fmt, fmtPct, type PayrollResult
 } from '@asklepios/backend';
 import { calculatePayslip, generatePayslipPdf, type PayslipAccountingMethod } from '@asklepios/backend';
-import { generateTimesheetPdf } from '@asklepios/backend';
 import { generateEinsatzrapportPdf } from '@asklepios/backend';
 import { generateIvInvoicePdf, type IvInvoiceLine } from '@asklepios/backend';
 import { PDFDocument } from 'pdf-lib';
@@ -344,89 +343,6 @@ export function PayrollPage() {
     };
   };
 
-  const downloadIvInvoicePdf = () => {
-    const cd = employer?.contact_data as any;
-    const insuredName = employer?.name || `${cd?.first_name || ''} ${cd?.last_name || ''}`.trim() || '–';
-    const issuerName =
-      employer?.representation === 'guardian'
-        ? `${cd?.first_name || ''} ${cd?.last_name || ''}`.trim() || insuredName
-        : insuredName;
-
-    const invoiceIssuerEmailPhone = [
-      cd?.email || '',
-      cd?.phone || '',
-    ].filter(Boolean).join(' · ');
-
-    const rate = Number(String(employer?.iv_rate ?? 35.30).replace(',', '.')) || 35.30;
-
-    const lines: IvInvoiceLine[] = [];
-    for (const a of assistants) {
-      const hours = timeEntries[a.id];
-      if (!hours || hours.totalHours <= 0) continue;
-
-      const byCat = new Map<string, number>();
-      for (const e of hours.entries) {
-        const cat = (e.category || '').trim() || 'Ohne Kategorie';
-        byCat.set(cat, (byCat.get(cat) || 0) + (e.hours || 0));
-      }
-      for (const [cat, h] of byCat.entries()) {
-        const rounded = Number(h.toFixed(2));
-        if (rounded <= 0) continue;
-        const amount = Number((rounded * rate).toFixed(2));
-        lines.push({
-          assistantName: a.name || '—',
-          activityLabel: cat === 'Ohne Kategorie' ? cat : activityLabelFromCode(cat),
-          hours: rounded,
-          rateCHF: rate,
-          amountCHF: amount,
-        });
-      }
-    }
-
-    lines.sort((x, y) => (x.assistantName + x.activityLabel).localeCompare(y.assistantName + y.activityLabel));
-    const totalCHF = Number(lines.reduce((s, l) => s + (l.amountCHF || 0), 0).toFixed(2));
-
-    const monthParts = currentMonth.split('-').map(Number);
-    const invoiceDateLabel = new Date().toLocaleDateString('de-CH');
-    const monthLabelStr = monthLabel(currentMonth);
-
-    const doc = generateIvInvoicePdf({
-      invoiceDateLabel,
-      monthLabel: monthLabelStr,
-      insuredPerson: {
-        name: insuredName,
-        ahvNumber: cd?.insured_ahv_number || '',
-        street: cd?.affected_street || cd?.street || '',
-        plzCity: (cd?.affected_plz && cd?.affected_city)
-          ? `${cd.affected_plz} ${cd.affected_city}`
-          : (cd?.plz && cd?.city ? `${cd.plz} ${cd.city}` : ''),
-      },
-      invoiceIssuer: {
-        name: issuerName,
-        emailPhone: invoiceIssuerEmailPhone,
-        street: cd?.street || '',
-        plzCity: cd?.plz && cd?.city ? `${cd.plz} ${cd.city}` : '',
-      },
-      billing: {
-        gln: cd?.billing_gln || '',
-        referenceNumber: cd?.billing_reference_number || '',
-        iban: cd?.billing_iban || '',
-        accountHolderName: cd?.billing_account_holder_name || '',
-        accountHolderStreet: cd?.billing_account_holder_street || '',
-        accountHolderPlzCity: (cd?.billing_account_holder_plz && cd?.billing_account_holder_city)
-          ? `${cd.billing_account_holder_plz} ${cd.billing_account_holder_city}`
-          : '',
-        paymentTermsDays: Number(cd?.payment_terms_days) || 30,
-        bankName: cd?.bank_name || '',
-      },
-      lines,
-      totalCHF,
-    });
-
-    doc.save(buildPdfName(currentMonth, 'IV-Rechnung_Deckblatt'));
-    toast.success('IV-Rechnung (Deckblatt) heruntergeladen');
-  };
-
   const downloadMonthlyPackagePdf = async () => {
     if (!canGenerateMonthlyPackage()) {
       toast.error('Monatspaket noch nicht verfügbar', {
@@ -518,7 +434,7 @@ export function PayrollPage() {
 
       await appendJsPdf(ivDoc);
 
-      // 2) Per assistant: Payslip + Timesheet + Einsatzrapport (Standard) – nur wenn Stunden > 0
+      // 2) Per assistant: Payslip + Einsatzrapport (Standard) – nur wenn Stunden > 0
       for (const a of assistants) {
         const hours = timeEntries[a.id];
         if (!hours || hours.totalHours <= 0) continue;
@@ -574,16 +490,6 @@ export function PayrollPage() {
           await appendJsPdf(payslipDoc);
         }
 
-        const timesheetDoc = generateTimesheetPdf({
-          month: monthLabel(currentMonth),
-          employer: getEmployerAddress(),
-          employee: getEmployeeAddress(a),
-          entries: hours.entries,
-          totalHours: hours.totalHours,
-          nightHours: hours.nightHours,
-        });
-        await appendJsPdf(timesheetDoc);
-
         const einsatzDoc = generateEinsatzrapportPdf({
           monthLabel: monthLabel(currentMonth),
           assistantName: a.name || '—',
@@ -610,6 +516,95 @@ export function PayrollPage() {
     } catch (e) {
       console.error(e);
       toast.error('Monatspaket konnte nicht erstellt werden');
+    }
+  };
+
+  const downloadLohnUndEinsatzrapportPdf = async (assistant: Assistant, hours: MonthlyHours) => {
+    try {
+      const merged = await PDFDocument.create();
+
+      const appendJsPdf = async (jsPdfDoc: any) => {
+        const buf = jsPdfDoc.output('arraybuffer');
+        const src = await PDFDocument.load(buf);
+        const pages = await merged.copyPages(src, src.getPageIndices());
+        for (const p of pages) merged.addPage(p);
+      };
+
+      const result = payrollResults[assistant.id];
+      if (result) {
+        const cd2 = assistant.contract_data as any;
+        const kanton = employer?.canton || cd2?.canton || 'ZH';
+        const kantonName = FAK_RATES[kanton]?.name || kanton;
+        const stundenlohn = assistant.hourly_rate || 0;
+        const vacWeeks = assistant.vacation_weeks || 4;
+        const ferienzuschlagRate = vacWeeks === 5 ? 0.1064 : vacWeeks === 6 ? 0.1304 : 0.0833;
+        const ferienzuschlagLabel = vacWeeks === 5 ? '10.64%' : vacWeeks === 6 ? '13.04%' : '8.33%';
+
+        const bm = String(cd2?.billing_method || 'ordinary').toLowerCase();
+        const accountingMethod: PayslipAccountingMethod =
+          bm === 'simplified' || bm === 'vereinfacht' ? 'simplified'
+            : (bm === 'ordinary_with_withholding' || bm === 'ordinary_quellensteuer') ? 'ordinary_with_withholding'
+              : 'ordinary';
+        const accountingMethodLabel =
+          accountingMethod === 'simplified'
+            ? 'Vereinfachtes'
+            : accountingMethod === 'ordinary_with_withholding'
+              ? 'Ordentliches mit Quellensteuer'
+              : 'Ordentliches';
+
+        const nbuRateEmployee = cd2?.nbu_employee ? (parseFloat(cd2.nbu_employee) / 100) : undefined;
+        const payslip = calculatePayslip({
+          canton: kanton,
+          accountingMethod,
+          hourlyRate: stundenlohn,
+          hours: hours.totalHours,
+          vacationSurchargeRate: ferienzuschlagRate,
+          nbuRateEmployee,
+        });
+
+        const payslipDoc = generatePayslipPdf({
+          monthYearLabel: monthLabel(currentMonth),
+          placeDateLabel: formatPlaceDateLabel(),
+          employer: getEmployerAddress(),
+          employee: { ...getEmployeeAddress(assistant), ahvNumber: (assistant.contract_data as any)?.ahv_number || '' },
+          grundlagen: {
+            cantonLabel: `${kantonName}`,
+            accountingMethodLabel,
+            hourlyRate: stundenlohn,
+            hours: hours.totalHours,
+            vacationSurchargeLabel: ferienzuschlagLabel,
+          },
+          accountingMethod,
+          result: payslip,
+        });
+        await appendJsPdf(payslipDoc);
+      }
+
+      const einsatzDoc = generateEinsatzrapportPdf({
+        monthLabel: monthLabel(currentMonth),
+        assistantName: assistant.name || '—',
+        employerName: employer?.name || '—',
+        includeActivities: false,
+        rows: buildEinsatzrapportRows(hours),
+        totalHours: Number(hours.totalHours.toFixed(2)),
+        totalNights: Math.round(hours.nightHours),
+      });
+      await appendJsPdf(einsatzDoc);
+
+      const bytes = await merged.save();
+      const blob = new Blob([bytes], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const aEl = document.createElement('a');
+      aEl.href = url;
+      aEl.download = buildPersonPdfName(currentMonth, 'Lohn-und_Einsatzrapport', assistant.name);
+      document.body.appendChild(aEl);
+      aEl.click();
+      aEl.remove();
+      URL.revokeObjectURL(url);
+      toast.success('Lohn- und Einsatzrapport heruntergeladen');
+    } catch (e) {
+      console.error(e);
+      toast.error('Lohn- und Einsatzrapport konnte nicht erstellt werden');
     }
   };
 
@@ -670,20 +665,6 @@ export function PayrollPage() {
 
     doc.save(buildPersonPdfName(currentMonth, 'Lohnabrechnung', assistant.name));
     toast.success('Lohnabrechnung PDF heruntergeladen');
-  };
-
-  const downloadTimesheetPdf = (assistant: Assistant, hours: MonthlyHours) => {
-    const doc = generateTimesheetPdf({
-      month: monthLabel(currentMonth),
-      employer: getEmployerAddress(),
-      employee: getEmployeeAddress(assistant),
-      entries: hours.entries,
-      totalHours: hours.totalHours,
-      nightHours: hours.nightHours,
-    });
-
-    doc.save(buildPersonPdfName(currentMonth, 'Stundenzettel', assistant.name));
-    toast.success('Stundenzettel PDF heruntergeladen');
   };
 
   const buildEinsatzrapportRows = (hours: MonthlyHours) => {
@@ -1041,7 +1022,7 @@ export function PayrollPage() {
                           background: flowStep === 'dokumente' ? '#1e293b' : '#cbd5e1',
                           color: '#fff',
                         }}>3</span>
-                        Dokumente (IV)
+                        Dokumente
                       </button>
                     </div>
 
@@ -1360,7 +1341,7 @@ export function PayrollPage() {
                                       </p>
                                       <p style={{ margin: '2px 0 0', fontSize: 12, color: '#64748b', lineHeight: 1.35 }}>
                                         Wenn Sie bestätigen, erscheint die Lohnabrechnung automatisch im Dashboard und die relevanten Dokumente für diese Assistenzperson werden generiert.
-                                        Anschliessend gelangen Sie automatisch zu <span style={{ fontWeight: 700, color: '#334155' }}>„Dokumente (IV)“</span>.
+                                        Anschliessend gelangen Sie automatisch zu <span style={{ fontWeight: 700, color: '#334155' }}>„Dokumente“</span>.
                                       </p>
                                     </div>
                                   </div>
@@ -1423,7 +1404,7 @@ export function PayrollPage() {
                         </div>
                       )}
 
-                      {/* ── STEP 3: Dokumente (IV) ── */}
+                      {/* ── STEP 3: Dokumente ── */}
                       {flowStep === 'dokumente' && (
                         <div>
                           <div style={{
@@ -1446,16 +1427,27 @@ export function PayrollPage() {
                                   Dokumentenspeicher
                                 </p>
                                 <p style={{ margin: '2px 0 0', fontSize: 12, color: '#94a3b8' }}>
-                                  Hier liegen die Dokumente (Lohnabrechnung, Stundenzettel und Einsatzrapport) pro Monat. Nur PDF.
+                                  Hier liegt deine Lohnabrechnung und der Arbeits- und Einsatzrapport, der mit zur IV gesendet wird.
+                                  Das Dokument für die IV kannst du gesondert generieren – für alle Assistenzpersonen auf einmal.
+                                  Das hier ist deine digitale Dokumentenablage.
                                 </p>
                               </div>
                               <div style={{ display: 'flex', gap: 8 }}>
-                                <ActionButton
+                                <button
                                   onClick={() => setFlowStep('abrechnung')}
-                                  icon={<ArrowLeft style={{ width: 15, height: 15 }} />}
-                                  label="Zurück"
-                                  variant="outline"
-                                />
+                                  style={{
+                                    border: '1px solid #e2e8f0',
+                                    background: '#fff',
+                                    borderRadius: 12,
+                                    padding: '8px 12px',
+                                    fontSize: 12,
+                                    fontWeight: 700,
+                                    color: '#334155',
+                                    cursor: 'pointer',
+                                  }}
+                                >
+                                  Zurück
+                                </button>
                               </div>
                             </div>
                             <div style={{ padding: 12 }}>
@@ -1466,27 +1458,18 @@ export function PayrollPage() {
                                 alignItems: 'stretch',
                               }}>
                                 <DocCard
-                                  title="Monatspaket (alles in 1 PDF)"
-                                  subtitle="Deckblatt + alle PDFs (nur wenn alle bestätigt sind)"
+                                  title="IV-Dokument (alle Assistenzpersonen)"
+                                  subtitle="Einmal generieren (nur wenn alle bestätigt sind)"
                                   fileType="PDF"
                                   icon={<Download style={{ width: 18, height: 18 }} />}
                                   tone="primary"
                                   disabled={!canGenerateMonthlyPackage()}
                                   onClick={() => void downloadMonthlyPackagePdf()}
                                 />
-                                <DocCard
-                                  title="IV-Rechnung (Deckblatt)"
-                                  subtitle="Monatliche Rechnung über alle Assistenzpersonen"
-                                  fileType="PDF"
-                                  icon={<Download style={{ width: 18, height: 18 }} />}
-                                  tone="primary"
-                                  disabled={assistants.length === 0 || totalHoursAll === 0}
-                                  onClick={downloadIvInvoicePdf}
-                                />
                                 {result && (
                                   <DocCard
                                     title="Lohnabrechnung"
-                                    subtitle="Für Lohnlauf & Ablage"
+                                    subtitle="PDF"
                                     fileType="PDF"
                                     icon={<Download style={{ width: 18, height: 18 }} />}
                                     tone="primary"
@@ -1494,20 +1477,12 @@ export function PayrollPage() {
                                   />
                                 )}
                                 <DocCard
-                                  title="Stundenzettel"
-                                  subtitle="Monatliche Stundenübersicht"
-                                  fileType="PDF"
-                                  icon={<FileText style={{ width: 18, height: 18 }} />}
-                                  disabled={hours.totalHours === 0}
-                                  onClick={() => downloadTimesheetPdf(a, hours)}
-                                />
-                                <DocCard
-                                  title="Einsatzrapport"
-                                  subtitle="Standard (PDF)"
+                                  title="Arbeits- und Einsatzrapport"
+                                  subtitle="Lohnabrechnung + Einsatzrapport (PDF)"
                                   fileType="PDF"
                                   icon={<Download style={{ width: 18, height: 18 }} />}
                                   disabled={hours.totalHours === 0}
-                                  onClick={() => downloadEinsatzrapportPdf(a, hours, false)}
+                                  onClick={() => void downloadLohnUndEinsatzrapportPdf(a, hours)}
                                 />
                               </div>
                             </div>
