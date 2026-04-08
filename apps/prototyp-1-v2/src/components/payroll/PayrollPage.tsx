@@ -957,13 +957,13 @@ export function PayrollPage() {
         >
           <div
             className={cn(
-              'relative space-y-4 p-5 sm:p-6',
+              'relative space-y-4 p-5 pb-6 sm:p-6',
               monthlyPackageReady && 'bg-success/[0.04]',
             )}
           >
-            <div className="relative flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+            <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
               <div className="min-w-0 flex-1 space-y-3">
-                <div className="flex flex-wrap items-start gap-3">
+                <div className="flex flex-wrap items-start gap-3 sm:items-center">
                   <div
                     className={cn(
                       'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border',
@@ -980,8 +980,8 @@ export function PayrollPage() {
                         Monatspaket (IV)
                       </p>
                       {monthlyPackageReady && (
-                        <Badge variant="success" className="gap-1 rounded-full border-0 pl-1.5 pr-2.5 shadow-md shadow-success/30 ring-2 ring-success/20">
-                          <Sparkles className="h-3.5 w-3.5 drop-shadow-sm" aria-hidden />
+                        <Badge variant="success" className="gap-1 rounded-full border-0 bg-success/12 px-2.5 py-0.5 text-success shadow-none">
+                          <Sparkles className="h-3.5 w-3.5 opacity-90" aria-hidden />
                           Freigeschaltet
                         </Badge>
                       )}
@@ -990,7 +990,7 @@ export function PayrollPage() {
                       Sobald alle Lohnabrechnungen bestätigt sind oder Personen ohne Stunden als «Keine Arbeit» markiert wurden,
                       können Sie hier das komplette Paket für die IV erzeugen: Deckblatt plus alle relevanten PDFs.
                     </p>
-                    <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
                       <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Status</span>
                       {assistantsWithHoursList.length > 0 && (
                         <Badge variant="secondary" className="rounded-full px-2.5 py-0.5 font-mono text-xs tabular-nums shadow-sm">
@@ -1018,10 +1018,12 @@ export function PayrollPage() {
                 onClick={() => void downloadMonthlyPackagePdf()}
                 disabled={!monthlyPackageReady}
                 className={cn(
-                  'inline-flex shrink-0 items-center gap-2 rounded-xl px-5 py-3 text-sm font-extrabold transition-colors sm:self-center',
+                  'inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-xl border-0 px-5 py-3 text-sm font-extrabold transition-colors',
+                  'outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+                  'sm:w-auto',
                   monthlyPackageReady
-                    ? 'cursor-pointer bg-primary text-primary-foreground shadow-md hover:bg-primary/90'
-                    : 'cursor-not-allowed bg-muted/90 text-muted-foreground shadow-inner',
+                    ? 'cursor-pointer bg-primary text-primary-foreground shadow-sm hover:bg-primary/90 active:bg-primary/95'
+                    : 'cursor-not-allowed bg-muted text-muted-foreground shadow-none',
                 )}
                 title={monthlyPackageReady ? 'Monatspaket als PDF herunterladen' : 'Noch nicht verfügbar'}
               >
