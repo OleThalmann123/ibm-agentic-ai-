@@ -1528,10 +1528,11 @@ export function PayrollPage() {
                                 <p style={{ margin: 0, fontSize: 11, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#64748b' }}>
                                   Dokumentenspeicher
                                 </p>
-                                <p style={{ margin: '2px 0 0', fontSize: 12, color: '#94a3b8' }}>
-                                  Hier liegt deine Lohnabrechnung und der Arbeits- und Einsatzrapport, der mit zur IV gesendet wird.
-                                  Das Dokument für die IV kannst du gesondert generieren – für alle Assistenzpersonen auf einmal.
-                                  Das hier ist deine digitale Dokumentenablage.
+                                <p style={{ margin: '6px 0 0', fontSize: 13, color: '#64748b', lineHeight: 1.45 }}>
+                                  Hier werden pro Assistenzperson die <span style={{ fontWeight: 800, color: '#334155' }}>Lohnabrechnung</span> und der
+                                  <span style={{ fontWeight: 800, color: '#334155' }}> Arbeits- und Einsatzrapport</span> gespeichert.
+                                  Das monatliche <span style={{ fontWeight: 800, color: '#334155' }}>Dokumentenpaket für die IV</span> kannst du separat generieren.
+                                  Sieh diesen Reiter als deine persönliche digitale Dokumentenablage pro Assistenzperson.
                                 </p>
                               </div>
                               <div style={{ display: 'flex', gap: 8 }}>
