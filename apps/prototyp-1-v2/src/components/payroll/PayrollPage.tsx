@@ -305,7 +305,7 @@ export function PayrollPage() {
   }, 0);
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto' }}>
+    <div style={{ maxWidth: 1120, margin: '0 auto' }}>
       {/* ── HERO HEADER ── */}
       <div style={{
         background: 'linear-gradient(135deg, #1e293b 0%, #334155 50%, #475569 100%)',
@@ -718,7 +718,12 @@ export function PayrollPage() {
                           )}
 
                           {/* Navigation buttons */}
-                          <div style={{ display: 'flex', gap: 8 }}>
+                          <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                            gap: 10,
+                            alignItems: 'stretch',
+                          }}>
                             {result && (
                               <ActionButton
                                 onClick={() => setFlowStep('abrechnung')}
@@ -826,7 +831,13 @@ export function PayrollPage() {
                               </div>
 
                               {/* Action buttons */}
-                              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                              <div style={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                                gap: 10,
+                                marginBottom: 12,
+                                alignItems: 'stretch',
+                              }}>
                                 <ActionButton
                                   onClick={() => downloadPayslipPdf(a, result, hours)}
                                   icon={<Download style={{ width: 15, height: 15 }} />}
@@ -993,18 +1004,72 @@ function ActionButton({ onClick, icon, label, variant, disabled }: {
       onClick={onClick}
       disabled={disabled}
       style={{
-        display: 'flex', alignItems: 'center', gap: 6,
-        padding: '10px 16px', borderRadius: 10,
+        width: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 10,
+        padding: '12px 14px',
+        borderRadius: 14,
         border: isPrimary ? 'none' : '1px solid #e2e8f0',
-        background: isPrimary ? 'linear-gradient(135deg, #3b82f6, #2563eb)' : '#fff',
+        background: isPrimary ? 'linear-gradient(135deg, #3b82f6, #2563eb)' : '#f8fafc',
         color: isPrimary ? '#fff' : '#475569',
         fontSize: 13, fontWeight: 600, cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.4 : 1,
         transition: 'all 0.2s',
-        whiteSpace: 'nowrap',
+        boxShadow: isPrimary ? '0 6px 18px rgba(37, 99, 235, 0.22)' : '0 1px 2px rgba(15, 23, 42, 0.06)',
+      }}
+      onMouseEnter={(e) => {
+        if (disabled) return;
+        e.currentTarget.style.transform = 'translateY(-1px)';
+        e.currentTarget.style.boxShadow = isPrimary
+          ? '0 10px 24px rgba(37, 99, 235, 0.28)'
+          : '0 8px 22px rgba(15, 23, 42, 0.08)';
+        if (!isPrimary) e.currentTarget.style.background = '#fff';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = 'translateY(0)';
+        e.currentTarget.style.boxShadow = isPrimary
+          ? '0 6px 18px rgba(37, 99, 235, 0.22)'
+          : '0 1px 2px rgba(15, 23, 42, 0.06)';
+        if (!isPrimary) e.currentTarget.style.background = '#f8fafc';
       }}
     >
-      {icon} {label}
+      <span style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+        <span style={{
+          width: 34,
+          height: 34,
+          borderRadius: 10,
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: isPrimary ? 'rgba(255,255,255,0.18)' : '#eef2ff',
+          color: isPrimary ? '#fff' : '#1d4ed8',
+          flexShrink: 0,
+        }}>
+          {icon}
+        </span>
+        <span style={{
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}>
+          {label}
+        </span>
+      </span>
+      <span style={{
+        width: 28,
+        height: 28,
+        borderRadius: 10,
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: isPrimary ? 'rgba(255,255,255,0.14)' : '#eef2ff',
+        color: isPrimary ? 'rgba(255,255,255,0.95)' : '#1d4ed8',
+        flexShrink: 0,
+      }}>
+        <ArrowRight style={{ width: 14, height: 14 }} />
+      </span>
     </button>
   );
 }
