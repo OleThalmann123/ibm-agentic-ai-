@@ -1577,22 +1577,12 @@ export function PayrollPage() {
                                 gap: 12,
                                 alignItems: 'stretch',
                               }}>
-                                <DocCard
-                                  title="IV-Dokument (alle Assistenzpersonen)"
-                                  subtitle="Einmal generieren (nur wenn alle bestätigt sind)"
-                                  fileType="PDF"
-                                  icon={<Download style={{ width: 18, height: 18 }} />}
-                                  tone="primary"
-                                  disabled={!canGenerateMonthlyPackage()}
-                                  onClick={() => void downloadMonthlyPackagePdf()}
-                                />
                                 {result && (
                                   <DocCard
                                     title="Lohnabrechnung"
                                     subtitle="PDF"
                                     fileType="PDF"
                                     icon={<Download style={{ width: 18, height: 18 }} />}
-                                    tone="primary"
                                     onClick={() => downloadPayslipPdf(a, result, hours)}
                                   />
                                 )}
@@ -1796,14 +1786,14 @@ function DocCard({
       style={{
         width: '100%',
         borderRadius: 16,
-        border: isPrimary ? '1px solid rgba(59, 130, 246, 0.35)' : '1px solid #e2e8f0',
-        background: isPrimary ? 'linear-gradient(135deg, rgba(59,130,246,0.16), rgba(37,99,235,0.08))' : '#fff',
+        border: isPrimary ? '1px solid rgba(59, 130, 246, 0.28)' : '1px solid #e2e8f0',
+        background: '#fff',
         padding: 14,
         cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.45 : 1,
         textAlign: 'left',
         transition: 'transform 0.18s, box-shadow 0.18s, background 0.18s',
-        boxShadow: isPrimary ? '0 10px 28px rgba(37, 99, 235, 0.12)' : '0 1px 2px rgba(15, 23, 42, 0.06)',
+        boxShadow: '0 1px 2px rgba(15, 23, 42, 0.06)',
         display: 'flex',
         flexDirection: 'column',
         gap: 12,
@@ -1812,17 +1802,13 @@ function DocCard({
       onMouseEnter={(e) => {
         if (disabled) return;
         e.currentTarget.style.transform = 'translateY(-2px)';
-        e.currentTarget.style.boxShadow = isPrimary
-          ? '0 16px 34px rgba(37, 99, 235, 0.18)'
-          : '0 14px 30px rgba(15, 23, 42, 0.10)';
-        if (!isPrimary) e.currentTarget.style.background = '#f8fafc';
+        e.currentTarget.style.boxShadow = '0 14px 30px rgba(15, 23, 42, 0.10)';
+        e.currentTarget.style.background = '#f8fafc';
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.transform = 'translateY(0)';
-        e.currentTarget.style.boxShadow = isPrimary
-          ? '0 10px 28px rgba(37, 99, 235, 0.12)'
-          : '0 1px 2px rgba(15, 23, 42, 0.06)';
-        if (!isPrimary) e.currentTarget.style.background = '#fff';
+        e.currentTarget.style.boxShadow = '0 1px 2px rgba(15, 23, 42, 0.06)';
+        e.currentTarget.style.background = '#fff';
       }}
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
@@ -1831,7 +1817,7 @@ function DocCard({
             width: 44,
             height: 44,
             borderRadius: 14,
-            background: isPrimary ? 'rgba(59,130,246,0.18)' : '#f1f5f9',
+            background: isPrimary ? 'rgba(59,130,246,0.10)' : '#f1f5f9',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -1880,7 +1866,7 @@ function DocCard({
           width: 32,
           height: 32,
           borderRadius: 12,
-          background: isPrimary ? 'rgba(37,99,235,0.12)' : '#eef2ff',
+          background: '#eef2ff',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
