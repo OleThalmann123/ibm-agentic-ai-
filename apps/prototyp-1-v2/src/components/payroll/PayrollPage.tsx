@@ -556,7 +556,7 @@ export function PayrollPage() {
       const url = URL.createObjectURL(blob);
       const aEl = document.createElement('a');
       aEl.href = url;
-      aEl.download = buildPdfName(currentMonth, 'Dokumentenspeicher');
+      aEl.download = buildPdfName(currentMonth, `Rechnung_Assistenzbeitrag_${insuredName}`);
       document.body.appendChild(aEl);
       aEl.click();
       aEl.remove();

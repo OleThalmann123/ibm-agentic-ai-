@@ -184,23 +184,6 @@ export function generateTimesheetPdf(data: TimesheetPdfData): jsPDF {
   }
   doc.text(`Einträge: ${data.entries.length}`, LM + W - 5, y + 7, { align: 'right' });
 
-  // Signature lines
-  y += 30;
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'normal');
-  doc.setDrawColor(0);
-  
-  doc.text('Unterschrift Arbeitgebender:', LM, y);
-  doc.line(LM, y + 15, LM + boxW, y + 15);
-  doc.setFontSize(7);
-  doc.text('Datum / Unterschrift', LM, y + 19);
-
-  doc.setFontSize(9);
-  doc.text('Unterschrift Arbeitnehmender:', lm2, y);
-  doc.line(lm2, y + 15, lm2 + boxW, y + 15);
-  doc.setFontSize(7);
-  doc.text('Datum / Unterschrift', lm2, y + 19);
-
   // Footer
   doc.setFontSize(7);
   doc.setTextColor(128);
