@@ -236,6 +236,13 @@ export function PayrollPage() {
     };
   };
 
+  const formatPlaceDateLabel = () => {
+    const cd = employer?.contact_data as any;
+    const place = (cd?.city || '').trim();
+    const date = new Date().toLocaleDateString('de-CH');
+    return place ? `${place}, ${date}` : date;
+  };
+
   // PDF handlers
   const downloadPayslipPdf = () => {
     if (!selectedAssistant || !selectedResult || !selectedHours) return;
@@ -271,7 +278,7 @@ export function PayrollPage() {
 
     const doc = generatePayslipPdf({
       monthYearLabel: monthLabel(currentMonth),
-      placeDateLabel: '[Ort, Datum]',
+      placeDateLabel: formatPlaceDateLabel(),
       employer: getEmployerAddress(),
       employee: { ...getEmployeeAddress(selectedAssistant), ahvNumber: cd?.ahv_number || '' },
       grundlagen: {
