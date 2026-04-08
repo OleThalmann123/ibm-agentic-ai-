@@ -109,6 +109,29 @@ function monthLabel(key: string): string {
   return `${MONTH_NAMES[parseInt(m, 10) - 1]} ${y}`;
 }
 
+function sanitizeFilenamePart(input: string): string {
+  return (input || '')
+    .trim()
+    .replace(/\s+/g, '_')
+    .replace(/[\/\\?%*:|"<>]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/_+/g, '_')
+    .replace(/^[-_]+|[-_]+$/g, '');
+}
+
+function buildPersonPdfName(monthKeyStr: string, docType: string, personName: string): string {
+  const datePart = sanitizeFilenamePart(monthKeyStr);
+  const typePart = sanitizeFilenamePart(docType);
+  const namePart = sanitizeFilenamePart(personName);
+  return `${datePart}_${typePart}_${namePart}.pdf`;
+}
+
+function buildPdfName(monthKeyStr: string, docType: string): string {
+  const datePart = sanitizeFilenamePart(monthKeyStr);
+  const typePart = sanitizeFilenamePart(docType);
+  return `${datePart}_${typePart}.pdf`;
+}
+
 // ─── Flow Steps (3-step linear flow) ───
 type FlowStep = 'stunden' | 'abrechnung' | 'dokumente';
 
@@ -400,7 +423,7 @@ export function PayrollPage() {
       totalCHF,
     });
 
-    doc.save(`IV_Rechnung_Assistenzbeitrag_${currentMonth}.pdf`);
+    doc.save(buildPdfName(currentMonth, 'IV-Rechnung_Deckblatt'));
     toast.success('IV-Rechnung (Deckblatt) heruntergeladen');
   };
 
@@ -578,7 +601,7 @@ export function PayrollPage() {
       const url = URL.createObjectURL(blob);
       const aEl = document.createElement('a');
       aEl.href = url;
-      aEl.download = `Dokumentenspeicher_${currentMonth}.pdf`;
+      aEl.download = buildPdfName(currentMonth, 'Dokumentenspeicher');
       document.body.appendChild(aEl);
       aEl.click();
       aEl.remove();
@@ -645,7 +668,7 @@ export function PayrollPage() {
       result: payslip,
     });
 
-    doc.save(`Lohnabrechnung_${assistant.name.replace(/\s/g, '_')}_${currentMonth}.pdf`);
+    doc.save(buildPersonPdfName(currentMonth, 'Lohnabrechnung', assistant.name));
     toast.success('Lohnabrechnung PDF heruntergeladen');
   };
 
@@ -659,7 +682,7 @@ export function PayrollPage() {
       nightHours: hours.nightHours,
     });
 
-    doc.save(`Stundenzettel_${assistant.name.replace(/\s/g, '_')}_${currentMonth}.pdf`);
+    doc.save(buildPersonPdfName(currentMonth, 'Stundenzettel', assistant.name));
     toast.success('Stundenzettel PDF heruntergeladen');
   };
 
@@ -720,7 +743,7 @@ export function PayrollPage() {
       totalHours: Number(hours.totalHours.toFixed(2)),
       totalNights: Math.round(hours.nightHours),
     });
-    doc.save(`Einsatzrapport_${assistant.name.replace(/\\s/g, '_')}_${currentMonth}.pdf`);
+    doc.save(buildPersonPdfName(currentMonth, includeActivities ? 'Einsatzrapport_mit_Taetigkeiten' : 'Einsatzrapport', assistant.name));
     toast.success('Einsatzrapport PDF heruntergeladen');
   };
 
