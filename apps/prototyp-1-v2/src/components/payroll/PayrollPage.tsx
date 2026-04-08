@@ -1302,12 +1302,35 @@ export function PayrollPage() {
                             alignItems: 'stretch',
                           }}>
                             {result && (
-                              <ActionButton
-                                onClick={() => setFlowStep('abrechnung')}
-                                icon={<ArrowRight style={{ width: 15, height: 15 }} />}
-                                label="Weiter zur Lohnabrechnung"
-                                variant="primary"
-                              />
+                              <div style={{ display: 'grid', gap: 10 }}>
+                                <div style={{
+                                  display: 'flex',
+                                  gap: 10,
+                                  alignItems: 'flex-start',
+                                  padding: '12px 14px',
+                                  borderRadius: 12,
+                                  border: '1px solid #e2e8f0',
+                                  background: '#f8fafc',
+                                }}>
+                                  <Clock style={{ width: 18, height: 18, color: '#0f172a', flexShrink: 0, marginTop: 1 }} />
+                                  <div>
+                                    <p style={{ margin: 0, fontSize: 12, fontWeight: 800, color: '#0f172a' }}>
+                                      Bitte kurz prüfen
+                                    </p>
+                                    <p style={{ margin: '2px 0 0', fontSize: 12, color: '#64748b', lineHeight: 1.35 }}>
+                                      Prüfen Sie hier die erfassten Zeiten der Assistenzperson und korrigieren Sie sie bei Bedarf.
+                                      Erst danach wird die Lohnabrechnung berechnet.
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <ActionButton
+                                  onClick={() => setFlowStep('abrechnung')}
+                                  icon={<ArrowRight style={{ width: 15, height: 15 }} />}
+                                  label="Weiter zur Lohnabrechnung"
+                                  variant="primary"
+                                />
+                              </div>
                             )}
                           </div>
                         </div>
