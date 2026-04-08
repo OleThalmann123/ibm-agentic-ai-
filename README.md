@@ -106,7 +106,7 @@ Einzelne Arbeitszeiteintraege. Werden in der Regel durch die Assistenzperson sel
 | `date` | date | Arbeitstag |
 | `start_time` | time | Beginn der Schicht (HH:MM) |
 | `end_time` | time | Ende der Schicht (HH:MM) |
-| `is_night` | boolean | Nachtdienst-Markierung |
+| `is_night` | boolean | Nachtdienst-Markierung (MVP 1: wird nur angezeigt/mitexportiert, aber **nicht** als Nachtzuschlag berechnet; Nachtzuschlaege sind out of scope) |
 | `entered_by` | text (enum) | `assistant` (Selbsterfassung), `admin` (durch Arbeitgeber) oder `system` (automatisch aus Wochenplan) |
 | `confirmed` | boolean | Bestaetigungsstatus |
 | `hours_decimal` | numeric (nullable) | Berechnete Stundenzahl als Dezimalwert |
@@ -134,7 +134,7 @@ Berechnete Lohnabrechnungsdaten pro Assistenzperson und Monat.
 | `assistant_id` | uuid (FK) | Referenz auf `assistant.id` |
 | `month` | text | Abrechnungsmonat (Format: YYYY-MM) |
 | `total_hours` | numeric | Gesamtstunden des Monats |
-| `total_nights` | numeric | Davon Nachtstunden |
+| `total_nights` | numeric | Davon Nachtstunden (MVP 1: nur Reporting/Export, keine Nachtzuschlaege) |
 | `base_pay` | numeric | Grundlohn (Stundenlohn x Stunden) |
 | `vacation_pay` | numeric | Ferienzuschlag in CHF |
 | `gross_pay` | numeric | Bruttolohn (base_pay + vacation_pay) |
