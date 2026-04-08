@@ -1155,12 +1155,6 @@ export function PayrollPage() {
                                 alignItems: 'stretch',
                               }}>
                                 <ActionButton
-                                  onClick={() => downloadPayslipPdf(a, result, hours)}
-                                  icon={<Download style={{ width: 15, height: 15 }} />}
-                                  label="Lohnabrechnung PDF"
-                                  variant="primary"
-                                />
-                                <ActionButton
                                   onClick={() => setFlowStep('stunden')}
                                   icon={<ArrowLeft style={{ width: 15, height: 15 }} />}
                                   label="Zurück zu den Stunden"
@@ -1170,23 +1164,47 @@ export function PayrollPage() {
 
                               {/* Confirm */}
                               {!confirmed ? (
-                                <button
-                                  onClick={() => handleConfirm(a.id, a.name)}
-                                  style={{
-                                    width: '100%', padding: '14px 20px', borderRadius: 12,
-                                    border: 'none', cursor: 'pointer',
-                                    background: 'linear-gradient(135deg, #059669, #047857)',
-                                    color: '#fff', fontWeight: 700, fontSize: 14,
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                                    transition: 'all 0.2s',
-                                    boxShadow: '0 2px 8px rgba(5, 150, 105, 0.3)',
-                                  }}
-                                  onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(5, 150, 105, 0.4)'; }}
-                                  onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(5, 150, 105, 0.3)'; }}
-                                >
-                                  <ShieldCheck style={{ width: 18, height: 18 }} />
-                                  Abrechnung bestätigen & freigeben
-                                </button>
+                                <div>
+                                  <div style={{
+                                    display: 'flex',
+                                    gap: 10,
+                                    alignItems: 'flex-start',
+                                    padding: '12px 14px',
+                                    borderRadius: 12,
+                                    border: '1px solid #e2e8f0',
+                                    background: '#f8fafc',
+                                    marginBottom: 10,
+                                  }}>
+                                    <ShieldCheck style={{ width: 18, height: 18, color: '#0f172a', flexShrink: 0, marginTop: 1 }} />
+                                    <div>
+                                      <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#0f172a' }}>
+                                        Hinweis
+                                      </p>
+                                      <p style={{ margin: '2px 0 0', fontSize: 12, color: '#64748b', lineHeight: 1.35 }}>
+                                        Wenn Sie bestätigen, erscheint die Lohnabrechnung automatisch im Dashboard und die relevanten Dokumente für diese Assistenzperson werden generiert.
+                                        Anschliessend gelangen Sie automatisch zu <span style={{ fontWeight: 700, color: '#334155' }}>„Dokumente (IV)“</span>.
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <button
+                                    onClick={() => handleConfirm(a.id, a.name)}
+                                    style={{
+                                      width: '100%', padding: '14px 20px', borderRadius: 12,
+                                      border: 'none', cursor: 'pointer',
+                                      background: 'linear-gradient(135deg, #059669, #047857)',
+                                      color: '#fff', fontWeight: 700, fontSize: 14,
+                                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                                      transition: 'all 0.2s',
+                                      boxShadow: '0 2px 8px rgba(5, 150, 105, 0.3)',
+                                    }}
+                                    onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(5, 150, 105, 0.4)'; }}
+                                    onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(5, 150, 105, 0.3)'; }}
+                                  >
+                                    <ShieldCheck style={{ width: 18, height: 18 }} />
+                                    Abrechnung bestätigen & freigeben
+                                  </button>
+                                </div>
                               ) : (
                                 <div style={{
                                   display: 'flex', alignItems: 'center', gap: 12,
