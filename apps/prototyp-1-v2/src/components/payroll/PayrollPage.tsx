@@ -55,6 +55,30 @@ function activityLabelFromCode(code?: string | null): string {
   return ACTIVITY_LABELS[c] || c;
 }
 
+function formatActivityForInlineDisplay(code?: string | null): string {
+  const raw = (code || '').trim();
+  if (!raw) return 'Ohne Kategorie';
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return raw;
+
+  // Stored: 2..9 map to display 1..8
+  if (n >= 2 && n <= 9) {
+    const display = n - 1;
+    const label = ACTIVITY_LABELS[String(n)];
+    const clean = label ? label.replace(/^\d+\)\s*/, '') : '';
+    return clean ? `${display} · ${clean}` : String(display);
+  }
+
+  // Allow already-display numbering 1..8
+  if (n >= 1 && n <= 8) {
+    const label = Object.entries(ACTIVITY_LABELS).find(([, v]) => v.startsWith(`${n})`))?.[1];
+    const clean = label ? label.replace(/^\d+\)\s*/, '') : '';
+    return clean ? `${n} · ${clean}` : String(n);
+  }
+
+  return raw;
+}
+
 function parseHours(start: string, end: string): number {
   const toMin = (t: string) => {
     const [hhRaw, mmRaw] = (t || '').split(':');
@@ -943,7 +967,7 @@ export function PayrollPage() {
                                               <p style={{ fontSize: 13, fontWeight: 500, color: '#1e293b', margin: 0 }}>{e.start_time} – {e.end_time}</p>
                                             )}
                                             <p style={{ fontSize: 11, color: '#94a3b8', margin: '1px 0 0' }}>
-                                              {e.category || 'Ohne Kategorie'}{e.is_night && ' 🌙'}
+                                              {formatActivityForInlineDisplay(e.category)}{e.is_night && ' 🌙'}
                                             </p>
                                           </div>
                                         </div>
