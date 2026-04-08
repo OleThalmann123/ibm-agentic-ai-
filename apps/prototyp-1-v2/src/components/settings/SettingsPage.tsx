@@ -220,6 +220,7 @@ export function SettingsPage() {
     iconBg = 'bg-primary/10',
     title,
     description,
+    badge,
     children,
   }: {
     icon: typeof User;
@@ -227,6 +228,7 @@ export function SettingsPage() {
     iconBg?: string;
     title: string;
     description?: string;
+    badge?: string;
     children: React.ReactNode;
   }) => (
     <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
@@ -236,7 +238,14 @@ export function SettingsPage() {
             <Icon className={`w-4.5 h-4.5 ${iconColor}`} />
           </div>
           <div>
-            <h2 className="font-semibold text-sm">{title}</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="font-semibold text-sm">{title}</h2>
+              {badge && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide border bg-background/60 text-muted-foreground">
+                  {badge}
+                </span>
+              )}
+            </div>
             {description && <p className="text-xs text-muted-foreground mt-0.5">{description}</p>}
           </div>
         </div>
@@ -380,6 +389,7 @@ export function SettingsPage() {
             iconBg="bg-red-500/10"
             title="Entwickler-Optionen"
             description="Onboarding erneut durchlaufen (löscht aktuelle Daten)"
+            badge="Demo only"
           >
             <button
               onClick={resetOnboarding}
