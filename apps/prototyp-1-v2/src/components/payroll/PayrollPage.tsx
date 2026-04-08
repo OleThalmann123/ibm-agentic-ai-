@@ -966,8 +966,26 @@ export function PayrollPage() {
                                 ))}
                               </div>
 
-                              {/* Navigation */}
-                              <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
+                              {/* Action buttons */}
+                              <div style={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                                gap: 10,
+                                marginBottom: 12,
+                                alignItems: 'stretch',
+                              }}>
+                                <ActionButton
+                                  onClick={() => downloadPayslipPdf(a, result, hours)}
+                                  icon={<Download style={{ width: 15, height: 15 }} />}
+                                  label="Lohnabrechnung PDF"
+                                  variant="primary"
+                                />
+                                <ActionButton
+                                  onClick={() => downloadTimesheetPdf(a, hours)}
+                                  icon={<FileText style={{ width: 15, height: 15 }} />}
+                                  label="Stundenzettel PDF"
+                                  variant="outline"
+                                />
                                 <ActionButton
                                   onClick={() => setFlowStep('stunden')}
                                   icon={<ArrowLeft style={{ width: 15, height: 15 }} />}

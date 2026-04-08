@@ -27,7 +27,6 @@ import { readFileContent } from '@asklepios/backend';
 import { runDocumentPipeline } from '@asklepios/backend';
 import { ContractExtractionResult, IDPField, ConfidenceLevel, BinaryStatus } from '@asklepios/backend';
 import type { PipelineTrace } from '@asklepios/backend';
-
 const REQUIRED_FIELDS = ['firstName', 'lastName', 'birthDate', 'ahvNumber', 'contractStart', 'hoursPerWeek', 'hourlyRate'];
 
 const normalizeCountryToIso2 = (raw: string) => {

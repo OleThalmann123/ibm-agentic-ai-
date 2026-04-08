@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "installCommand": "npm install",
+  "buildCommand": "npm run build --workspace=apps/prototyp-1-v2",
+  "outputDirectory": "apps/prototyp-1-v2/dist",
+  "rewrites": [
+    { "source": "/assets/(.*)", "destination": "/assets/$1" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
