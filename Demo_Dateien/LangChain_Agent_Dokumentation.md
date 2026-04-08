@@ -78,7 +78,7 @@ function getModel(apiKey: string, modelName: string = 'openrouter/auto'): ChatOp
 #### `apiKey`
 Der OpenRouter API-Key aus der `.env`-Datei:
 ```
-VITE_OPENROUTER_API_KEY=***REMOVED***
+VITE_OPENROUTER_API_KEY=<DEIN_OPENROUTER_KEY>
 ```
 Wird über `import.meta.env.VITE_OPENROUTER_API_KEY` gelesen. Das `VITE_`-Prefix sorgt dafür, dass Vite die Variable im Browser verfügbar macht.
 
