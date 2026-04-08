@@ -300,7 +300,7 @@ export function PayrollPage() {
 
     const nbuRateEmployee = cd?.nbu_employee ? (parseFloat(cd.nbu_employee) / 100) : undefined;
     const payslip = calculatePayslip({
-      canton,
+      canton: kanton,
       accountingMethod,
       hourlyRate: stundenlohn,
       hours: hours.totalHours,
