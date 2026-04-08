@@ -1438,12 +1438,6 @@ export function PayrollPage() {
                                 marginBottom: 12,
                                 alignItems: 'stretch',
                               }}>
-                                <ActionButton
-                                  onClick={() => setFlowStep('stunden')}
-                                  icon={<ArrowLeft style={{ width: 15, height: 15 }} />}
-                                  label="Zurück zu den Stunden"
-                                  variant="outline"
-                                />
                               </div>
 
                               {/* Confirm */}
