@@ -1403,7 +1403,7 @@ export function PayrollPage() {
                             hint={
                               result ? (
                                 <>
-                                  Hier sehen Sie die Berechnung. Mit Bestätigung werden die PDFs erzeugt und Sie gelangen zum Schritt «Dokumente».
+                                  Hier sehen Sie die Berechnung. Mit Bestätigung wird die Lohnabrechnung als PDF erzeugt und dem Arbeitnehmer zugestellt. Zudem wird der Arbeits- und Einsatzrapport erstellt. Anschliessend gelangen Sie zum Schritt «Dokumente».
                                 </>
                               ) : (
                                 <>Ohne erfasste Stunden ist keine Lohnabrechnung möglich.</>
