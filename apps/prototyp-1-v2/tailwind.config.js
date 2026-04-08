@@ -92,11 +92,22 @@ export default {
           "0%, 100%": { opacity: "1" },
           "50%": { opacity: "0.6" },
         },
+        "glow-asklepios": {
+          "0%, 100%": {
+            boxShadow:
+              "0 0 22px -6px hsl(var(--success) / 0.35), 0 0 44px -14px hsl(var(--primary) / 0.22), 0 1px 3px rgb(15 23 42 / 0.06)",
+          },
+          "50%": {
+            boxShadow:
+              "0 0 34px 4px hsl(var(--success) / 0.5), 0 0 52px -6px hsl(var(--primary) / 0.38), 0 1px 3px rgb(15 23 42 / 0.06)",
+          },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         "pulse-slow": "pulse-slow 2s ease-in-out infinite",
+        "glow-asklepios": "glow-asklepios 2.75s ease-in-out infinite",
       },
     },
   },

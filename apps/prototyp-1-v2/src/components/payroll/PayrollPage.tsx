@@ -11,10 +11,12 @@ import { PDFDocument } from 'pdf-lib';
 import {
   Calculator, FileText, ChevronLeft, ChevronRight, Users,
   ShieldCheck, Clock, Eye, Download, Pencil, Save, X,
-  ChevronDown, TrendingUp, Banknote, ArrowRight, ArrowLeft
+  ChevronDown, TrendingUp, Banknote, ArrowRight, ArrowLeft, Sparkles,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Assistant } from '@asklepios/backend';
+import { Badge, badgeVariants } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 
 // ─── Types ───
 interface MonthlyHours {
@@ -755,7 +757,6 @@ export function PayrollPage() {
   // Stats
   const totalHoursAll = Object.values(timeEntries).reduce((s, h) => s + h.totalHours, 0);
   const confirmedCount = assistants.filter(a => confirmedMap[`${a.id}-${currentMonth}`]).length;
-  const noWorkCount = assistants.filter(a => (timeEntries[a.id]?.totalHours || 0) <= 0 && noWorkMap[a.id]).length;
 
   const payrollResults = useMemo(() => {
     const results: Record<string, PayrollResult | null> = {};
@@ -773,6 +774,20 @@ export function PayrollPage() {
   const totalNettoAll = assistants.reduce((s, a) => {
     return s + (payrollResults[a.id]?.nettolohn.perYear || 0);
   }, 0);
+
+  const assistantsWithHoursList = assistants.filter(
+    (a) => (timeEntries[a.id]?.totalHours || 0) > 0,
+  );
+  const assistantsWithoutHoursList = assistants.filter(
+    (a) => (timeEntries[a.id]?.totalHours || 0) <= 0,
+  );
+  const confirmedAmongWithHours = assistantsWithHoursList.filter(
+    (a) => confirmedMap[`${a.id}-${currentMonth}`],
+  ).length;
+  const noWorkAmongWithoutHours = assistantsWithoutHoursList.filter(
+    (a) => noWorkMap[a.id],
+  ).length;
+  const monthlyPackageReady = canGenerateMonthlyPackage();
 
   return (
     <div style={{ maxWidth: 1120, margin: '0 auto' }}>
@@ -869,54 +884,74 @@ export function PayrollPage() {
 
       {/* ── IV Monatsdokument (global) ── */}
       {!loading && (
-        <div style={{
-          background: '#fff',
-          borderRadius: 16,
-          border: '1px solid #e2e8f0',
-          padding: '14px 16px',
-          marginBottom: 14,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 14,
-        }}>
-          <div style={{ minWidth: 0 }}>
-            <p style={{ margin: 0, fontSize: 12, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#64748b' }}>
-              Monatspaket (IV)
-            </p>
-            <p style={{ margin: '4px 0 0', fontSize: 13, color: '#64748b', lineHeight: 1.45 }}>
-              Sobald alle Lohnabrechnungen bestätigt sind oder Personen ohne Stunden als «Keine Arbeit» markiert wurden,
-              können Sie hier das komplette Paket für die IV erzeugen: Deckblatt plus alle relevanten PDFs.
-            </p>
-            <p style={{ margin: '6px 0 0', fontSize: 11, color: '#94a3b8' }}>
-              Status: Bestätigt {confirmedCount}/{assistants.filter(a => (timeEntries[a.id]?.totalHours || 0) > 0).length} · Keine Arbeit {noWorkCount}/{assistants.filter(a => (timeEntries[a.id]?.totalHours || 0) <= 0).length}
-            </p>
+        <div
+          className={cn(
+            'relative mb-3.5 overflow-hidden rounded-2xl border bg-card p-4 transition-[border-color,box-shadow] duration-500',
+            monthlyPackageReady
+              ? 'border-success/40 animate-glow-asklepios shadow-sm'
+              : 'border-border shadow-sm',
+          )}
+        >
+          {monthlyPackageReady && (
+            <div
+              className="pointer-events-none absolute inset-0 bg-gradient-to-br from-success/[0.07] via-transparent to-primary/[0.12]"
+              aria-hidden
+            />
+          )}
+          <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0 flex-1 space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-base font-extrabold uppercase tracking-wide text-muted-foreground">
+                  Monatspaket (IV)
+                </p>
+                {monthlyPackageReady && (
+                  <Badge variant="success" className="gap-1 rounded-full border-0 pl-1.5 pr-2.5 shadow-sm">
+                    <Sparkles className="h-3.5 w-3.5" aria-hidden />
+                    Freigeschaltet
+                  </Badge>
+                )}
+              </div>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                Sobald alle Lohnabrechnungen bestätigt sind oder Personen ohne Stunden als «Keine Arbeit» markiert wurden,
+                können Sie hier das komplette Paket für die IV erzeugen: Deckblatt plus alle relevanten PDFs.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold text-muted-foreground">Status</span>
+                {assistantsWithHoursList.length > 0 && (
+                  <Badge variant="secondary" className="rounded-full font-mono tabular-nums">
+                    Bestätigt {confirmedAmongWithHours}/{assistantsWithHoursList.length}
+                  </Badge>
+                )}
+                {assistantsWithoutHoursList.length > 0 && (
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      'rounded-full border-dashed font-mono tabular-nums',
+                      noWorkAmongWithoutHours >= assistantsWithoutHoursList.length &&
+                        'border-success/50 bg-success/10 text-success',
+                    )}
+                  >
+                    Keine Arbeit {noWorkAmongWithoutHours}/{assistantsWithoutHoursList.length}
+                  </Badge>
+                )}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void downloadMonthlyPackagePdf()}
+              disabled={!monthlyPackageReady}
+              className={cn(
+                'inline-flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-extrabold transition-all',
+                monthlyPackageReady
+                  ? 'cursor-pointer bg-gradient-to-br from-primary to-primary/90 text-primary-foreground shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/35'
+                  : 'cursor-not-allowed bg-muted text-muted-foreground',
+              )}
+              title={monthlyPackageReady ? 'Monatspaket als PDF herunterladen' : 'Noch nicht verfügbar'}
+            >
+              <Download className="h-4 w-4 shrink-0" />
+              Alles in 1 PDF
+            </button>
           </div>
-          <button
-            onClick={() => void downloadMonthlyPackagePdf()}
-            disabled={!canGenerateMonthlyPackage()}
-            style={{
-              flexShrink: 0,
-              border: 'none',
-              borderRadius: 12,
-              padding: '10px 12px',
-              cursor: canGenerateMonthlyPackage() ? 'pointer' : 'not-allowed',
-              background: canGenerateMonthlyPackage()
-                ? 'linear-gradient(135deg, #3b82f6, #2563eb)'
-                : '#e2e8f0',
-              color: canGenerateMonthlyPackage() ? '#fff' : '#64748b',
-              fontSize: 12,
-              fontWeight: 800,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 8,
-              boxShadow: canGenerateMonthlyPackage() ? '0 8px 22px rgba(37, 99, 235, 0.18)' : 'none',
-            }}
-            title={canGenerateMonthlyPackage() ? 'Monatspaket als PDF herunterladen' : 'Noch nicht verfügbar'}
-          >
-            <Download style={{ width: 16, height: 16 }} />
-            Alles in 1 PDF
-          </button>
         </div>
       )}
 
@@ -1005,17 +1040,13 @@ export function PayrollPage() {
                           ev.stopPropagation();
                           setNoWork(a.id, !noWorkMap[a.id]);
                         }}
-                        style={{
-                          border: `1px solid ${noWorkMap[a.id] ? '#a7f3d0' : '#e2e8f0'}`,
-                          background: noWorkMap[a.id] ? '#ecfdf5' : '#fff',
-                          color: noWorkMap[a.id] ? '#047857' : '#64748b',
-                          borderRadius: 999,
-                          padding: '6px 10px',
-                          fontSize: 11,
-                          fontWeight: 800,
-                          cursor: 'pointer',
-                          whiteSpace: 'nowrap',
-                        }}
+                        className={cn(
+                          badgeVariants({
+                            variant: noWorkMap[a.id] ? 'success' : 'outline',
+                          }),
+                          'cursor-pointer rounded-full px-3 py-1 text-[11px] font-bold shadow-none hover:opacity-95',
+                          !noWorkMap[a.id] && 'border-dashed text-muted-foreground hover:bg-muted/70',
+                        )}
                         title="Markieren, dass diese Person in diesem Monat nicht gearbeitet hat"
                       >
                         {noWorkMap[a.id] ? '✓ Keine Arbeit' : 'Keine Arbeit?'}
