@@ -1152,7 +1152,7 @@ export function PayrollPage() {
                           background: flowStep === 'stunden' ? '#1e293b' : '#cbd5e1',
                           color: '#fff',
                         }}>1</span>
-                        Stunden prüfen ({hours.entryCount})
+                        Stunden prüfen
                       </button>
                       <ArrowRight style={{ width: 14, height: 14, color: '#cbd5e1', margin: '0 4px', flexShrink: 0 }} />
                       <button
@@ -1207,6 +1207,11 @@ export function PayrollPage() {
                         <div>
                           <PayrollFlowStepChrome
                             title="Stunden prüfen"
+                            lead={
+                              hours.entries.length === 0
+                                ? 'Dieser Bereich zeigt die Zeiterfassung dieser Assistenzperson für den gewählten Monat. Ohne erfasste oder plausibel gesetzte Stunden gibt es keine belastbare Lohnabrechnung.'
+                                : 'Dieser Bereich fasst alle Schichten dieses Monats für diese Assistenzperson zusammen. Diese Summen sind die Grundlage für die Lohnabrechnung und die späteren Unterlagen (z. B. IV).'
+                            }
                             hint={
                               hours.entries.length === 0 ? (
                                 <>Für diesen Monat sind noch keine Zeiten erfasst. Personen ohne Einsatz können Sie in der Übersicht als «Keine Arbeit» markieren.</>
@@ -1214,10 +1219,6 @@ export function PayrollPage() {
                                 <>Prüfen Sie die erfassten Zeiten der Assistenzperson und korrigieren Sie sie bei Bedarf. Erst danach wird die Lohnabrechnung berechnet.</>
                               )
                             }
-                            onBack={() => {
-                              setExpandedId(null);
-                              setFlowStep('stunden');
-                            }}
                           />
                           {/* Quick summary row */}
                           {result && (
@@ -1649,14 +1650,17 @@ function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string
   );
 }
 
-/** Einheitlicher Kopfbereich für die drei Payroll-Schritte: Titel, Hinweistext, Zurück. */
+/** Einheitlicher Kopfbereich für die drei Payroll-Schritte: Titel, optional Einordnung, Hinweistext, optional Zurück. */
 function PayrollFlowStepChrome({
   title,
+  lead,
   hint,
   onBack,
   backLabel = 'Zurück',
 }: {
   title: string;
+  /** Kurz erklären, worum es in diesem Schritt geht (steht über dem eigentlichen Hinweis). */
+  lead?: React.ReactNode;
   hint: React.ReactNode;
   onBack?: () => void;
   backLabel?: string;
@@ -1688,6 +1692,11 @@ function PayrollFlowStepChrome({
             {title}
           </p>
           <div style={{ margin: '8px 0 0', fontSize: 14, color: '#475569', lineHeight: 1.55 }}>
+            {lead ? (
+              <p style={{ margin: '0 0 10px', fontWeight: 600, color: '#1e293b', lineHeight: 1.45 }}>
+                {lead}
+              </p>
+            ) : null}
             {hint}
           </div>
         </div>
