@@ -7,6 +7,7 @@ import {
 import { calculatePayslip, generatePayslipPdf, type PayslipAccountingMethod } from '@asklepios/backend';
 import { generateTimesheetPdf } from '@asklepios/backend';
 import { generateEinsatzrapportPdf } from '@asklepios/backend';
+import { generateIvInvoicePdf, type IvInvoiceLine } from '@asklepios/backend';
 import {
   Calculator, FileText, ChevronLeft, ChevronRight, Users,
   ShieldCheck, Clock, Eye, Download, Pencil, Save, X,
@@ -47,6 +48,12 @@ const ACTIVITY_LABELS: Record<string, string> = {
   '9': '8) Überwachung während des Tages',
   '10': 'Nachtdienst',
 };
+
+function activityLabelFromCode(code?: string | null): string {
+  const c = (code || '').trim();
+  if (!c) return 'Ohne Kategorie';
+  return ACTIVITY_LABELS[c] || c;
+}
 
 function parseHours(start: string, end: string): number {
   const toMin = (t: string) => {
@@ -274,6 +281,89 @@ export function PayrollPage() {
       street: cd?.street || '',
       plzCity: cd?.plz && cd?.city ? `${cd.plz} ${cd.city}` : (cd?.city || ''),
     };
+  };
+
+  const downloadIvInvoicePdf = () => {
+    const cd = employer?.contact_data as any;
+    const insuredName = employer?.name || `${cd?.first_name || ''} ${cd?.last_name || ''}`.trim() || '–';
+    const issuerName =
+      employer?.representation === 'guardian'
+        ? `${cd?.first_name || ''} ${cd?.last_name || ''}`.trim() || insuredName
+        : insuredName;
+
+    const invoiceIssuerEmailPhone = [
+      cd?.email || '',
+      cd?.phone || '',
+    ].filter(Boolean).join(' · ');
+
+    const rate = Number(String(employer?.iv_rate ?? 35.30).replace(',', '.')) || 35.30;
+
+    const lines: IvInvoiceLine[] = [];
+    for (const a of assistants) {
+      const hours = timeEntries[a.id];
+      if (!hours || hours.totalHours <= 0) continue;
+
+      const byCat = new Map<string, number>();
+      for (const e of hours.entries) {
+        const cat = (e.category || '').trim() || 'Ohne Kategorie';
+        byCat.set(cat, (byCat.get(cat) || 0) + (e.hours || 0));
+      }
+      for (const [cat, h] of byCat.entries()) {
+        const rounded = Number(h.toFixed(2));
+        if (rounded <= 0) continue;
+        const amount = Number((rounded * rate).toFixed(2));
+        lines.push({
+          assistantName: a.name || '—',
+          activityLabel: cat === 'Ohne Kategorie' ? cat : activityLabelFromCode(cat),
+          hours: rounded,
+          rateCHF: rate,
+          amountCHF: amount,
+        });
+      }
+    }
+
+    lines.sort((x, y) => (x.assistantName + x.activityLabel).localeCompare(y.assistantName + y.activityLabel));
+    const totalCHF = Number(lines.reduce((s, l) => s + (l.amountCHF || 0), 0).toFixed(2));
+
+    const monthParts = currentMonth.split('-').map(Number);
+    const invoiceDateLabel = new Date().toLocaleDateString('de-CH');
+    const monthLabelStr = monthLabel(currentMonth);
+
+    const doc = generateIvInvoicePdf({
+      invoiceDateLabel,
+      monthLabel: monthLabelStr,
+      insuredPerson: {
+        name: insuredName,
+        ahvNumber: cd?.insured_ahv_number || '',
+        street: cd?.affected_street || cd?.street || '',
+        plzCity: (cd?.affected_plz && cd?.affected_city)
+          ? `${cd.affected_plz} ${cd.affected_city}`
+          : (cd?.plz && cd?.city ? `${cd.plz} ${cd.city}` : ''),
+      },
+      invoiceIssuer: {
+        name: issuerName,
+        emailPhone: invoiceIssuerEmailPhone,
+        street: cd?.street || '',
+        plzCity: cd?.plz && cd?.city ? `${cd.plz} ${cd.city}` : '',
+      },
+      billing: {
+        gln: cd?.billing_gln || '',
+        referenceNumber: cd?.billing_reference_number || '',
+        iban: cd?.billing_iban || '',
+        accountHolderName: cd?.billing_account_holder_name || '',
+        accountHolderStreet: cd?.billing_account_holder_street || '',
+        accountHolderPlzCity: (cd?.billing_account_holder_plz && cd?.billing_account_holder_city)
+          ? `${cd.billing_account_holder_plz} ${cd.billing_account_holder_city}`
+          : '',
+        paymentTermsDays: Number(cd?.payment_terms_days) || 30,
+        bankName: cd?.bank_name || '',
+      },
+      lines,
+      totalCHF,
+    });
+
+    doc.save(`IV_Rechnung_Assistenzbeitrag_${currentMonth}.pdf`);
+    toast.success('IV-Rechnung (Deckblatt) heruntergeladen');
   };
 
   const formatPlaceDateLabel = () => {
@@ -1155,6 +1245,15 @@ export function PayrollPage() {
                                 gap: 12,
                                 alignItems: 'stretch',
                               }}>
+                                <DocCard
+                                  title="IV-Rechnung (Deckblatt)"
+                                  subtitle="Monatliche Rechnung über alle Assistenzpersonen"
+                                  fileType="PDF"
+                                  icon={<Download style={{ width: 18, height: 18 }} />}
+                                  tone="primary"
+                                  disabled={assistants.length === 0 || totalHoursAll === 0}
+                                  onClick={downloadIvInvoicePdf}
+                                />
                                 {result && (
                                   <DocCard
                                     title="Lohnabrechnung"

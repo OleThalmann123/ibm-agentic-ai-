@@ -38,18 +38,40 @@ function getCantonFromPLZ(plz: string): { code: string; name: string } | null {
 
 export function SettingsPage() {
   const { user, employer, employerAccess, refreshProfile } = useAuth();
-  const [employerName, setEmployerName] = useState(employer?.name ?? '');
+  const [insuredName, setInsuredName] = useState(employer?.name ?? '');
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
 
-  // Contact data fields
+  // Stored in employer.contact_data
   const contact = (employer?.contact_data as Record<string, string>) || {};
-  const [firstName, setFirstName] = useState(contact.first_name ?? '');
-  const [lastName, setLastName] = useState(contact.last_name ?? '');
-  const [street, setStreet] = useState(contact.street ?? '');
-  const [plz, setPlz] = useState(contact.plz ?? '');
-  const [city, setCity] = useState(contact.city ?? '');
+  // Rechnungssteller / Kontaktperson (kann von betroffener Person abweichen)
+  const [issuerFirstName, setIssuerFirstName] = useState(contact.first_name ?? '');
+  const [issuerLastName, setIssuerLastName] = useState(contact.last_name ?? '');
+  const [issuerStreet, setIssuerStreet] = useState(contact.street ?? '');
+  const [issuerPlz, setIssuerPlz] = useState(contact.plz ?? '');
+  const [issuerCity, setIssuerCity] = useState(contact.city ?? '');
   const [representation, setRepresentation] = useState(employer?.representation ?? 'self');
+  const [issuerPhone, setIssuerPhone] = useState((contact as any).phone ?? '');
+  const [insuredAhvNumber, setInsuredAhvNumber] = useState((contact as any).insured_ahv_number ?? '');
+
+  // Betroffene Person (falls unterstützt) – in contact_data. Sonst: separate Versicherte-Person-Adresse.
+  const [affectedFirstName, setAffectedFirstName] = useState((contact as any).affected_first_name ?? '');
+  const [affectedLastName, setAffectedLastName] = useState((contact as any).affected_last_name ?? '');
+  const [affectedStreet, setAffectedStreet] = useState((contact as any).affected_street ?? '');
+  const [affectedPlz, setAffectedPlz] = useState((contact as any).affected_plz ?? '');
+  const [affectedCity, setAffectedCity] = useState((contact as any).affected_city ?? '');
+
+  const [insuredStreet, setInsuredStreet] = useState(String((contact as any).insured_street ?? ''));
+  const [insuredPlz, setInsuredPlz] = useState(String((contact as any).insured_plz ?? ''));
+  const [insuredCity, setInsuredCity] = useState(String((contact as any).insured_city ?? ''));
+
+  // IV invoice settings (stored inside employer.contact_data)
+  const [billingIban, setBillingIban] = useState(String((contact as any).billing_iban ?? ''));
+  const [billingReferenceNumber, setBillingReferenceNumber] = useState(String((contact as any).billing_reference_number ?? ''));
+  const [billingAccountHolderName, setBillingAccountHolderName] = useState(String((contact as any).billing_account_holder_name ?? ''));
+  const [billingAccountHolderStreet, setBillingAccountHolderStreet] = useState(String((contact as any).billing_account_holder_street ?? ''));
+  const [billingAccountHolderPlz, setBillingAccountHolderPlz] = useState(String((contact as any).billing_account_holder_plz ?? ''));
+  const [billingAccountHolderCity, setBillingAccountHolderCity] = useState(String((contact as any).billing_account_holder_city ?? ''));
 
   const resetOnboarding = async () => {
     if (!employer || !employerAccess) return;
@@ -102,14 +124,30 @@ export function SettingsPage() {
 
   useEffect(() => {
     if (employer) {
-      setEmployerName(employer.name ?? '');
+      setInsuredName(employer.name ?? '');
       setRepresentation(employer.representation ?? 'self');
       const c = (employer.contact_data as Record<string, string>) || {};
-      setFirstName(c.first_name ?? '');
-      setLastName(c.last_name ?? '');
-      setStreet(c.street ?? '');
-      setPlz(c.plz ?? '');
-      setCity(c.city ?? '');
+      setIssuerFirstName(c.first_name ?? '');
+      setIssuerLastName(c.last_name ?? '');
+      setIssuerStreet(c.street ?? '');
+      setIssuerPlz(c.plz ?? '');
+      setIssuerCity(c.city ?? '');
+      setIssuerPhone((c as any).phone ?? '');
+      setInsuredAhvNumber((c as any).insured_ahv_number ?? '');
+      setAffectedFirstName((c as any).affected_first_name ?? '');
+      setAffectedLastName((c as any).affected_last_name ?? '');
+      setAffectedStreet((c as any).affected_street ?? '');
+      setAffectedPlz((c as any).affected_plz ?? '');
+      setAffectedCity((c as any).affected_city ?? '');
+      setInsuredStreet(String((c as any).insured_street ?? ''));
+      setInsuredPlz(String((c as any).insured_plz ?? ''));
+      setInsuredCity(String((c as any).insured_city ?? ''));
+      setBillingIban(String((c as any).billing_iban ?? ''));
+      setBillingReferenceNumber(String((c as any).billing_reference_number ?? ''));
+      setBillingAccountHolderName(String((c as any).billing_account_holder_name ?? ''));
+      setBillingAccountHolderStreet(String((c as any).billing_account_holder_street ?? ''));
+      setBillingAccountHolderPlz(String((c as any).billing_account_holder_plz ?? ''));
+      setBillingAccountHolderCity(String((c as any).billing_account_holder_city ?? ''));
     }
   }, [employer]);
 
@@ -117,22 +155,53 @@ export function SettingsPage() {
     if (!employer) return;
     setSaving(true);
 
-    // Auto-detect canton from PLZ
-    const detected = getCantonFromPLZ(plz);
+    // Auto-detect canton from insured PLZ (betroffene Person)
+    const effectiveInsuredPlz = representation === 'guardian' ? affectedPlz : insuredPlz;
+    const detected = getCantonFromPLZ(effectiveInsuredPlz);
+
+    // In Unterstützer-Modus ist employer.name = Name der betroffenen Person.
+    const nextInsuredName =
+      representation === 'guardian'
+        ? `${affectedFirstName} ${affectedLastName}`.trim() || insuredName
+        : insuredName;
 
     const { error } = await supabase
       .from('employer')
       .update({
-        name: employerName,
+        name: nextInsuredName,
         representation,
         canton: detected?.code || employer.canton,
         contact_data: {
           ...((employer.contact_data as object) || {}),
-          first_name: firstName,
-          last_name: lastName,
-          street,
-          plz,
-          city,
+          // Rechnungssteller / Kontaktperson
+          first_name: issuerFirstName,
+          last_name: issuerLastName,
+          street: issuerStreet,
+          plz: issuerPlz,
+          city: issuerCity,
+          phone: issuerPhone,
+
+          insured_ahv_number: insuredAhvNumber,
+
+          // Betroffene Person (nur relevant, wenn unterstützt)
+          affected_first_name: affectedFirstName,
+          affected_last_name: affectedLastName,
+          affected_street: affectedStreet,
+          affected_plz: affectedPlz,
+          affected_city: affectedCity,
+
+          // Versicherte Person Adresse (wenn selber = betroffene Person, aber Rechnungssteller kann abweichen)
+          insured_street: insuredStreet,
+          insured_plz: insuredPlz,
+          insured_city: insuredCity,
+
+          billing_iban: billingIban,
+          billing_reference_number: billingReferenceNumber,
+          billing_account_holder_name: billingAccountHolderName,
+          billing_account_holder_street: billingAccountHolderStreet,
+          billing_account_holder_plz: billingAccountHolderPlz,
+          billing_account_holder_city: billingAccountHolderCity,
+          payment_terms_days: 30,
         }
       })
       .eq('id', employer.id);
@@ -227,7 +296,7 @@ export function SettingsPage() {
     </div>
   );
 
-  const detectedCanton = getCantonFromPLZ(plz);
+  const detectedCanton = getCantonFromPLZ(representation === 'guardian' ? affectedPlz : insuredPlz);
 
   // Guard: don't render if employer was deleted (e.g. after reset)
   if (!employer || !employerAccess) {
@@ -299,8 +368,8 @@ export function SettingsPage() {
               icon={Home}
               iconColor="text-violet-600"
               iconBg="bg-violet-500/10"
-              title="Kontaktdaten"
-              description="Ihre Adresse und persönlichen Angaben"
+              title="Betroffene Person & Rechnungssteller"
+              description="Versicherte/betroffene Person kann von Konto-/Kontaktperson abweichen"
             >
               <div>
                 <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
@@ -321,18 +390,50 @@ export function SettingsPage() {
                 </div>
               </div>
 
-              <EditableField label="Name (Versicherte Person)" value={employerName} onChange={setEmployerName} placeholder="Name eingeben" />
-
-              <div className="grid grid-cols-2 gap-3">
-                <EditableField label="Vorname" value={firstName} onChange={setFirstName} />
-                <EditableField label="Nachname" value={lastName} onChange={setLastName} />
+              {/* Versicherte / betroffene Person */}
+              <div className="rounded-2xl border bg-muted/10 p-4 space-y-3">
+                <p className="text-sm font-semibold">Betroffene Person (versicherte Person)</p>
+                {representation === 'guardian' ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <EditableField label="Vorname" value={affectedFirstName} onChange={setAffectedFirstName} placeholder="Vorname" />
+                      <EditableField label="Nachname" value={affectedLastName} onChange={setAffectedLastName} placeholder="Nachname" />
+                    </div>
+                    <EditableField label="Strasse & Nr." value={affectedStreet} onChange={setAffectedStreet} placeholder="z.B. Bahnhofstrasse 12" />
+                    <div className="grid grid-cols-[120px_1fr] gap-3">
+                      <EditableField label="PLZ" value={affectedPlz} onChange={setAffectedPlz} placeholder="8000" />
+                      <EditableField label="Ort" value={affectedCity} onChange={setAffectedCity} placeholder="Zürich" />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <EditableField label="Name" value={insuredName} onChange={setInsuredName} placeholder="Vorname Nachname" />
+                    <EditableField label="Strasse & Nr." value={insuredStreet} onChange={setInsuredStreet} placeholder="z.B. Bahnhofstrasse 12" />
+                    <div className="grid grid-cols-[120px_1fr] gap-3">
+                      <EditableField label="PLZ" value={insuredPlz} onChange={setInsuredPlz} placeholder="8000" />
+                      <EditableField label="Ort" value={insuredCity} onChange={setInsuredCity} placeholder="Zürich" />
+                    </div>
+                  </>
+                )}
+                <EditableField label="AHV-Nummer" value={insuredAhvNumber} onChange={setInsuredAhvNumber} placeholder="756.xxxx.xxxx.xx" />
               </div>
 
-              <EditableField label="Strasse & Nr." value={street} onChange={setStreet} placeholder="z.B. Bahnhofstrasse 12" />
-
-              <div className="grid grid-cols-[120px_1fr] gap-3">
-                <EditableField label="PLZ" value={plz} onChange={setPlz} placeholder="8000" />
-                <EditableField label="Ort" value={city} onChange={setCity} placeholder="Zürich" />
+              {/* Rechnungssteller / Kontaktperson */}
+              <div className="rounded-2xl border bg-muted/10 p-4 space-y-3">
+                <p className="text-sm font-semibold">Rechnungssteller / Kontaktperson</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <EditableField label="Vorname" value={issuerFirstName} onChange={setIssuerFirstName} />
+                  <EditableField label="Nachname" value={issuerLastName} onChange={setIssuerLastName} />
+                </div>
+                <EditableField label="Strasse & Nr." value={issuerStreet} onChange={setIssuerStreet} placeholder="z.B. Bahnhofstrasse 12" />
+                <div className="grid grid-cols-[120px_1fr] gap-3">
+                  <EditableField label="PLZ" value={issuerPlz} onChange={setIssuerPlz} placeholder="8000" />
+                  <EditableField label="Ort" value={issuerCity} onChange={setIssuerCity} placeholder="Zürich" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <EditableField label="Telefon (für Rückfragen)" value={issuerPhone} onChange={setIssuerPhone} placeholder="+41 ..." />
+                  <ReadOnlyField label="E-Mail" value={user?.email ?? ''} />
+                </div>
               </div>
 
               {detectedCanton && (
@@ -342,10 +443,22 @@ export function SettingsPage() {
                 </div>
               )}
 
-              <div className="rounded-xl border border-border/50 bg-muted/10 overflow-hidden shadow-sm">
-                <InfoRow icon={CreditCard} label="IV-Ansatz" value={employer.iv_rate ? `CHF ${employer.iv_rate}` : '–'} iconColor="text-amber-500" />
-                <InfoRow icon={Moon} label="Stunden Tag" value={employer.iv_hours_day ? `${employer.iv_hours_day}h` : '–'} iconColor="text-blue-500" />
-                <InfoRow icon={Moon} label="Stunden Nacht" value={employer.iv_hours_night ? `${employer.iv_hours_night}h` : '–'} iconColor="text-indigo-500" />
+              <div className="rounded-2xl border bg-muted/10 p-4 space-y-3">
+                <p className="text-sm font-semibold">IV-Deckblatt / Rechnung</p>
+                <ReadOnlyField label="IV-Ansatz (CHF/Std)" value="35.30" />
+                <EditableField label="IBAN (Auszahlung)" value={billingIban} onChange={setBillingIban} placeholder="CH.." />
+                <EditableField label="Mitteilungs-/Verfügungsnummer (optional)" value={billingReferenceNumber} onChange={setBillingReferenceNumber} placeholder="…" />
+                <div className="grid grid-cols-2 gap-3">
+                  <EditableField label="Kontoinhaber:in" value={billingAccountHolderName} onChange={setBillingAccountHolderName} placeholder="Vorname Name" />
+                  <EditableField label="Adresse Kontoinhaber:in" value={billingAccountHolderStreet} onChange={setBillingAccountHolderStreet} placeholder="Strasse Nr." />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <EditableField label="PLZ" value={billingAccountHolderPlz} onChange={setBillingAccountHolderPlz} placeholder="8000" />
+                  <EditableField label="Ort" value={billingAccountHolderCity} onChange={setBillingAccountHolderCity} placeholder="Zürich" />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Diese Angaben werden im Download „IV-Rechnung (Deckblatt)“ verwendet.
+                </p>
               </div>
 
               <button

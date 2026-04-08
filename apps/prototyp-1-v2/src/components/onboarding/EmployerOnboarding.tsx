@@ -164,6 +164,7 @@ export function EmployerOnboarding({ onComplete }: Props) {
   const [cZip, setCZip] = useState('');
   const [cCity, setCCity] = useState('');
   const [cCityAutofill, setCCityAutofill] = useState(false);
+  const [cPhone, setCPhone] = useState('');
 
   // Affected person
   const [aFirst, setAFirst] = useState('');
@@ -173,6 +174,15 @@ export function EmployerOnboarding({ onComplete }: Props) {
   const [aCity, setACity] = useState('');
   const [aCityAutofill, setACityAutofill] = useState(false);
   const [aEmail, setAEmail] = useState('');
+  const [insuredAhvNumber, setInsuredAhvNumber] = useState('');
+
+  // IV invoice / billing (stored in employer.contact_data)
+  const [billingIban, setBillingIban] = useState('');
+  const [billingAccountHolderName, setBillingAccountHolderName] = useState('');
+  const [billingAccountHolderStreet, setBillingAccountHolderStreet] = useState('');
+  const [billingAccountHolderPlz, setBillingAccountHolderPlz] = useState('');
+  const [billingAccountHolderCity, setBillingAccountHolderCity] = useState('');
+  const [billingReferenceNumber, setBillingReferenceNumber] = useState('');
 
   // Setup
   const [tracker, setTracker] = useState('');
@@ -251,6 +261,15 @@ export function EmployerOnboarding({ onComplete }: Props) {
           street: cStreet,
           plz: cZip,
           city: cCity,
+          phone: cPhone,
+          insured_ahv_number: insuredAhvNumber.trim() || null,
+          billing_iban: billingIban.trim() || null,
+          billing_reference_number: billingReferenceNumber.trim() || null,
+          billing_account_holder_name: billingAccountHolderName.trim() || null,
+          billing_account_holder_street: billingAccountHolderStreet.trim() || null,
+          billing_account_holder_plz: billingAccountHolderPlz.trim() || null,
+          billing_account_holder_city: billingAccountHolderCity.trim() || null,
+          payment_terms_days: 30,
           ...(isSupporter ? {
             affected_first_name: aFirst,
             affected_last_name: aLast,
@@ -358,7 +377,30 @@ export function EmployerOnboarding({ onComplete }: Props) {
             <span className="text-sm"><span className="font-semibold">{detectedCanton.code}</span> - {detectedCanton.name}</span>
           </div>
         )}
-        <Field label="E-Mail" value={user?.email ?? ''} disabled />
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="E-Mail" value={user?.email ?? ''} disabled />
+          <Field label="Telefon (für Rückfragen)" value={cPhone} onChange={setCPhone} placeholder="+41 ..." />
+        </div>
+
+        <Field label="AHV-Nummer (versicherte Person)" value={insuredAhvNumber} onChange={setInsuredAhvNumber} placeholder="756.xxxx.xxxx.xx" />
+
+        <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
+          <p className="text-sm font-semibold">IV-Abrechnung (Ansatz & Auszahlung)</p>
+          <Field label="IV-Ansatz (CHF/Std)" value="35.30" disabled />
+          <Field label="IBAN (Auszahlung)" value={billingIban} onChange={setBillingIban} placeholder="CH.." />
+          <Field label="Mitteilungs-/Verfügungsnummer (optional)" value={billingReferenceNumber} onChange={setBillingReferenceNumber} placeholder="…" />
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Kontoinhaber:in" value={billingAccountHolderName} onChange={setBillingAccountHolderName} placeholder="Vorname Name" />
+            <Field label="Adresse Kontoinhaber:in" value={billingAccountHolderStreet} onChange={setBillingAccountHolderStreet} placeholder="Strasse Nr." />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="PLZ" value={billingAccountHolderPlz} onChange={setBillingAccountHolderPlz} placeholder="8000" />
+            <Field label="Ort" value={billingAccountHolderCity} onChange={setBillingAccountHolderCity} placeholder="Zürich" />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Diese Angaben werden für das IV-Deckblatt / die monatliche Rechnung verwendet.
+          </p>
+        </div>
       </div>
     );
 
