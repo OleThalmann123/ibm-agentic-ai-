@@ -607,7 +607,7 @@ Warnungen (warnings) einfügen wenn zutreffend:
 - "FEHLENDE_AHV_NUMMER": ahv_number nicht vorhanden
 - "KANTON_ABGELEITET": canton aus Adresse/PLZ abgeleitet
 - "FEHLENDE_SOZIALVERSICHERUNGSANGABEN": NBU/KTV/BU fehlen
-- "KEIN_LOHN_ANGEGEBEN": weder hourly_rate noch monthly_rate
+- "KEIN_LOHN_ANGEGEBEN": hourly_rate fehlt
 - "MUSTERVERTRAG_NICHT_AUSGEFUELLT": Mustervertrag ohne ausgefüllte Werte
 ```
 
@@ -618,7 +618,7 @@ Warnungen (warnings) einfügen wenn zutreffend:
 | `FEHLENDE_AHV_NUMMER` | `ahv_number` ist `null` | AHV-Nr. ist Pflicht für Lohnabrechnung; ohne geht keine Sozialversicherungsmeldung |
 | `KANTON_ABGELEITET` | Kanton wurde aus PLZ erraten | Kanton bestimmt Steuertarife und NBU-Sätze; falsche Ableitung = falsche Abrechnung |
 | `FEHLENDE_SOZIALVERSICHERUNGSANGABEN` | NBU/KTV/BVG fehlen | Für die Lohnabrechnung müssen SUVA/NBU-Sätze bekannt sein |
-| `KEIN_LOHN_ANGEGEBEN` | Weder Stunden- noch Monatslohn | Ohne Lohn kann keine Abrechnung erstellt werden |
+| `KEIN_LOHN_ANGEGEBEN` | Stundenlohn fehlt | Ohne Lohn kann keine Abrechnung erstellt werden |
 | `MUSTERVERTRAG_NICHT_AUSGEFUELLT` | Blanko-Vorlage hochgeladen | Erkennt, wenn jemand die leere Vertragsvorlage statt den ausgefüllten Vertrag hochlädt |
 
 ---
@@ -785,16 +785,15 @@ Hier das **vollständige JSON-Schema** mit Erklärungen:
 
 ```json
     "wage": {
-      "wage_type":            { ..., "note": "hourly oder monthly" },
+      "wage_type":            { ..., "note": "hourly" },
       "hourly_rate":          { ..., "note": "CHF brutto" },
-      "monthly_rate":         { ..., "note": "CHF brutto" },
       "vacation_weeks":       { ..., "note": "4, 5 oder 6" },
       "holiday_supplement_pct": { ..., "note": "0.0833=4W, 0.1064=5W, 0.1304=6W" },
       "payment_iban":         { ..., "note": "IBAN" }
     },
 ```
 
-**`wage`** = Lohnangaben. 6 Felder: Lohnart, Stunden-/Monatslohn, Ferien, Ferienzuschlag, IBAN. Die `note` bei `holiday_supplement_pct` gibt dem LLM direkt die Ableitungs-Tabelle mit.
+**`wage`** = Lohnangaben. 5 Felder: Lohnart, Stundenlohn, Ferien, Ferienzuschlag, IBAN. Die `note` bei `holiday_supplement_pct` gibt dem LLM direkt die Ableitungs-Tabelle mit.
 
 ```json
     "social_insurance": {

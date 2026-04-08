@@ -7,6 +7,7 @@
  */
 
 import * as pdfjsLib from 'pdfjs-dist';
+import mammoth from 'mammoth';
 
 // Configure the worker - use the bundled worker from pdfjs-dist
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -81,7 +82,7 @@ export async function extractPdfContent(file: File): Promise<PdfExtractionResult
 
 /**
  * Read any supported file type and return text content.
- * Handles: PDF, TXT, DOCX (as text), images (as base64 for vision).
+ * Handles: PDF, TXT, DOCX (text extraction), images (as base64 for vision).
  */
 export async function readFileContent(file: File): Promise<{ text: string; images?: string[] }> {
   const type = file.type;
@@ -102,7 +103,23 @@ export async function readFileContent(file: File): Promise<{ text: string; image
     return { text: '[Bild-Upload: Vision-Analyse]', images: [base64] };
   }
 
-  // Text-based files (txt, doc, etc.)
+  // DOCX: extract text from zipped XML container
+  if (
+    type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+    name.endsWith('.docx')
+  ) {
+    const arrayBuffer = await file.arrayBuffer();
+    const { value } = await mammoth.extractRawText({ arrayBuffer });
+    const text = (value ?? '').replace(/\s+/g, ' ').trim();
+    return { text };
+  }
+
+  // Legacy DOC (binary) is not reliably parseable in-browser without extra tooling.
+  if (type === 'application/msword' || name.endsWith('.doc')) {
+    throw new Error('Das DOC-Format (.doc) wird nicht unterstützt. Bitte als PDF oder DOCX hochladen.');
+  }
+
+  // Text-based files (txt, etc.)
   const text = await file.text();
   return { text };
 }

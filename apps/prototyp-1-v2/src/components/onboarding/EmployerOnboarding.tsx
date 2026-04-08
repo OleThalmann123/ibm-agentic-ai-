@@ -6,6 +6,7 @@ import {
   ArrowRight, ArrowLeft, HeartHandshake, User, CheckCircle2,
   ClipboardList, ShieldCheck, UserX, MapPin
 } from 'lucide-react';
+import { getCityFromChPlz, normalizeChPlz } from '@/utils/chPlz';
 
 // Swiss PLZ → Canton mapping (simplified ranges for prototype)
 const PLZ_CANTON_MAP: [number, number, string, string][] = [
@@ -90,36 +91,8 @@ function getCantonFromPLZ(plz: string): { code: string; name: string } | null {
   return null;
 }
 
-// Minimaler PLZ → Ort Lookup (MVP). Nur häufige/prüfrelevante PLZ.
-const PLZ_CITY_MAP: Record<string, string> = {
-  '3000': 'Bern',
-  '3001': 'Bern',
-  '3011': 'Bern',
-  '3012': 'Bern',
-  '3013': 'Bern',
-  '3014': 'Bern',
-  '3015': 'Bern',
-  '3018': 'Bern',
-  '3027': 'Bern',
-  '4000': 'Basel',
-  '4001': 'Basel',
-  '4058': 'Basel',
-  '6000': 'Luzern',
-  '6003': 'Luzern',
-  '8000': 'Zürich',
-  '8001': 'Zürich',
-  '8003': 'Zürich',
-  '8004': 'Zürich',
-  '8005': 'Zürich',
-  '8006': 'Zürich',
-  '8008': 'Zürich',
-  '8032': 'Zürich',
-};
-
 function getCityFromPLZ(plz: string): string | null {
-  const z = plz.trim();
-  if (z.length !== 4) return null;
-  return PLZ_CITY_MAP[z] || null;
+  return getCityFromChPlz(plz);
 }
 
 // ─── Stable sub-components ───
@@ -210,10 +183,11 @@ export function EmployerOnboarding({ onComplete }: Props) {
 
   // Auto-detect canton when PLZ changes
   const handleZipChange = (zip: string) => {
-    setCZip(zip);
-    if (zip.length >= 4) {
-      setDetectedCanton(getCantonFromPLZ(zip));
-      const city = getCityFromPLZ(zip);
+    const normalized = normalizeChPlz(zip);
+    setCZip(normalized);
+    if (normalized.length >= 4) {
+      setDetectedCanton(getCantonFromPLZ(normalized));
+      const city = getCityFromPLZ(normalized);
       if (city && (!cCity || cCityAutofill)) {
         setCCity(city);
         setCCityAutofill(true);
@@ -224,8 +198,9 @@ export function EmployerOnboarding({ onComplete }: Props) {
   };
 
   const handleAffectedZipChange = (zip: string) => {
-    setAZip(zip);
-    const city = getCityFromPLZ(zip);
+    const normalized = normalizeChPlz(zip);
+    setAZip(normalized);
+    const city = getCityFromPLZ(normalized);
     if (city && (!aCity || aCityAutofill)) {
       setACity(city);
       setACityAutofill(true);
@@ -413,7 +388,7 @@ export function EmployerOnboarding({ onComplete }: Props) {
 
     // 3: Who tracks hours
     if (step === 3) return (
-      <div className="space-y-4">
+      <div className="space-y-3">
         <h3 className="text-xl font-bold flex items-center gap-2"><ClipboardList className="w-6 h-6 text-primary" />Wer erfasst die Stunden?</h3>
         <Radio
           active={tracker === 'employer'}
@@ -431,10 +406,12 @@ export function EmployerOnboarding({ onComplete }: Props) {
         <Radio active={tracker === 'assistant'} onClick={() => setTracker('assistant')} label="Die Assistenzperson" icon={UserX} />
 
         {tracker === 'assistant' && (
-          <div className="ml-8 space-y-3 pt-2 border-l-2 border-primary/20 pl-5">
+          <div className="ml-6 space-y-3 pt-2 border-l-2 border-primary/20 pl-4">
             <p className="text-base font-medium flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-primary" />Müssen die Stunden genehmigt werden?</p>
-            <Radio active={approvalNeeded === 'yes'} onClick={() => setApprovalNeeded('yes')} label="Ja, ich genehmige" />
-            <Radio active={approvalNeeded === 'no'} onClick={() => setApprovalNeeded('no')} label="Nein, direkt übernehmen" />
+            <div className="grid grid-cols-2 gap-3">
+              <Radio active={approvalNeeded === 'yes'} onClick={() => setApprovalNeeded('yes')} label="Ja, ich genehmige" />
+              <Radio active={approvalNeeded === 'no'} onClick={() => setApprovalNeeded('no')} label="Nein, direkt übernehmen" />
+            </div>
 
             <div className="pt-3">
               <p className="text-base font-medium">Soll die Assistenzperson bei Tagdiensten zusätzlich Tätigkeiten erfassen?</p>
@@ -442,7 +419,7 @@ export function EmployerOnboarding({ onComplete }: Props) {
                 Wenn Sie <span className="font-medium">Ja</span> wählen, erscheint bei <span className="font-medium">Tagdiensten</span> beim Erfassen der Stunden
                 ein zusätzliches Feld „Tätigkeitsbereich“. Bei Nachtdiensten wird dieses Feld nicht angezeigt.
               </p>
-              <div className="mt-3 space-y-2">
+              <div className="mt-3 grid grid-cols-2 gap-3">
                 <Radio active={activitiesInDayShifts === 'yes'} onClick={() => setActivitiesInDayShifts('yes')} label="Ja, Tätigkeiten mit erfassen" />
                 <Radio active={activitiesInDayShifts === 'no'} onClick={() => setActivitiesInDayShifts('no')} label="Nein, nur Zeiten erfassen" />
               </div>
@@ -456,11 +433,11 @@ export function EmployerOnboarding({ onComplete }: Props) {
   };
 
   return (
-    <div className="rounded-2xl border bg-card shadow-sm overflow-hidden">
+    <div className="w-full max-w-3xl mx-auto rounded-2xl border bg-card shadow-sm overflow-hidden">
       <div className="h-1.5 bg-muted">
         <div className="h-full bg-primary transition-all duration-500" style={{ width: `${progress}%` }} />
       </div>
-      <div className="p-8">
+      <div className="p-6">
         {renderStep()}
 
         {step > 0 && (

@@ -69,7 +69,6 @@ export interface ContractSchema {
   wage: {
     wage_type: IDPField<string>;
     hourly_rate: IDPField<number>;
-    monthly_rate: IDPField<number>;
     vacation_weeks: IDPField<number>;
     holiday_supplement_pct: IDPField<number>;
     payment_iban: IDPField<string>;

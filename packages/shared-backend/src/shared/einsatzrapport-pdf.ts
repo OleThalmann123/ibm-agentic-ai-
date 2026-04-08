@@ -172,15 +172,15 @@ export function generateEinsatzrapportPdf(data: EinsatzrapportPdfData): jsPDF {
     y += 5;
 
     const legend = [
-      '2) Alltägliche Lebensverrichtungen',
-      '3) Haushaltsführung',
-      '4) Gesellschaftliche Teilhabe und Freizeitgestaltung',
-      '5) Erziehung und Kinderbetreuung',
-      '6) Ausübung einer gemeinnützigen oder ehrenamtlichen Tätigkeit',
-      '7) Berufliche Aus- und Weiterbildung',
-      '8) Ausübung einer Erwerbstätigkeit im ersten Arbeitsmarkt',
-      '9) Überwachung während des Tages',
-      '10) Nachtdienst',
+      '1) Alltägliche Lebensverrichtungen',
+      '2) Haushaltsführung',
+      '3) Gesellschaftliche Teilhabe und Freizeitgestaltung',
+      '4) Erziehung und Kinderbetreuung',
+      '5) Ausübung einer gemeinnützigen oder ehrenamtlichen Tätigkeit',
+      '6) Berufliche Aus- und Weiterbildung',
+      '7) Ausübung einer Erwerbstätigkeit im ersten Arbeitsmarkt',
+      '8) Überwachung während des Tages',
+      'Nachtdienst',
     ];
     doc.text(legend.join('\n'), LM, y);
   }

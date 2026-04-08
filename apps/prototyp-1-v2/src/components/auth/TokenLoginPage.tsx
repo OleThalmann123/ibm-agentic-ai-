@@ -9,15 +9,15 @@ import {
 import { calculatePayroll, FAK_RATES, fmt, fmtPct, type PayrollInput } from '@asklepios/backend';
 
 const ACTIVITY_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: '2', label: '2) Alltägliche Lebensverrichtungen' },
-  { value: '3', label: '3) Haushaltsführung' },
-  { value: '4', label: '4) Gesellschaftliche Teilhabe und Freizeitgestaltung' },
-  { value: '5', label: '5) Erziehung und Kinderbetreuung' },
-  { value: '6', label: '6) Gemeinnützig/ehrenamtlich' },
-  { value: '7', label: '7) Berufliche Aus- und Weiterbildung' },
-  { value: '8', label: '8) Erwerbstätigkeit (1. Arbeitsmarkt)' },
-  { value: '9', label: '9) Überwachung während des Tages' },
-  { value: '10', label: '10) Nachtdienst' },
+  // Hinweis: Die gespeicherten Codes bleiben (2–9), aber die UI-Nummerierung soll 1–8 sein.
+  { value: '2', label: '1) Alltägliche Lebensverrichtungen' },
+  { value: '3', label: '2) Haushaltsführung' },
+  { value: '4', label: '3) Gesellschaftliche Teilhabe und Freizeitgestaltung' },
+  { value: '5', label: '4) Erziehung und Kinderbetreuung' },
+  { value: '6', label: '5) Gemeinnützig/ehrenamtlich' },
+  { value: '7', label: '6) Berufliche Aus- und Weiterbildung' },
+  { value: '8', label: '7) Erwerbstätigkeit (1. Arbeitsmarkt)' },
+  { value: '9', label: '8) Überwachung während des Tages' },
 ];
 
 interface TimeEntry {
@@ -28,6 +28,47 @@ interface TimeEntry {
   is_night: boolean;
   category?: string;
   confirmed: boolean;
+}
+
+function parseTimeToMinutes(t: string): number | null {
+  const s = (t || '').trim();
+  if (!s) return null;
+  const [hhRaw, mmRaw] = s.split(':');
+  const hh = Number(hhRaw);
+  const mm = Number(mmRaw);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+  if (hh === 24 && mm === 0) return 24 * 60;
+  if (hh < 0 || hh > 23) return null;
+  if (mm < 0 || mm > 59) return null;
+  return hh * 60 + mm;
+}
+
+function diffHours(start: string, end: string): number {
+  const s = parseTimeToMinutes(start);
+  const e = parseTimeToMinutes(end);
+  if (s == null || e == null) return 0;
+  const raw = e - s;
+  const minutes = raw >= 0 ? raw : raw + 24 * 60;
+  return Math.max(0, minutes / 60);
+}
+
+function nextIsoDate(iso: string): string {
+  const d = new Date(iso + 'T12:00:00');
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+function clampInt(n: number, min: number, max: number): number {
+  if (!Number.isFinite(n)) return min;
+  return Math.max(min, Math.min(max, Math.trunc(n)));
+}
+
+function roundToStep(n: number, step: number, max: number): number {
+  if (step <= 1) return clampInt(n, 0, max);
+  const rounded = Math.round(n / step) * step;
+  const clamped = clampInt(rounded, 0, max);
+  // Ensure we never land on a value > max due to rounding.
+  return Math.min(clamped, Math.floor(max / step) * step);
 }
 
 export function TokenLoginPage() {
@@ -125,10 +166,26 @@ export function TokenLoginPage() {
     const categoryToSave = requiresActivities && !isNight ? (category || null) : null;
 
     if (editingId) {
-      const { error: err } = await supabase.from('time_entry').update({
-        date, start_time: startTime, end_time: endTime, is_night: isNight,
-        category: categoryToSave,
-      }).eq('id', editingId);
+      const sMin = parseTimeToMinutes(startTime);
+      const eMin = parseTimeToMinutes(endTime);
+      const crossesMidnight = sMin != null && eMin != null && eMin < sMin;
+
+      if (crossesMidnight) {
+        setSaveError('Bitte Nachtdienst über Mitternacht als zwei Einträge erfassen (vor und nach 00:00).');
+        setSaving(false);
+        return;
+      }
+
+      const { error: err } = await supabase
+        .from('time_entry')
+        .update({
+          date,
+          start_time: startTime,
+          end_time: endTime,
+          is_night: isNight,
+          category: categoryToSave,
+        })
+        .eq('id', editingId);
       if (err) {
         setSaveError(err.message || 'Speichern fehlgeschlagen.');
         setSaving(false);
@@ -136,16 +193,56 @@ export function TokenLoginPage() {
       }
       setEditingId(null);
     } else {
-      const { error: err } = await supabase.from('time_entry').insert({
-        assistant_id: assistant.id, date,
-        start_time: startTime, end_time: endTime,
-        is_night: isNight, entered_by: 'assistant', confirmed: false,
-        category: categoryToSave,
-      });
-      if (err) {
-        setSaveError(err.message || 'Speichern fehlgeschlagen.');
-        setSaving(false);
-        return;
+      const sMin = parseTimeToMinutes(startTime);
+      const eMin = parseTimeToMinutes(endTime);
+      const crossesMidnight = sMin != null && eMin != null && eMin < sMin;
+
+      if (!crossesMidnight) {
+        const { error: err } = await supabase.from('time_entry').insert({
+          assistant_id: assistant.id,
+          date,
+          start_time: startTime,
+          end_time: endTime,
+          is_night: isNight,
+          entered_by: 'assistant',
+          confirmed: false,
+          category: categoryToSave,
+        });
+        if (err) {
+          setSaveError(err.message || 'Speichern fehlgeschlagen.');
+          setSaving(false);
+          return;
+        }
+      } else {
+        // Nachtdienst über Mitternacht: automatisch in zwei Tage splitten.
+        const nextDate = nextIsoDate(date);
+        const { error: err } = await supabase.from('time_entry').insert([
+          {
+            assistant_id: assistant.id,
+            date,
+            start_time: startTime,
+            end_time: '24:00',
+            is_night: true,
+            entered_by: 'assistant',
+            confirmed: false,
+            category: null,
+          },
+          {
+            assistant_id: assistant.id,
+            date: nextDate,
+            start_time: '00:00',
+            end_time: endTime,
+            is_night: true,
+            entered_by: 'assistant',
+            confirmed: false,
+            category: null,
+          },
+        ]);
+        if (err) {
+          setSaveError(err.message || 'Speichern fehlgeschlagen.');
+          setSaving(false);
+          return;
+        }
       }
     }
 
@@ -179,6 +276,13 @@ export function TokenLoginPage() {
 
   // ─── Spinner for hours/minutes ───
   const Spinner = ({ value, onChange, max, step = 1 }: { value: number; onChange: (v: number) => void; max: number; step?: number }) => {
+    const [text, setText] = useState<string>(() => pad(clampInt(value, 0, max)));
+
+    useEffect(() => {
+      // Keep display in sync with external updates (buttons, edit load, etc.)
+      setText(pad(clampInt(value, 0, max)));
+    }, [value, max]);
+
     const handleUp = () => {
       const next = value + step;
       onChange(next > max ? 0 : next);
@@ -192,13 +296,19 @@ export function TokenLoginPage() {
         onChange(next);
       }
     };
-    const handleManualInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const raw = e.target.value.replace(/\D/g, '');
-      if (raw === '') { onChange(0); return; }
-      let num = parseInt(raw, 10);
-      if (num > max) num = max;
-      onChange(num);
+    const commitText = (raw: string) => {
+      const digits = raw.replace(/\D/g, '');
+      if (digits === '') {
+        setText(pad(0));
+        onChange(0);
+        return;
+      }
+      const num = clampInt(parseInt(digits, 10), 0, max);
+      const stepped = roundToStep(num, step, max);
+      setText(pad(stepped));
+      onChange(stepped);
     };
+
     return (
       <div className="flex flex-col items-center">
         <button type="button" onClick={handleUp}
@@ -206,11 +316,37 @@ export function TokenLoginPage() {
           <ChevronUp className="w-5 h-5 text-slate-500" />
         </button>
         <input
-          type="text"
+          type="tel"
           inputMode="numeric"
-          value={pad(value)}
-          onChange={handleManualInput}
-          onFocus={e => e.target.select()}
+          pattern="[0-9]*"
+          value={text}
+          onChange={(e) => {
+            // Allow free typing without cursor jumps; we sanitize/commit on blur/enter.
+            const next = e.target.value;
+            // Keep it short (max 2 digits) but don't fight the caret with padding mid-typing.
+            const digits = next.replace(/\D/g, '').slice(0, 2);
+            setText(digits);
+          }}
+          onFocus={(e) => {
+            // Select all for quick overwrite.
+            e.currentTarget.select();
+          }}
+          onBlur={() => commitText(text)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.currentTarget.blur();
+            } else if (e.key === 'ArrowUp') {
+              e.preventDefault();
+              handleUp();
+            } else if (e.key === 'ArrowDown') {
+              e.preventDefault();
+              handleDown();
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              setText(pad(clampInt(value, 0, max)));
+              e.currentTarget.blur();
+            }
+          }}
           className="text-4xl font-black tabular-nums py-2 w-full text-center bg-transparent outline-none focus:ring-2 focus:ring-emerald-300 rounded-lg"
           style={{ caretColor: '#10b981' }}
         />
@@ -383,7 +519,7 @@ export function TokenLoginPage() {
                   className="w-full px-3 py-3 rounded-xl border bg-white text-base focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
                 >
                   <option value="">Bitte wählen…</option>
-                  {ACTIVITY_OPTIONS.filter(o => o.value !== '10').map((o) => (
+                  {ACTIVITY_OPTIONS.map((o) => (
                     <option key={o.value} value={o.value}>
                       {o.label}
                     </option>
@@ -424,7 +560,7 @@ export function TokenLoginPage() {
                 {entries.map(e => {
                   const d = new Date(e.date + 'T12:00:00');
                   const dayLabel = formatDateLabel(e.date);
-                  const hours = ((new Date(`2000-01-01T${e.end_time}`).getTime() - new Date(`2000-01-01T${e.start_time}`).getTime()) / 3600000).toFixed(1);
+                  const hours = diffHours(e.start_time, e.end_time).toFixed(1);
 
                   return (
                     <div key={e.id} className="bg-white rounded-xl border shadow-sm p-4">
@@ -492,10 +628,7 @@ function LohnTab({ assistant, employerName, entries }: { assistant: Assistant; e
   });
 
   const trackedHours = currentMonthEntries.reduce((sum, e) => {
-    const start = new Date(`2000-01-01T${e.start_time}`).getTime();
-    const end = new Date(`2000-01-01T${e.end_time}`).getTime();
-    const diff = (end - start) / 3600000;
-    return sum + Math.max(0, diff);
+    return sum + diffHours(e.start_time, e.end_time);
   }, 0);
   
   // Build payroll from assistant's contract data
@@ -522,15 +655,22 @@ function LohnTab({ assistant, employerName, entries }: { assistant: Assistant; e
   // Demo confirmation status (in production this would come from DB)
   const [isConfirmed] = useState(false);
 
-  const Row = ({ label, rate, perHour, perYear, bold }: {
-    label: string; rate?: number | null; perHour: number; perYear: number; bold?: boolean;
+  const Row = ({ label, rate, perHour, perYear, bold, minus }: {
+    label: string;
+    rate?: number | null;
+    perHour: number;
+    perYear: number;
+    bold?: boolean;
+    minus?: boolean;
   }) => (
     <div className={`flex items-center justify-between py-1.5 ${bold ? 'font-bold' : ''}`}>
       <span className="text-sm">{label}</span>
       <div className="flex items-center gap-4">
         {rate != null && <span className="text-xs text-slate-400 tabular-nums w-14 text-right">{fmtPct(rate)}</span>}
         {rate == null && <span className="w-14" />}
-        <span className="text-sm tabular-nums w-20 text-right">{fmt(perYear)}</span>
+        <span className="text-sm tabular-nums w-20 text-right">
+          {minus ? `−${fmt(perYear)}` : fmt(perYear)}
+        </span>
       </div>
     </div>
   );
@@ -599,21 +739,21 @@ function LohnTab({ assistant, employerName, entries }: { assistant: Assistant; e
             <Row label="Ferienzuschlag" rate={result.ferienzuschlag.rate} perHour={result.ferienzuschlag.perHour} perYear={result.ferienzuschlag.perYear} />
           )}
           <div className="border-t my-1.5" />
-          <Row label="Bruttolohn AN" perHour={result.bruttolohn.perHour} perYear={result.bruttolohn.perYear} bold />
+          <Row label="Bruttolohn" perHour={result.bruttolohn.perHour} perYear={result.bruttolohn.perYear} bold />
 
           {/* AN deductions */}
-          <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold pt-3 pb-1">Beiträge AN</p>
+          <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold pt-3 pb-1">Abzüge</p>
           {result.anLines.map((l, i) => (
-            <Row key={i} label={l.label} rate={l.rate} perHour={l.perHour} perYear={l.perYear} />
+            <Row key={i} label={l.label} rate={l.rate} perHour={l.perHour} perYear={l.perYear} minus />
           ))}
           <div className="border-t my-1.5" />
-          <Row label="Total AN" perHour={result.totalAN.perHour} perYear={result.totalAN.perYear} bold />
+          <Row label="Total Abzüge" rate={result.totalAN.rate} perHour={result.totalAN.perHour} perYear={result.totalAN.perYear} bold minus />
         </div>
 
         {/* Nettolohn highlight */}
         <div className="px-4 py-4 bg-emerald-50 border-t border-emerald-200">
           <div className="flex items-center justify-between">
-            <span className="font-bold text-emerald-800">Nettolohn AN</span>
+            <span className="font-bold text-emerald-800">Nettolohn</span>
             <span className="text-xl font-black tabular-nums text-emerald-700">CHF {fmt(result.nettolohn.perYear)}</span>
           </div>
           <p className="text-xs text-emerald-600 mt-0.5">CHF {fmt(result.nettolohn.perHour)} pro Stunde</p>

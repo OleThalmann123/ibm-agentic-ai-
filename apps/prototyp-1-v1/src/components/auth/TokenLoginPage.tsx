@@ -30,6 +30,34 @@ interface TimeEntry {
   confirmed: boolean;
 }
 
+function parseTimeToMinutes(t: string): number | null {
+  const s = (t || '').trim();
+  if (!s) return null;
+  const [hhRaw, mmRaw] = s.split(':');
+  const hh = Number(hhRaw);
+  const mm = Number(mmRaw);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+  if (hh === 24 && mm === 0) return 24 * 60;
+  if (hh < 0 || hh > 23) return null;
+  if (mm < 0 || mm > 59) return null;
+  return hh * 60 + mm;
+}
+
+function diffHours(start: string, end: string): number {
+  const s = parseTimeToMinutes(start);
+  const e = parseTimeToMinutes(end);
+  if (s == null || e == null) return 0;
+  const raw = e - s;
+  const minutes = raw >= 0 ? raw : raw + 24 * 60;
+  return Math.max(0, minutes / 60);
+}
+
+function nextIsoDate(iso: string): string {
+  const d = new Date(iso + 'T12:00:00');
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 export function TokenLoginPage() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
@@ -114,16 +142,51 @@ export function TokenLoginPage() {
     const endTime = fmtTime(endH, endM);
 
     if (editingId) {
+      const sMin = parseTimeToMinutes(startTime);
+      const eMin = parseTimeToMinutes(endTime);
+      const crossesMidnight = sMin != null && eMin != null && eMin < sMin;
+      if (crossesMidnight) {
+        setSaving(false);
+        return;
+      }
       await supabase.from('time_entry').update({
         date, start_time: startTime, end_time: endTime, is_night: isNight,
       }).eq('id', editingId);
       setEditingId(null);
     } else {
-      await supabase.from('time_entry').insert({
-        assistant_id: assistant.id, date,
-        start_time: startTime, end_time: endTime,
-        is_night: isNight, entered_by: 'assistant', confirmed: false,
-      });
+      const sMin = parseTimeToMinutes(startTime);
+      const eMin = parseTimeToMinutes(endTime);
+      const crossesMidnight = sMin != null && eMin != null && eMin < sMin;
+
+      if (!crossesMidnight) {
+        await supabase.from('time_entry').insert({
+          assistant_id: assistant.id, date,
+          start_time: startTime, end_time: endTime,
+          is_night: isNight, entered_by: 'assistant', confirmed: false,
+        });
+      } else {
+        const nextDate = nextIsoDate(date);
+        await supabase.from('time_entry').insert([
+          {
+            assistant_id: assistant.id,
+            date,
+            start_time: startTime,
+            end_time: '24:00',
+            is_night: true,
+            entered_by: 'assistant',
+            confirmed: false,
+          },
+          {
+            assistant_id: assistant.id,
+            date: nextDate,
+            start_time: '00:00',
+            end_time: endTime,
+            is_night: true,
+            entered_by: 'assistant',
+            confirmed: false,
+          },
+        ]);
+      }
     }
 
     setSaving(false);
@@ -344,12 +407,7 @@ export function TokenLoginPage() {
                   const d = new Date(e.date + 'T12:00:00');
                   const dayLabel = formatDateLabel(e.date);
                   
-                  let endMs = new Date(`2000-01-01T${e.end_time}`).getTime();
-                  const startMs = new Date(`2000-01-01T${e.start_time}`).getTime();
-                  if (endMs < startMs) {
-                    endMs += 24 * 3600 * 1000;
-                  }
-                  const hours = ((endMs - startMs) / 3600000).toFixed(1);
+                  const hours = diffHours(e.start_time, e.end_time).toFixed(1);
 
                   return (
                     <div key={e.id} className="bg-white rounded-xl border shadow-sm p-4">
@@ -417,13 +475,7 @@ function LohnTab({ assistant, employerName, entries }: { assistant: Assistant; e
   });
 
   const trackedHours = currentMonthEntries.reduce((sum, e) => {
-    const start = new Date(`2000-01-01T${e.start_time}`).getTime();
-    let end = new Date(`2000-01-01T${e.end_time}`).getTime();
-    if (end < start) {
-      end += 24 * 3600 * 1000;
-    }
-    const diff = (end - start) / 3600000;
-    return sum + Math.max(0, diff);
+    return sum + diffHours(e.start_time, e.end_time);
   }, 0);
   
   // Build payroll from assistant's contract data

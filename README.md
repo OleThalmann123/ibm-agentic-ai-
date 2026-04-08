@@ -188,7 +188,7 @@ Ein spezialisierter Prompt weist das Sprachmodell an, aus einem Schweizer Assist
 | `employer` | Vorname, Nachname, Strasse, PLZ, Ort |
 | `assistant` | Vorname, Nachname, Adresse, Geburtsdatum, Zivilstand, Nationalitaet, Aufenthaltsstatus, AHV-Nummer |
 | `contract_terms` | Vertragsbeginn, Vertragsende, Befristung, Stunden/Woche, Stunden/Monat, Kuendigungsfrist |
-| `wage` | Lohnart, Stundenlohn, Monatslohn, Ferienwochen, Ferienzuschlag, IBAN |
+| `wage` | Lohnart, Stundenlohn, Ferienwochen, Ferienzuschlag, IBAN |
 | `social_insurance` | Abrechnungsverfahren, Kanton, NBU-Saetze (AG/AN) |
 
 Jedes extrahierte Feld enthaelt:

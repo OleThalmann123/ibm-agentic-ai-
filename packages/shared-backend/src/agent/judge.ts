@@ -131,7 +131,7 @@ function parseJudgeResponse(content: unknown): JudgeResult {
     return content as JudgeResult;
   }
 
-  const text =
+  const rawText =
     typeof content === 'string'
       ? content
       : Array.isArray(content)
@@ -145,21 +145,105 @@ function parseJudgeResponse(content: unknown): JudgeResult {
               return JSON.stringify(part);
             })
             .join('\n')
-        : JSON.stringify(content);
-  let cleaned = text.replace(/```json\n?/gi, '').replace(/```\n?/g, '').trim();
+        : String(content ?? '');
 
-  const startIdx = cleaned.indexOf('{');
-  const endIdx = cleaned.lastIndexOf('}');
+  const cleanedText = rawText
+    .replace(/```json\n?/gi, '')
+    .replace(/```\n?/g, '')
+    .replace(/^\uFEFF/, '')
+    .trim();
 
+  if (!cleanedText) {
+    throw new Error('Leere Judge-Antwort erhalten. Bitte erneut versuchen.');
+  }
+
+  const looksLikeHtml = /^<!doctype html|^<html\b/i.test(cleanedText);
+  if (looksLikeHtml) {
+    throw new Error(
+      'Unerwartete HTML-Antwort vom Judge erhalten (wahrscheinlich API-Fehler/Rate-Limit/Auth). Bitte erneut versuchen.',
+    );
+  }
+
+  const tryParse = (candidate: string): JudgeResult | null => {
+    try {
+      return JSON.parse(candidate) as JudgeResult;
+    } catch {
+      return null;
+    }
+  };
+
+  const ensureShape = (parsed: any): JudgeResult => {
+    if (parsed && typeof parsed === 'object' && ('error' in parsed || 'message' in parsed) && !('fields' in parsed)) {
+      const msg = typeof parsed.message === 'string'
+        ? parsed.message
+        : typeof (parsed.error as any)?.message === 'string'
+          ? (parsed.error as any).message
+          : 'Unerwartete API-Antwort erhalten.';
+      throw new Error(msg);
+    }
+
+    if (!parsed || typeof parsed !== 'object' || !('fields' in parsed) || !('overall_confidence' in parsed)) {
+      throw new Error('Unerwartetes Antwortformat des Judge. Bitte erneut versuchen.');
+    }
+    return parsed as JudgeResult;
+  };
+
+  const direct = tryParse(cleanedText);
+  if (direct) return ensureShape(direct as any);
+
+  const extracted = extractFirstJsonObject(cleanedText);
+  if (extracted) {
+    const parsed = tryParse(extracted);
+    if (parsed) return ensureShape(parsed as any);
+  }
+
+  const startIdx = cleanedText.indexOf('{');
+  const endIdx = cleanedText.lastIndexOf('}');
   if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-    cleaned = cleaned.substring(startIdx, endIdx + 1);
+    const sliced = cleanedText.substring(startIdx, endIdx + 1);
+    const parsed = tryParse(sliced);
+    if (parsed) return ensureShape(parsed as any);
   }
 
-  try {
-    return JSON.parse(cleaned) as JudgeResult;
-  } catch {
-    throw new Error('Judge-Antwort konnte nicht als JSON geparsed werden.');
+  const snippet = cleanedText.slice(0, 400);
+  throw new Error(
+    `Judge-Antwort konnte nicht als JSON geparsed werden. (Antwortanfang: ${JSON.stringify(snippet)})`,
+  );
+}
+
+function extractFirstJsonObject(text: string): string | null {
+  const start = text.indexOf('{');
+  if (start === -1) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === '\\\\') {
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+
+    if (ch === '{') depth++;
+    if (ch === '}') depth--;
+
+    if (depth === 0) {
+      return text.slice(start, i + 1);
+    }
   }
+
+  return null;
 }
 
 /**

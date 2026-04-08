@@ -74,7 +74,7 @@ export const documentClassificationTool = tool(
       'sozialversicherung', 'quellensteuer', 'fak',
     ];
     const employmentKeywords = [
-      'lohn', 'stundenlohn', 'monatslohn', 'ferien', 'ferienanspruch',
+      'lohn', 'stundenlohn', 'ferien', 'ferienanspruch',
       'kündigungsfrist', 'pensum', 'arbeitszeit', 'iban',
     ];
 
@@ -168,6 +168,79 @@ export const contractDataSubmissionTool = tool(
     const validationErrors: string[] = [];
     const corrections: string[] = [];
 
+    const ibanMod97 = (iban: string): number => {
+      // ISO 13616: move first 4 chars to end, letters -> numbers (A=10..Z=35), mod 97 iteratively
+      const rearranged = `${iban.slice(4)}${iban.slice(0, 4)}`;
+      let remainder = 0;
+      for (const ch of rearranged) {
+        const code = ch.charCodeAt(0);
+        if (code >= 48 && code <= 57) {
+          remainder = (remainder * 10 + (code - 48)) % 97;
+          continue;
+        }
+        if (code >= 65 && code <= 90) {
+          const value = code - 55; // 'A' -> 10
+          remainder = (remainder * 10 + Math.floor(value / 10)) % 97;
+          remainder = (remainder * 10 + (value % 10)) % 97;
+          continue;
+        }
+        // invalid char
+        return -1;
+      }
+      return remainder;
+    };
+
+    const isValidIban = (iban: string): boolean => {
+      if (!/^[A-Z0-9]+$/.test(iban)) return false;
+      if (iban.length < 5) return false;
+      return ibanMod97(iban) === 1;
+    };
+
+    const normalizeAhv = (raw: unknown): { digits: string; formatted: string | null } => {
+      // Tolerate Swiss separators (., spaces, -) and OCR artifacts (commas, etc.)
+      const digits = String(raw ?? '').replace(/[^\d]/g, '');
+      if (!/^756\d{10}$/.test(digits)) return { digits, formatted: null };
+      const formatted = `${digits.slice(0, 3)}.${digits.slice(3, 7)}.${digits.slice(7, 11)}.${digits.slice(11)}`;
+      return { digits, formatted };
+    };
+
+    const normalizeIban = (raw: unknown): { cleaned: string; formatted: string | null } => {
+      const cleanedRaw = String(raw ?? '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, ''); // tolerate spaces, punctuation, OCR artifacts
+
+      // We currently only support CH/LI. Swiss/Liechtenstein IBANs are digits after country code.
+      if (!/^(CH|LI)/.test(cleanedRaw)) return { cleaned: cleanedRaw, formatted: null };
+
+      const ocrDigitMap: Record<string, string> = {
+        O: '0',
+        Q: '0',
+        D: '0',
+        I: '1',
+        L: '1',
+        Z: '2',
+        S: '5',
+        G: '6',
+        B: '8',
+      };
+
+      const country = cleanedRaw.slice(0, 2);
+      const rest = cleanedRaw
+        .slice(2)
+        .split('')
+        .map((c) => ocrDigitMap[c] ?? c)
+        .join('');
+
+      const cleaned = `${country}${rest}`;
+
+      // CH/LI IBAN length is 21 (2 letters + 19 digits)
+      if (!/^(CH|LI)\d{19}$/.test(cleaned)) return { cleaned, formatted: null };
+      if (!isValidIban(cleaned)) return { cleaned, formatted: null };
+
+      const formatted = cleaned.match(/.{1,4}/g)?.join(' ') ?? cleaned;
+      return { cleaned, formatted };
+    };
+
     let employerData: Record<string, any>;
     let assistantData: Record<string, any>;
     let contractData: Record<string, any>;
@@ -244,7 +317,7 @@ export const contractDataSubmissionTool = tool(
     if (assistantData.phone?.value) {
       const phone = String(assistantData.phone.value).trim();
       if (!/^\+\d[\d\s().-]{5,}$/.test(phone)) {
-        validationErrors.push('Assistant phone format suspicious (expected +CC …)');
+        validationErrors.push('Telefonnummer-Format auffällig (erwartet: +CC …)');
       }
     }
 
@@ -252,7 +325,7 @@ export const contractDataSubmissionTool = tool(
     if (assistantData.email?.value) {
       const email = String(assistantData.email.value).trim();
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        validationErrors.push('Assistant email format invalid');
+        validationErrors.push('E-Mail-Format ungültig');
       }
     }
 
@@ -260,7 +333,7 @@ export const contractDataSubmissionTool = tool(
     if (assistantData.gender?.value) {
       const g = String(assistantData.gender.value).trim().toLowerCase();
       if (!['male', 'female', 'diverse', 'männlich', 'weiblich', 'divers'].includes(g)) {
-        validationErrors.push('Assistant gender value not recognized (expected male|female|diverse)');
+        validationErrors.push('Geschlecht nicht erkannt (erwartet: male|female|diverse)');
       }
     }
 
@@ -279,23 +352,23 @@ export const contractDataSubmissionTool = tool(
 
     // Validate AHV number
     if (assistantData.ahv_number?.value) {
-      const digits = String(assistantData.ahv_number.value).replace(/[.\s-]/g, '');
-      if (!/^756\d{10}$/.test(digits)) {
-        validationErrors.push('AHV number format invalid (expected: 756.XXXX.XXXX.XX)');
-      } else {
-        const formatted = `${digits.slice(0, 3)}.${digits.slice(3, 7)}.${digits.slice(7, 11)}.${digits.slice(11)}`;
-        if (assistantData.ahv_number.value !== formatted) {
-          corrections.push(`AHV number reformatted: ${assistantData.ahv_number.value} → ${formatted}`);
-          assistantData.ahv_number.value = formatted;
-        }
+      const { formatted } = normalizeAhv(assistantData.ahv_number.value);
+      if (!formatted) {
+        validationErrors.push('AHV-Nummer ungültig (erwartet 13 Ziffern, beginnt mit 756; z.B. 756.XXXX.XXXX.XX)');
+      } else if (assistantData.ahv_number.value !== formatted) {
+        corrections.push(`AHV-Nummer normalisiert: ${assistantData.ahv_number.value} → ${formatted}`);
+        assistantData.ahv_number.value = formatted;
       }
     }
 
     // Validate IBAN
     if (wageData.payment_iban?.value) {
-      const cleaned = String(wageData.payment_iban.value).replace(/\s/g, '').toUpperCase();
-      if (!/^CH\d{19}$/.test(cleaned) && !/^LI\d{19}$/.test(cleaned)) {
-        validationErrors.push('IBAN format invalid (expected: CH followed by 19 digits)');
+      const { formatted } = normalizeIban(wageData.payment_iban.value);
+      if (!formatted) {
+        validationErrors.push('IBAN ungültig (erwartet CH/LI + 19 Zeichen; Trennzeichen wie Leerzeichen/Punkte sind ok)');
+      } else if (wageData.payment_iban.value !== formatted) {
+        corrections.push(`IBAN normalisiert: ${wageData.payment_iban.value} → ${formatted}`);
+        wageData.payment_iban.value = formatted;
       }
     }
 
@@ -345,6 +418,20 @@ export const contractDataSubmissionTool = tool(
       }
     }
 
+    // Derive monthly hours from weekly hours (rule of thumb: 4 weeks/month)
+    if (!contractData.hours_per_month?.value && contractData.hours_per_week?.value) {
+      const perWeek = Number(contractData.hours_per_week.value);
+      if (Number.isFinite(perWeek) && perWeek > 0) {
+        const perMonth = Math.round(perWeek * 4 * 100) / 100; // keep 2 decimals at most
+        if (!contractData.hours_per_month) contractData.hours_per_month = {};
+        contractData.hours_per_month.value = perMonth;
+        contractData.hours_per_month.note =
+          contractData.hours_per_month.note ||
+          `Abgeleitet aus Stunden/Woche (${perWeek}) mit 4 Wochen/Monat`;
+        corrections.push(`Hours per month derived from hours per week: ${perWeek} → ${perMonth} (×4)`);
+      }
+    }
+
     // Validate PLZ
     for (const [label, data] of [['Employer', employerData], ['Assistant', assistantData]] as const) {
       if (data.zip?.value) {
@@ -388,7 +475,7 @@ export const contractDataSubmissionTool = tool(
       employer: z.string().describe('JSON string with employer fields: {first_name, last_name, street, zip, city}'),
       assistant: z.string().describe('JSON string with assistant fields: {first_name, last_name, street, house_number, zip, city, country, phone, email, birth_date, gender, ahv_number, civil_status, nationality, residence_permit}'),
       contract_terms: z.string().describe('JSON string with contract fields: {start_date, end_date, is_indefinite, hours_per_week, hours_per_month, notice_period_days}'),
-      wage: z.string().describe('JSON string with wage fields: {wage_type, hourly_rate, monthly_rate, vacation_weeks, holiday_supplement_pct, payment_iban}'),
+      wage: z.string().describe('JSON string with wage fields: {wage_type, hourly_rate, vacation_weeks, holiday_supplement_pct, payment_iban}'),
       social_insurance: z.string().describe('JSON string with insurance fields: {accounting_method, canton, nbu_employer_pct, nbu_employee_pct}'),
     }),
   },

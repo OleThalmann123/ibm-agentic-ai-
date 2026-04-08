@@ -33,11 +33,22 @@ interface MonthlyHours {
 const MONTH_NAMES = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
 
 function parseHours(start: string, end: string): number {
-  const parts1 = start.split(':').map(Number);
-  const parts2 = end.split(':').map(Number);
-  const sh = parts1[0] ?? 0, sm = parts1[1] ?? 0;
-  const eh = parts2[0] ?? 0, em = parts2[1] ?? 0;
-  return Math.max(0, (eh * 60 + em - sh * 60 - sm) / 60);
+  const toMin = (t: string) => {
+    const [hhRaw, mmRaw] = (t || '').split(':');
+    const hh = Number(hhRaw);
+    const mm = Number(mmRaw);
+    if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+    if (hh === 24 && mm === 0) return 24 * 60;
+    if (hh < 0 || hh > 23) return null;
+    if (mm < 0 || mm > 59) return null;
+    return hh * 60 + mm;
+  };
+  const s = toMin(start);
+  const e = toMin(end);
+  if (s == null || e == null) return 0;
+  const raw = e - s;
+  const minutes = raw >= 0 ? raw : raw + 24 * 60;
+  return Math.max(0, minutes / 60);
 }
 
 function monthKey(d: Date): string {

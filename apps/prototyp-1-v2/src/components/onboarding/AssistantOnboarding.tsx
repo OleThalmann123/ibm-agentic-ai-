@@ -11,6 +11,7 @@ import { supabase } from '@asklepios/backend';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import asklepiosLogo from '@/assets/asklepios-logo.png';
+import { getCityFromChPlz, isValidChPlz } from '@/utils/chPlz';
 
 const formatAIWarning = (code: string) => {
   const map: Record<string, string> = {
@@ -79,10 +80,10 @@ const FIELD_LABELS: Record<string, string> = {
   'assistant.residence_permit': 'Aufenthaltsstatus',
   'contract_terms.start_date': 'Vertragsbeginn', 'contract_terms.end_date': 'Vertragsende',
   'contract_terms.is_indefinite': 'Unbefristet',
-  'contract_terms.hours_per_week': 'Stunden/Woche', 'contract_terms.hours_per_month': 'Stunden/Monat',
+  'contract_terms.hours_per_week': 'Stunden/Woche',
   'contract_terms.notice_period_days': 'Kündigungsfrist (Tage)',
   'wage.wage_type': 'Lohnart',
-  'wage.hourly_rate': 'Stundenlohn', 'wage.monthly_rate': 'Monatslohn',
+  'wage.hourly_rate': 'Stundenlohn',
   'wage.vacation_weeks': 'Ferienwochen',
   'wage.holiday_supplement_pct': 'Ferienzuschlag',
   'wage.payment_iban': 'IBAN',
@@ -113,10 +114,8 @@ const FIELD_KEY_TO_PATH: Record<string, string> = {
   contractUnbefristet: 'contract_terms.is_indefinite',
   noticePeriodDays: 'contract_terms.notice_period_days',
   hoursPerWeek: 'contract_terms.hours_per_week',
-  hoursPerMonth: 'contract_terms.hours_per_month',
   wageType: 'wage.wage_type',
   hourlyRate: 'wage.hourly_rate',
-  monthlyRate: 'wage.monthly_rate',
   vacationWeeks: 'wage.vacation_weeks',
   vacationSurcharge: 'wage.holiday_supplement_pct',
   iban: 'wage.payment_iban',
@@ -131,8 +130,31 @@ const PATH_TO_FIELD_KEY: Record<string, string> = Object.fromEntries(
 );
 
 const SWISS_CANTON_OPTIONS: [string, string][] = [
-  ['LU', 'Luzern'],
+  ['AG', 'Aargau'],
+  ['AI', 'Appenzell Innerrhoden'],
+  ['AR', 'Appenzell Ausserrhoden'],
   ['BE', 'Bern'],
+  ['BL', 'Basel-Landschaft'],
+  ['BS', 'Basel-Stadt'],
+  ['FR', 'Freiburg'],
+  ['GE', 'Genf'],
+  ['GL', 'Glarus'],
+  ['GR', 'Graubünden'],
+  ['JU', 'Jura'],
+  ['LU', 'Luzern'],
+  ['NE', 'Neuenburg'],
+  ['NW', 'Nidwalden'],
+  ['OW', 'Obwalden'],
+  ['SG', 'St. Gallen'],
+  ['SH', 'Schaffhausen'],
+  ['SO', 'Solothurn'],
+  ['SZ', 'Schwyz'],
+  ['TG', 'Thurgau'],
+  ['TI', 'Tessin'],
+  ['UR', 'Uri'],
+  ['VD', 'Waadt'],
+  ['VS', 'Wallis'],
+  ['ZG', 'Zug'],
   ['ZH', 'Zürich'],
 ];
 
@@ -152,6 +174,39 @@ function extractionDedupeKey(file: File) {
 
 const TOAST_EXTRACTION_LOADING = 'extraction-loading';
 const TOAST_EXTRACTION_RESULT = 'extraction-result';
+
+function parseLooseNumber(input: string): number | null {
+  const s = input.trim().replace('%', '').replace(/\s/g, '').replace(',', '.');
+  if (!s) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+function holidayPctToUiPercentString(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  const n = typeof value === 'number' ? value : parseLooseNumber(String(value));
+  if (n === null) return String(value).trim();
+  // In den extrahierten Daten kommt der Ferienzuschlag typischerweise als Dezimal (z. B. 0.0833).
+  const pct = n <= 1 ? n * 100 : n;
+  return String(Number(pct.toFixed(2)));
+}
+
+function uiPercentStringToHolidayFractionString(value: string): string {
+  const n = parseLooseNumber(value);
+  if (n === null) return value.trim();
+  // UI ist Prozent (z. B. 8.33) → persistiert wird Dezimal (z. B. 0.0833)
+  const fraction = n / 100;
+  return String(Number(fraction.toFixed(4)));
+}
+
+function pctFieldToUiPercentString(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  const n = typeof value === 'number' ? value : parseLooseNumber(String(value));
+  if (n === null) return String(value).trim();
+  // Für Prozentfelder (z. B. NBU): Extraktion kann Dezimal liefern (0.01) oder Prozent (1.0).
+  const pct = n <= 1 ? n * 100 : n;
+  return String(Number(pct.toFixed(2)));
+}
 
 export type PopupAttentionField = {
   path: string;
@@ -536,9 +591,9 @@ function validateAhvNumber(value: string): string | null {
 /** Validate Swiss PLZ: 4 digits, 1000-9699 */
 function validatePlz(value: string): string | null {
   if (!value) return null;
-  const num = parseInt(value.trim(), 10);
-  if (isNaN(num) || value.trim().length !== 4) return 'PLZ muss 4 Ziffern haben';
-  if (num < 1000 || num > 9699) return 'Ungültige Schweizer PLZ';
+  const v = value.trim();
+  if (v.length !== 4) return 'PLZ muss 4 Ziffern haben';
+  if (!isValidChPlz(v)) return 'Ungültige Schweizer PLZ';
   return null;
 }
 
@@ -551,11 +606,57 @@ function formatIban(raw: string): string {
 /** Validate Swiss IBAN */
 function validateIban(value: string): string | null {
   if (!value) return null;
-  const clean = value.replace(/\s/g, '').toUpperCase();
-  if (clean.length > 0 && !clean.startsWith('CH')) return 'Muss mit CH beginnen';
-  if (clean.length > 2 && clean.length < 21) return `${21 - clean.length} Zeichen fehlen`;
-  if (clean.length === 21) return null;
-  if (clean.length > 21) return 'Zu viele Zeichen';
+  const cleanedRaw = value
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+
+  if (cleanedRaw.length > 0 && !cleanedRaw.startsWith('CH')) return 'Muss mit CH beginnen';
+  if (cleanedRaw.length > 2 && cleanedRaw.length < 21) return `${21 - cleanedRaw.length} Zeichen fehlen`;
+  if (cleanedRaw.length > 21) return 'Zu viele Zeichen';
+  if (cleanedRaw.length !== 21) return null;
+
+  // OCR-Toleranz: häufige Buchstaben↔Ziffern-Verwechslungen im Zahlenteil
+  const ocrDigitMap: Record<string, string> = {
+    O: '0',
+    Q: '0',
+    D: '0',
+    I: '1',
+    L: '1',
+    Z: '2',
+    S: '5',
+    G: '6',
+    B: '8',
+  };
+
+  const normalized = `${cleanedRaw.slice(0, 2)}${cleanedRaw
+    .slice(2)
+    .split('')
+    .map((c) => ocrDigitMap[c] ?? c)
+    .join('')}`;
+
+  if (!/^CH\d{19}$/.test(normalized)) return 'Ungültige IBAN (Format)';
+
+  const mod97 = (iban: string): number => {
+    const rearranged = `${iban.slice(4)}${iban.slice(0, 4)}`;
+    let remainder = 0;
+    for (const ch of rearranged) {
+      const code = ch.charCodeAt(0);
+      if (code >= 48 && code <= 57) {
+        remainder = (remainder * 10 + (code - 48)) % 97;
+        continue;
+      }
+      if (code >= 65 && code <= 90) {
+        const value = code - 55; // A=10..Z=35
+        remainder = (remainder * 10 + Math.floor(value / 10)) % 97;
+        remainder = (remainder * 10 + (value % 10)) % 97;
+        continue;
+      }
+      return -1;
+    }
+    return remainder;
+  };
+
+  if (mod97(normalized) !== 1) return 'Ungültige IBAN (Prüfziffer)';
   return null;
 }
 
@@ -716,7 +817,6 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
   const [hoursPerMonth, setHoursPerMonth] = useState('');
   const [wageType, setWageType] = useState('hourly');
   const [hourlyRate, setHourlyRate] = useState('');
-  const [monthlyRate, setMonthlyRate] = useState('');
   const [vacationWeeks, setVacationWeeks] = useState('4');
   const [vacationSurcharge, setVacationSurcharge] = useState('');
   const [iban, setIban] = useState('');
@@ -870,13 +970,17 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
       setContractEnd(data.contract_end || '');
       setContractUnbefristet(!!data.contract_unbefristet);
       setNoticePeriodDays(data.notice_period_days?.toString() || '');
-      setHoursPerWeek(data.hours_per_week?.toString() || '');
-      setHoursPerMonth(data.hours_per_month?.toString() || '');
+      const existingHoursPerWeek = data.hours_per_week?.toString?.() || '';
+      const existingHoursPerMonth = data.hours_per_month?.toString?.() || '';
+      setHoursPerMonth(existingHoursPerMonth);
+      setHoursPerWeek(existingHoursPerWeek || (Number.isFinite(Number(existingHoursPerMonth)) && Number(existingHoursPerMonth) > 0
+        ? String(Number((Number(existingHoursPerMonth) / 4).toFixed(2)))
+        : ''
+      ));
       setWageType(data.wage_type || 'hourly');
       setHourlyRate(editAssistant.hourly_rate?.toString() || data.hourly_rate?.toString() || '');
-      setMonthlyRate(data.monthly_rate?.toString() || '');
       setVacationWeeks(editAssistant.vacation_weeks?.toString() || data.vacation_weeks?.toString() || '4');
-      setVacationSurcharge(data.vacation_surcharge || '');
+      setVacationSurcharge(holidayPctToUiPercentString(data.vacation_surcharge));
       setIban(data.iban || data.payment_iban || '');
       setBillingMethod(
         data.billing_method === 'ordinary' || data.billing_method === 'standard'
@@ -884,8 +988,8 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
           : '',
       );
       setCanton(data.canton || '');
-      setNbuEmployer(data.nbu_employer || data.nbu_employer_pct || '');
-      setNbuEmployee(data.nbu_employee || data.nbu_employee_pct || '');
+      setNbuEmployer(pctFieldToUiPercentString(data.nbu_employer || data.nbu_employer_pct));
+      setNbuEmployee(pctFieldToUiPercentString(data.nbu_employee || data.nbu_employee_pct));
     }
   }, [editAssistant]);
 
@@ -942,9 +1046,10 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
     if (w) {
       setField('wageType', w.wage_type, setWageType);
       setField('hourlyRate', w.hourly_rate, setHourlyRate);
-      setField('monthlyRate', w.monthly_rate, setMonthlyRate);
       setField('vacationWeeks', w.vacation_weeks, setVacationWeeks);
-      setField('vacationSurcharge', w.holiday_supplement_pct, setVacationSurcharge);
+      // UI arbeitet mit Prozentwerten, Extraktion liefert typischerweise Dezimalwerte.
+      if (w.holiday_supplement_pct) cMap.vacationSurcharge = w.holiday_supplement_pct;
+      setVacationSurcharge(holidayPctToUiPercentString(w.holiday_supplement_pct?.value));
       setField('iban', w.payment_iban, setIban);
     }
 
@@ -958,8 +1063,10 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
         }
       }
       setField('canton', si.canton, setCanton);
-      setField('nbuEmployer', si.nbu_employer_pct, setNbuEmployer);
-      setField('nbuEmployee', si.nbu_employee_pct, setNbuEmployee);
+      if (si.nbu_employer_pct) cMap.nbuEmployer = si.nbu_employer_pct;
+      if (si.nbu_employee_pct) cMap.nbuEmployee = si.nbu_employee_pct;
+      setNbuEmployer(pctFieldToUiPercentString(si.nbu_employer_pct?.value));
+      setNbuEmployee(pctFieldToUiPercentString(si.nbu_employee_pct?.value));
     }
 
     // UX: Wenn der Judge bereits ein konkretes ISO-Land vorschlägt, vorbefüllen,
@@ -979,6 +1086,17 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
       const next = normalizeStreetAndHouseNumber(rawStreet, rawHn);
       if (next.street !== rawStreet) setStreet(next.street);
       if (!rawHn && next.houseNumber) setHouseNumber(next.houseNumber);
+    }
+
+    // Vertragswerte können "pro Monat" angegeben sein – UI arbeitet mit Stunden/Woche.
+    // Regel: Falls keine Wochenstunden vorhanden sind, Monatsstunden auf 4 Wochen umrechnen.
+    const weekRaw = ct?.hours_per_week?.value;
+    const monthRaw = ct?.hours_per_month?.value;
+    if ((weekRaw == null || String(weekRaw).trim() === '') && monthRaw != null && String(monthRaw).trim() !== '') {
+      const n = Number(monthRaw);
+      if (Number.isFinite(n) && n > 0) {
+        setHoursPerWeek(String(Number((n / 4).toFixed(2))));
+      }
     }
 
     setConfidenceMap(cMap);
@@ -1026,6 +1144,15 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
     const derived = ZIP_PREFIX_TO_CANTON[p2];
     if (derived) setCanton(derived);
   }, [plz, canton]);
+
+  // Auto-fill Ort aus PLZ (nur wenn Ort noch leer ist)
+  useEffect(() => {
+    if (city.trim()) return;
+    const z = plz.trim();
+    if (z.length !== 4) return;
+    const derivedCity = getCityFromChPlz(z);
+    if (derivedCity) setCity(derivedCity);
+  }, [plz, city]);
 
   const COUNTRY_OPTIONS = [
     { value: 'CH', label: 'Schweiz (CH)' },
@@ -1189,8 +1316,8 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
         contract_unbefristet: contractUnbefristet,
         notice_period_days: noticePeriodDays.trim() || null,
         hours_per_week: hoursPerWeek, hours_per_month: hoursPerMonth,
-        wage_type: wageType, monthly_rate: monthlyRate,
-        vacation_surcharge: vacationSurcharge,
+        wage_type: wageType,
+        vacation_surcharge: uiPercentStringToHolidayFractionString(vacationSurcharge),
         iban,
         billing_method:
           billingMethod === 'ordinary' ? billingMethod : null,
@@ -1436,16 +1563,11 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
         return (
           <select value={wageType} onChange={(e) => setWageType(e.target.value)} className={`${selectStyle} mt-1`}>
             <option value="hourly">Stundenlohn</option>
-            <option value="monthly">Monatslohn</option>
           </select>
         );
       case 'hourlyRate':
         return (
           <input type="number" step={0.05} min={0} className={pIn} placeholder="z. B. 30.00" value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} />
-        );
-      case 'monthlyRate':
-        return (
-          <input type="number" step={1} min={0} className={pIn} placeholder="z. B. 2600" value={monthlyRate} onChange={(e) => setMonthlyRate(e.target.value)} />
         );
       case 'vacationWeeks':
         return (
@@ -1456,7 +1578,17 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
           </select>
         );
       case 'vacationSurcharge':
-        return <input type="text" className={pIn} value={vacationSurcharge} onChange={(e) => setVacationSurcharge(e.target.value)} />;
+        return (
+          <input
+            type="number"
+            min={0}
+            step={0.01}
+            className={pIn}
+            placeholder="z. B. 8.33"
+            value={vacationSurcharge}
+            onChange={(e) => setVacationSurcharge(e.target.value)}
+          />
+        );
       case 'iban':
         return (
           <input type="text" className={pIn} placeholder="CH93 …" value={iban} onChange={(e) => setIban(formatIban(e.target.value))} />
@@ -1482,7 +1614,10 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
       case 'nbuEmployer':
         return (
           <input
-            type="text"
+            type="number"
+            min={0}
+            max={100}
+            step={0.01}
             className={pIn}
             placeholder="z. B. 1.50"
             value={nbuEmployer}
@@ -1492,7 +1627,10 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
       case 'nbuEmployee':
         return (
           <input
-            type="text"
+            type="number"
+            min={0}
+            max={100}
+            step={0.01}
             className={pIn}
             placeholder="z. B. 1.50"
             value={nbuEmployee}
@@ -2032,9 +2170,6 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                   <MiniField title="Stunden/Woche" {...fieldProps('hoursPerWeek')} hasValue={!!hoursPerWeek} error={validatePositiveNumber(hoursPerWeek, 'Stunden')}>
                     <input type="number" min="0" max="168" step="0.5" placeholder="z.B. 20" value={hoursPerWeek} onChange={e => setHoursPerWeek(e.target.value)} className={inputStyle} />
                   </MiniField>
-                  <MiniField title="Stunden/Monat" {...fieldProps('hoursPerMonth')} hasValue={!!hoursPerMonth} error={validatePositiveNumber(hoursPerMonth, 'Stunden')}>
-                    <input type="number" min="0" max="744" step="0.5" placeholder="z.B. 86" value={hoursPerMonth} onChange={e => setHoursPerMonth(e.target.value)} className={inputStyle} />
-                  </MiniField>
                 </div>
 
                 <h4 className="text-sm font-bold">Lohn</h4>
@@ -2042,14 +2177,10 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                   <MiniField title="Lohnart" {...fieldProps('wageType')} hasValue={!!wageType}>
                     <select value={wageType} onChange={e => setWageType(e.target.value)} className={selectStyle}>
                       <option value="hourly">Stundenlohn</option>
-                      <option value="monthly">Monatslohn</option>
                     </select>
                   </MiniField>
                   <MiniField title="Stundenlohn (CHF)" {...fieldProps('hourlyRate')} hasValue={!!hourlyRate} error={validatePositiveNumber(hourlyRate, 'Stundenlohn')}>
                     <input type="number" step="0.05" min="0" placeholder="z.B. 30.00" value={hourlyRate} onChange={e => setHourlyRate(e.target.value)} className={inputStyle} />
-                  </MiniField>
-                  <MiniField title="Monatslohn (ca.)" {...fieldProps('monthlyRate')} hasValue={!!monthlyRate} error={validatePositiveNumber(monthlyRate, 'Monatslohn')}>
-                    <input type="number" step="1" min="0" placeholder="z.B. 2600" value={monthlyRate} onChange={e => setMonthlyRate(e.target.value)} className={inputStyle} />
                   </MiniField>
                   <MiniField title="Ferien (Wochen)" {...fieldProps('vacationWeeks')} hasValue={!!vacationWeeks}>
                     <select value={vacationWeeks} onChange={e => setVacationWeeks(e.target.value)} className={selectStyle}>
@@ -2071,7 +2202,15 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
 
                   <div className="grid grid-cols-4 gap-4">
                   <MiniField title="Ferienzuschlag %" {...fieldProps('vacationSurcharge')} hasValue={!!vacationSurcharge}>
-                    <input type="text" value={vacationSurcharge} onChange={e => setVacationSurcharge(e.target.value)} className={inputStyle} />
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      placeholder="z.B. 8.33"
+                      value={vacationSurcharge}
+                      onChange={e => setVacationSurcharge(e.target.value)}
+                      className={inputStyle}
+                    />
                   </MiniField>
                   <MiniField title="Lohnkonto (IBAN)" {...fieldProps('iban')} hasValue={!!iban} error={validateIban(iban)} hint="Gültige IBAN">
                     <input type="text" placeholder="CH93 0076 2011 6238 5295 7" value={iban} onChange={e => setIban(formatIban(e.target.value))} className={inputStyle} />
@@ -2090,16 +2229,36 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                   >
                     <select value={canton} onChange={e => setCanton(e.target.value)} className={selectStyle}>
                       <option value="">Bitte wählen...</option>
-                      <option value="BE">Bern</option>
-                      <option value="LU">Luzern</option>
-                      <option value="ZH">Zürich</option>
+                      {SWISS_CANTON_OPTIONS.map(([code, name]) => (
+                        <option key={code} value={code}>
+                          {name}
+                        </option>
+                      ))}
                     </select>
                   </MiniField>
                   <MiniField title="Nichtberufsunfallversicherung (NBU) Arbeitgeber (%)" {...fieldProps('nbuEmployer')} hasValue={!!nbuEmployer}>
-                    <input type="text" value={nbuEmployer} onChange={e => setNbuEmployer(e.target.value)} className={inputStyle} />
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step="0.01"
+                      placeholder="z.B. 1.50"
+                      value={nbuEmployer}
+                      onChange={e => setNbuEmployer(e.target.value)}
+                      className={inputStyle}
+                    />
                   </MiniField>
                   <MiniField title="Nichtberufsunfallversicherung (NBU) Arbeitnehmer (%)" {...fieldProps('nbuEmployee')} hasValue={!!nbuEmployee}>
-                    <input type="text" value={nbuEmployee} onChange={e => setNbuEmployee(e.target.value)} className={inputStyle} />
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step="0.01"
+                      placeholder="z.B. 1.50"
+                      value={nbuEmployee}
+                      onChange={e => setNbuEmployee(e.target.value)}
+                      className={inputStyle}
+                    />
                   </MiniField>
                   </div>
                 </div>

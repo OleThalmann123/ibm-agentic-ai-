@@ -99,17 +99,19 @@ Extraktionsregeln:
 - Extrahiere nur was explizit im Vertrag steht. Erfinde niemals Werte.
 - Wenn ein Wert nicht vorhanden ist, gib null zurück und begründe dies in note.
 - **Geschlecht**: nur setzen, wenn es im Vertrag explizit genannt ist (z. B. "Herr/Frau", "männlich/weiblich/divers"). Niemals aus Zivilstand ableiten. Wenn unsicher → null.
+- **IBAN (CH/LI)**: nur setzen, wenn eine IBAN explizit im Vertrag steht. Normalisiere auf Grossbuchstaben und entferne Trennzeichen. Wenn du dir unsicher bist oder die IBAN nicht sauber erkennbar ist → null (nicht raten).
 - Daten immer als YYYY-MM-DD formatieren.
 - Prozentsätze als Dezimal: 5.3% → 0.053
 - Kantonskürzel: Grossbuchstaben, 2-stellig (ZH, BE, BS, etc.)
 - is_indefinite: true wenn «unbefristet», false wenn end_date vorhanden
 - accounting_method: «ordinary» (aktuell nur ordentlich unterstützt)
+- Arbeitszeit: Wenn nur Stunden/Woche im Vertrag stehen, setze hours_per_week und lasse hours_per_month null (wird im Tool aus weekly × 4 abgeleitet).
 
 Warnungen (warnings) einfügen wenn zutreffend:
 - "FEHLENDE_AHV_NUMMER": ahv_number nicht vorhanden
 - "KANTON_ABGELEITET": canton wurde aus PLZ abgeleitet
 - "FEHLENDE_SOZIALVERSICHERUNGSANGABEN": NBU/KTV/BU fehlen
-- "KEIN_LOHN_ANGEGEBEN": weder hourly_rate noch monthly_rate
+- "KEIN_LOHN_ANGEGEBEN": hourly_rate fehlt
 - "MUSTERVERTRAG_NICHT_AUSGEFUELLT": Mustervertrag ohne ausgefüllte Werte
 
 Du gibst ausschliesslich ein JSON-Objekt zurück. Kein erklärender Text davor oder danach.`;
@@ -163,9 +165,8 @@ Gib ein JSON in exakt diesem Format zurück. Jedes Feld hat: value, source_text,
       "notice_period_days": { "value": null, "source_text": "", "note": "Kündigungsfrist in Tagen" }
     },
     "wage": {
-      "wage_type": { "value": null, "source_text": "", "note": "hourly oder monthly" },
+      "wage_type": { "value": null, "source_text": "", "note": "hourly" },
       "hourly_rate": { "value": null, "source_text": "", "note": "CHF brutto" },
-      "monthly_rate": { "value": null, "source_text": "", "note": "CHF brutto" },
       "vacation_weeks": { "value": null, "source_text": "", "note": "4, 5 oder 6" },
       "holiday_supplement_pct": { "value": null, "source_text": "", "note": "0.0833=4W, 0.1064=5W, 0.1304=6W" },
       "payment_iban": { "value": null, "source_text": "", "note": "IBAN" }
@@ -210,7 +211,7 @@ function parseResponse(content: unknown): RawExtractionResult {
     return content as RawExtractionResult;
   }
 
-  const text =
+  const rawText =
     typeof content === 'string'
       ? content
       : Array.isArray(content)
@@ -224,21 +225,113 @@ function parseResponse(content: unknown): RawExtractionResult {
               return JSON.stringify(part);
             })
             .join('\n')
-        : JSON.stringify(content);
-  let cleaned = text.replace(/```json\n?/gi, '').replace(/```\n?/g, '').trim();
+        : String(content ?? '');
 
-  const startIdx = cleaned.indexOf('{');
-  const endIdx = cleaned.lastIndexOf('}');
+  const cleanedText = rawText
+    .replace(/```json\n?/gi, '')
+    .replace(/```\n?/g, '')
+    .replace(/^\uFEFF/, '') // BOM
+    .trim();
 
+  if (!cleanedText) {
+    throw new Error('Leere KI-Antwort erhalten. Bitte erneut versuchen.');
+  }
+
+  const looksLikeHtml = /^<!doctype html|^<html\b/i.test(cleanedText);
+  if (looksLikeHtml) {
+    throw new Error(
+      'Unerwartete HTML-Antwort erhalten (wahrscheinlich API-Fehler/Rate-Limit/Auth). Bitte erneut versuchen.',
+    );
+  }
+
+  const tryParse = (candidate: string): RawExtractionResult | null => {
+    try {
+      return JSON.parse(candidate) as RawExtractionResult;
+    } catch {
+      return null;
+    }
+  };
+
+  const ensureShape = (parsed: any): RawExtractionResult => {
+    // Surface OpenRouter-ish error payloads cleanly (they are valid JSON but not our schema)
+    if (parsed && typeof parsed === 'object' && ('error' in parsed || 'message' in parsed) && !('contracts' in parsed)) {
+      const msg = typeof parsed.message === 'string'
+        ? parsed.message
+        : typeof (parsed.error as any)?.message === 'string'
+          ? (parsed.error as any).message
+          : 'Unerwartete API-Antwort erhalten.';
+      throw new Error(msg);
+    }
+
+    if (!parsed || typeof parsed !== 'object' || !('contracts' in parsed) || !('extraction_metadata' in parsed)) {
+      throw new Error('Unerwartetes Antwortformat der KI. Bitte erneut versuchen.');
+    }
+    return parsed as RawExtractionResult;
+  };
+
+  // 1) Direct parse
+  const direct = tryParse(cleanedText);
+  if (direct) return ensureShape(direct as any);
+
+  // 2) Extract the first balanced JSON object from the text
+  const extracted = extractFirstJsonObject(cleanedText);
+  if (extracted) {
+    const parsed = tryParse(extracted);
+    if (parsed) return ensureShape(parsed as any);
+  }
+
+  // 3) Legacy: from first "{" to last "}"
+  const startIdx = cleanedText.indexOf('{');
+  const endIdx = cleanedText.lastIndexOf('}');
   if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-    cleaned = cleaned.substring(startIdx, endIdx + 1);
+    const sliced = cleanedText.substring(startIdx, endIdx + 1);
+    const parsed = tryParse(sliced);
+    if (parsed) return ensureShape(parsed as any);
   }
 
-  try {
-    return JSON.parse(cleaned) as RawExtractionResult;
-  } catch {
-    throw new Error('KI-Antwort konnte nicht als JSON geparsed werden. Bitte erneut versuchen.');
+  const snippet = cleanedText.slice(0, 400);
+  throw new Error(
+    `KI-Antwort konnte nicht als JSON geparsed werden. Bitte erneut versuchen. (Antwortanfang: ${JSON.stringify(snippet)})`,
+  );
+}
+
+/**
+ * Extract the first JSON object from a string by finding the first balanced { ... }.
+ * This tolerates extra text before/after and braces inside JSON strings.
+ */
+function extractFirstJsonObject(text: string): string | null {
+  const start = text.indexOf('{');
+  if (start === -1) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (ch === '\\\\') {
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+
+    if (ch === '{') depth++;
+    if (ch === '}') depth--;
+
+    if (depth === 0) {
+      return text.slice(start, i + 1);
+    }
   }
+
+  return null;
 }
 
 /**

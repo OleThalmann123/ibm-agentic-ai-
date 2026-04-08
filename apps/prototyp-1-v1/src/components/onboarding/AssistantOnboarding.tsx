@@ -22,6 +22,28 @@ function getCityFromPLZ(plz: string): string | null {
   return PLZ_CITY_MAP[zip] ?? null;
 }
 
+function parseLooseNumber(input: string): number | null {
+  const s = input.trim().replace('%', '').replace(/\s/g, '').replace(',', '.');
+  if (!s) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+function holidayPctToUiPercentString(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  const n = typeof value === 'number' ? value : parseLooseNumber(String(value));
+  if (n === null) return String(value).trim();
+  const pct = n <= 1 ? n * 100 : n;
+  return String(Number(pct.toFixed(2)));
+}
+
+function uiPercentStringToHolidayFractionString(value: string): string {
+  const n = parseLooseNumber(value);
+  if (n === null) return value.trim();
+  const fraction = n / 100;
+  return String(Number(fraction.toFixed(4)));
+}
+
 interface AssistantOnboardingProps {
   onComplete: () => void;
   onClose: () => void;
@@ -104,7 +126,6 @@ export function AssistantOnboarding({ onComplete, onClose }: AssistantOnboarding
   const [hoursPerMonth, setHoursPerMonth] = useState('');
   const [wageType, setWageType] = useState('hourly');
   const [hourlyRate, setHourlyRate] = useState('');
-  const [monthlyRate, setMonthlyRate] = useState('');
   const [vacationWeeks, setVacationWeeks] = useState('4');
   const [vacationSurcharge, setVacationSurcharge] = useState('');
   const [iban, setIban] = useState('');
@@ -154,9 +175,10 @@ export function AssistantOnboarding({ onComplete, onClose }: AssistantOnboarding
     if (w) {
       setField('wageType', w.wage_type, setWageType);
       setField('hourlyRate', w.hourly_rate, setHourlyRate);
-      setField('monthlyRate', w.monthly_rate, setMonthlyRate);
       setField('vacationWeeks', w.vacation_weeks, setVacationWeeks);
-      setField('vacationSurcharge', w.holiday_supplement_pct, setVacationSurcharge);
+      // UI arbeitet mit Prozentwerten, Extraktion liefert typischerweise Dezimalwerte.
+      if (w.holiday_supplement_pct) cMap.vacationSurcharge = w.holiday_supplement_pct;
+      setVacationSurcharge(holidayPctToUiPercentString(w.holiday_supplement_pct?.value));
       setField('iban', w.payment_iban, setIban);
     }
 
@@ -165,6 +187,17 @@ export function AssistantOnboarding({ onComplete, onClose }: AssistantOnboarding
       setField('canton', si.canton, setCanton);
       setField('nbuEmployer', si.nbu_employer_pct, setNbuEmployer);
       setField('nbuEmployee', si.nbu_employee_pct, setNbuEmployee);
+    }
+
+    // Vertragswerte können "pro Monat" angegeben sein – UI arbeitet mit Stunden/Woche.
+    // Regel: Falls keine Wochenstunden vorhanden sind, Monatsstunden auf 4 Wochen umrechnen.
+    const weekRaw = ct?.hours_per_week?.value;
+    const monthRaw = ct?.hours_per_month?.value;
+    if ((weekRaw == null || String(weekRaw).trim() === '') && monthRaw != null && String(monthRaw).trim() !== '') {
+      const n = Number(monthRaw);
+      if (Number.isFinite(n) && n > 0) {
+        setHoursPerWeek(String(Number((n / 4).toFixed(2))));
+      }
     }
 
     setConfidenceMap(cMap);
@@ -264,8 +297,8 @@ export function AssistantOnboarding({ onComplete, onClose }: AssistantOnboarding
         civil_status: civilStatus, residence_permit: residencePermit,
         contract_start: contractStart, contract_end: contractEnd,
         hours_per_week: hoursPerWeek, hours_per_month: hoursPerMonth,
-        wage_type: wageType, monthly_rate: monthlyRate,
-        vacation_surcharge: vacationSurcharge,
+        wage_type: wageType,
+        vacation_surcharge: uiPercentStringToHolidayFractionString(vacationSurcharge),
         iban, billing_method: billingMethod,
         canton, nbu_employer: nbuEmployer, nbu_employee: nbuEmployee,
         extraction_metadata: extraction?.extraction_metadata ?? null,
@@ -522,9 +555,6 @@ export function AssistantOnboarding({ onComplete, onClose }: AssistantOnboarding
                   <MiniField status={getStatus('hoursPerWeek', hoursPerWeek)} title="Stunden/Woche" message={getMessage('hoursPerWeek', hoursPerWeek)}>
                     <input type="text" value={hoursPerWeek} onChange={e => setHoursPerWeek(e.target.value)} className={inputStyle} />
                   </MiniField>
-                  <MiniField status={getStatus('hoursPerMonth', hoursPerMonth)} title="Stunden/Monat" message={getMessage('hoursPerMonth', hoursPerMonth)}>
-                    <input type="text" value={hoursPerMonth} onChange={e => setHoursPerMonth(e.target.value)} className={inputStyle} />
-                  </MiniField>
                 </div>
 
                 <h4 className="text-sm font-bold">Lohn</h4>
@@ -532,14 +562,10 @@ export function AssistantOnboarding({ onComplete, onClose }: AssistantOnboarding
                   <MiniField status={getStatus('wageType', wageType)} title="Lohnart" message={getMessage('wageType', wageType)}>
                     <select value={wageType} onChange={e => setWageType(e.target.value)} className={selectStyle}>
                       <option value="hourly">Stundenlohn</option>
-                      <option value="monthly">Monatslohn</option>
                     </select>
                   </MiniField>
                   <MiniField status={getStatus('hourlyRate', hourlyRate)} title="Stundenlohn (CHF)" message={getMessage('hourlyRate', hourlyRate)}>
                     <input type="number" step="0.01" value={hourlyRate} onChange={e => setHourlyRate(e.target.value)} className={inputStyle} />
-                  </MiniField>
-                  <MiniField status={getStatus('monthlyRate', monthlyRate)} title="Monatslohn (ca.)" message={getMessage('monthlyRate', monthlyRate)}>
-                    <input type="text" value={monthlyRate} onChange={e => setMonthlyRate(e.target.value)} className={inputStyle} />
                   </MiniField>
                   <MiniField status={getStatus('vacationWeeks', vacationWeeks)} title="Ferien (Wochen)" message={getMessage('vacationWeeks', vacationWeeks)}>
                     <select value={vacationWeeks} onChange={e => setVacationWeeks(e.target.value)} className={selectStyle}>
@@ -553,7 +579,15 @@ export function AssistantOnboarding({ onComplete, onClose }: AssistantOnboarding
                 <h4 className="text-sm font-bold">Versicherung & Konto</h4>
                 <div className="grid grid-cols-4 gap-4">
                   <MiniField status={getStatus('vacationSurcharge', vacationSurcharge)} title="Ferienzuschlag %" message={getMessage('vacationSurcharge', vacationSurcharge)}>
-                    <input type="text" value={vacationSurcharge} onChange={e => setVacationSurcharge(e.target.value)} className={inputStyle} />
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="z.B. 8.33"
+                      value={vacationSurcharge}
+                      onChange={e => setVacationSurcharge(e.target.value)}
+                      className={inputStyle}
+                    />
                   </MiniField>
                   <MiniField status={getStatus('iban', iban)} title="Lohnkonto (IBAN)" message={getMessage('iban', iban)}>
                     <input type="text" value={iban} onChange={e => setIban(e.target.value)} className={inputStyle} />
