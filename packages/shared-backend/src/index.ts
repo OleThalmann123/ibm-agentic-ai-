@@ -18,5 +18,4 @@ export * from './shared/types';
 export * from './shared/utils';
 export * from './shared/payslip-pdf';
 export * from './shared/timesheet-pdf';
-export * from './shared/einsatzrapport-pdf';
 export * from './shared/iv-invoice-pdf';

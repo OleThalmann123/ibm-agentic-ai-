@@ -14,6 +14,8 @@ export type IvInvoiceLine = {
 export interface IvInvoicePdfData {
   invoiceDateLabel: string; // z. B. "08.04.2026"
   monthLabel: string; // z. B. "April 2026"
+  /** Optionales Logo (DataURL), wird im Deckblatt verwendet. */
+  logoDataUrl?: string;
 
   insuredPerson: {
     name: string;
@@ -55,10 +57,23 @@ export function generateIvInvoicePdf(data: IvInvoicePdfData): jsPDF {
   const LM = 10;
   let y = 15;
 
-  // Header
+  // Header (leicht andere Farbe, inkl. Logo)
+  doc.setFillColor(236, 253, 245); // sehr dezentes Asklepios-Grün
+  doc.rect(0, 0, 210, 32, 'F');
+  doc.setDrawColor(209, 250, 229);
+  doc.line(0, 32, 210, 32);
+
+  if (data.logoDataUrl) {
+    try {
+      doc.addImage(data.logoDataUrl, 'PNG', LM, 8, 18, 18);
+    } catch {
+      // ignore
+    }
+  }
+
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
-  doc.text('Rechnung für Assistenzbeitrag (IV)', LM, y);
+  doc.text('Rechnung für Assistenzbeitrag (IV)', LM + (data.logoDataUrl ? 22 : 0), y);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
   doc.text(`Rechnungsdatum: ${data.invoiceDateLabel}`, LM + W, y, { align: 'right' });
@@ -76,7 +91,7 @@ export function generateIvInvoicePdf(data: IvInvoicePdfData): jsPDF {
       ['Postleitzahl, Ort', data.insuredPerson.plzCity || ''],
     ],
     theme: 'grid',
-    headStyles: { fillColor: [230, 238, 250], textColor: 20, fontSize: 9, fontStyle: 'bold' },
+    headStyles: { fillColor: [230, 252, 240], textColor: 20, fontSize: 9, fontStyle: 'bold' },
     bodyStyles: { fontSize: 9 },
     columnStyles: { 0: { cellWidth: 60 }, 1: { cellWidth: 120 } },
     margin: { left: LM, right: LM },
@@ -93,7 +108,7 @@ export function generateIvInvoicePdf(data: IvInvoicePdfData): jsPDF {
       ['Postleitzahl, Ort', data.invoiceIssuer.plzCity || ''],
     ],
     theme: 'grid',
-    headStyles: { fillColor: [230, 238, 250], textColor: 20, fontSize: 9, fontStyle: 'bold' },
+    headStyles: { fillColor: [230, 252, 240], textColor: 20, fontSize: 9, fontStyle: 'bold' },
     bodyStyles: { fontSize: 9 },
     columnStyles: { 0: { cellWidth: 60 }, 1: { cellWidth: 120 } },
     margin: { left: LM, right: LM },
@@ -115,44 +130,62 @@ export function generateIvInvoicePdf(data: IvInvoicePdfData): jsPDF {
       ['Zahlungskondition', data.billing.paymentTermsDays ? `${data.billing.paymentTermsDays} Tage` : ''],
     ],
     theme: 'grid',
-    headStyles: { fillColor: [230, 238, 250], textColor: 20, fontSize: 9, fontStyle: 'bold' },
+    headStyles: { fillColor: [230, 252, 240], textColor: 20, fontSize: 9, fontStyle: 'bold' },
     bodyStyles: { fontSize: 9 },
     columnStyles: { 0: { cellWidth: 60 }, 1: { cellWidth: 120 } },
     margin: { left: LM, right: LM },
   });
   y = (doc as any).lastAutoTable.finalY + 8;
 
-  // Lines table
-  const body = data.lines.map((l) => ([
-    l.assistantName,
-    l.activityLabel,
-    fmt(l.hours),
-    money(l.rateCHF),
-    money(l.amountCHF),
-  ]));
+  // Lines table – nach Assistenzpersonen aufgeschlüsselt
+  const sortedLines = [...data.lines].sort((a, b) =>
+    (a.assistantName + a.activityLabel).localeCompare(b.assistantName + b.activityLabel),
+  );
+  const body: any[] = [];
+  let lastAssistant = '';
+  for (const l of sortedLines) {
+    const firstRowForAssistant = l.assistantName !== lastAssistant;
+    lastAssistant = l.assistantName;
+    body.push([
+      firstRowForAssistant ? l.assistantName : '',
+      'Assistenzleistung Wohnen',
+      l.activityLabel,
+      fmt(l.hours),
+      money(l.amountCHF),
+      '',
+    ]);
+  }
 
   body.push([
     { content: 'TOTAL', styles: { fontStyle: 'bold' as const } } as any,
     '',
     '',
     '',
-    '',
     { content: money(data.totalCHF), styles: { fontStyle: 'bold' as const } } as any,
+    '',
   ]);
 
   autoTable(doc, {
     startY: y,
-    head: [['Leistungserbringer', 'Beschreibung', 'Std (dez.)', 'Ansatz', 'Betrag']],
+    head: [[
+      'Leistungserbringer',
+      'Leistung',
+      'Beschreibung der erbrachten Leistung',
+      'Anz. Std. (Min. in 1/100h)',
+      'Betrag Total (in CHF)',
+      'Beilagen',
+    ]],
     body,
     theme: 'grid',
-    headStyles: { fillColor: [30, 64, 175], fontSize: 8, fontStyle: 'bold' },
+    headStyles: { fillColor: [16, 185, 129], fontSize: 8, fontStyle: 'bold' },
     bodyStyles: { fontSize: 9 },
     columnStyles: {
-      0: { cellWidth: 46 },
-      1: { cellWidth: 76 },
-      2: { cellWidth: 18, halign: 'right' },
+      0: { cellWidth: 38 },
+      1: { cellWidth: 30 },
+      2: { cellWidth: 64 },
       3: { cellWidth: 24, halign: 'right' },
       4: { cellWidth: 26, halign: 'right' },
+      5: { cellWidth: 18 },
     },
     margin: { left: LM, right: LM },
   });

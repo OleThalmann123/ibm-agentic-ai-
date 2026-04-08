@@ -5,7 +5,7 @@ import {
   calculatePayroll, FAK_RATES, fmt, fmtPct, type PayrollResult
 } from '@asklepios/backend';
 import { calculatePayslip, generatePayslipPdf, type PayslipAccountingMethod } from '@asklepios/backend';
-import { generateEinsatzrapportPdf } from '@asklepios/backend';
+import { generateTimesheetPdf } from '@asklepios/backend';
 import { generateIvInvoicePdf, type IvInvoiceLine } from '@asklepios/backend';
 import { PDFDocument } from 'pdf-lib';
 import {
@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import type { Assistant } from '@asklepios/backend';
 import { Badge, badgeVariants } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import asklepiosLogo from '@/assets/asklepios-logo.png';
 
 // ─── Types ───
 interface MonthlyHours {
@@ -131,6 +132,17 @@ function buildPdfName(monthKeyStr: string, docType: string): string {
   const datePart = sanitizeFilenamePart(monthKeyStr);
   const typePart = sanitizeFilenamePart(docType);
   return `${datePart}_${typePart}.pdf`;
+}
+
+async function loadImageAsDataUrl(url: string): Promise<string> {
+  const res = await fetch(url);
+  const blob = await res.blob();
+  return await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('image_read_failed'));
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.readAsDataURL(blob);
+  });
 }
 
 // ─── Flow Steps (3-step linear flow) ───
@@ -414,9 +426,11 @@ export function PayrollPage() {
       ivLines.sort((x, y) => (x.assistantName + x.activityLabel).localeCompare(y.assistantName + y.activityLabel));
       const ivTotalCHF = Number(ivLines.reduce((s, l) => s + (l.amountCHF || 0), 0).toFixed(2));
 
+      const logoDataUrl = await loadImageAsDataUrl(asklepiosLogo);
       const ivDoc = generateIvInvoicePdf({
         invoiceDateLabel: new Date().toLocaleDateString('de-CH'),
         monthLabel: monthLabel(currentMonth),
+        logoDataUrl,
         insuredPerson: {
           name: insuredName,
           ahvNumber: cd?.insured_ahv_number || '',
@@ -460,10 +474,30 @@ export function PayrollPage() {
 
       await appendJsPdf(ivDoc);
 
-      // 2) Per assistant: Payslip + Einsatzrapport (Standard) – nur wenn Stunden > 0
+      // 2) Per assistant – nur wenn Stunden > 0:
+      //    zuerst Arbeits- und Einsatzrapport, dann Lohnabrechnung.
       for (const a of assistants) {
         const hours = timeEntries[a.id];
         if (!hours || hours.totalHours <= 0) continue;
+
+        const reportDoc = generateTimesheetPdf({
+          title: 'Arbeits- und Einsatzrapport',
+          month: monthLabel(currentMonth),
+          employer: getEmployerAddress(),
+          employee: getEmployeeAddress(a),
+          entries: hours.entries.map((e) => ({
+            date: e.date,
+            start_time: (e.start_time || '').slice(0, 5),
+            end_time: (e.end_time || '').slice(0, 5),
+            hours: Number((e.hours || 0).toFixed(2)),
+            is_night: Boolean(e.is_night),
+            category: e.category || '',
+          })),
+          totalHours: Number(hours.totalHours.toFixed(2)),
+          nightHours: Number(hours.nightHours.toFixed(2)),
+          includeActivities: true,
+        });
+        await appendJsPdf(reportDoc);
 
         const result = payrollResults[a.id];
         if (result) {
@@ -515,17 +549,6 @@ export function PayrollPage() {
           });
           await appendJsPdf(payslipDoc);
         }
-
-        const einsatzDoc = generateEinsatzrapportPdf({
-          monthLabel: monthLabel(currentMonth),
-          assistantName: a.name || '—',
-          employerName: employer?.name || '—',
-          includeActivities: false,
-          rows: buildEinsatzrapportRows(hours),
-          totalHours: Number(hours.totalHours.toFixed(2)),
-          totalNights: Math.round(hours.nightHours),
-        });
-        await appendJsPdf(einsatzDoc);
       }
 
       const bytes = await merged.save();
@@ -555,6 +578,26 @@ export function PayrollPage() {
         const pages = await merged.copyPages(src, src.getPageIndices());
         for (const p of pages) merged.addPage(p);
       };
+
+      // Reihenfolge: zuerst Arbeits-/Einsatzrapport, dann Lohnabrechnung
+      const reportDoc = generateTimesheetPdf({
+        title: 'Arbeits- und Einsatzrapport',
+        month: monthLabel(currentMonth),
+        employer: getEmployerAddress(),
+        employee: getEmployeeAddress(assistant),
+        entries: hours.entries.map((e) => ({
+          date: e.date,
+          start_time: (e.start_time || '').slice(0, 5),
+          end_time: (e.end_time || '').slice(0, 5),
+          hours: Number((e.hours || 0).toFixed(2)),
+          is_night: Boolean(e.is_night),
+          category: e.category || '',
+        })),
+        totalHours: Number(hours.totalHours.toFixed(2)),
+        nightHours: Number(hours.nightHours.toFixed(2)),
+        includeActivities: true,
+      });
+      await appendJsPdf(reportDoc);
 
       const result = payrollResults[assistant.id];
       if (result) {
@@ -605,17 +648,6 @@ export function PayrollPage() {
         });
         await appendJsPdf(payslipDoc);
       }
-
-      const einsatzDoc = generateEinsatzrapportPdf({
-        monthLabel: monthLabel(currentMonth),
-        assistantName: assistant.name || '—',
-        employerName: employer?.name || '—',
-        includeActivities: false,
-        rows: buildEinsatzrapportRows(hours),
-        totalHours: Number(hours.totalHours.toFixed(2)),
-        totalNights: Math.round(hours.nightHours),
-      });
-      await appendJsPdf(einsatzDoc);
 
       const bytes = await merged.save();
       const blob = new Blob([bytes], { type: 'application/pdf' });
@@ -693,46 +725,6 @@ export function PayrollPage() {
     toast.success('Lohnabrechnung PDF heruntergeladen');
   };
 
-  const buildEinsatzrapportRows = (hours: MonthlyHours) => {
-    const parts = currentMonth.split('-').map(Number);
-    const year = parts[0] ?? new Date().getFullYear();
-    const month = parts[1] ?? new Date().getMonth() + 1;
-    const daysInMonth = new Date(year, month, 0).getDate();
-
-    // group entries by day (YYYY-MM-DD)
-    const byDay: Record<string, MonthlyHours['entries']> = {};
-    for (const e of hours.entries) {
-      (byDay[e.date] ||= []).push(e);
-    }
-    for (const d of Object.keys(byDay)) {
-      byDay[d]!.sort((a, b) => a.start_time.localeCompare(b.start_time));
-    }
-
-    const rows = [];
-    for (let day = 1; day <= daysInMonth; day++) {
-      const iso = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      const list = byDay[iso] || [];
-      const t1 = list[0];
-      const t2 = list[1];
-      const nightHours = list.filter(e => e.is_night).reduce((s, e) => s + (e.hours || 0), 0);
-      const dayHours = list.reduce((s, e) => s + (e.hours || 0), 0);
-      rows.push({
-        date: iso,
-        time1_from: t1?.start_time?.slice(0, 5) || '',
-        time1_to: t1?.end_time?.slice(0, 5) || '',
-        time1_hours: t1 ? Number((t1.hours || 0).toFixed(2)) : undefined,
-        time1_activity: t1?.is_night ? '' : (t1?.category || ''),
-        time2_from: t2?.start_time?.slice(0, 5) || '',
-        time2_to: t2?.end_time?.slice(0, 5) || '',
-        time2_hours: t2 ? Number((t2.hours || 0).toFixed(2)) : undefined,
-        time2_activity: t2?.is_night ? '' : (t2?.category || ''),
-        day_hours: Number(dayHours.toFixed(2)),
-        night_hours: Number(nightHours.toFixed(2)),
-      });
-    }
-    return rows;
-  };
-
   const downloadEinsatzrapportPdf = async (assistant: Assistant, hours: MonthlyHours, includeActivities: boolean) => {
     const cd = (assistant.contract_data as any) || {};
     // persist preference for assistant time entry UI
@@ -741,17 +733,25 @@ export function PayrollPage() {
       .update({ contract_data: { ...cd, time_entry_requires_activity_breakdown: includeActivities } })
       .eq('id', assistant.id);
 
-    const doc = generateEinsatzrapportPdf({
-      monthLabel: monthLabel(currentMonth),
-      assistantName: assistant.name || '—',
-      employerName: employer?.name || '—',
-      includeActivities,
-      rows: buildEinsatzrapportRows(hours),
+    const doc = generateTimesheetPdf({
+      title: 'Arbeits- und Einsatzrapport',
+      month: monthLabel(currentMonth),
+      employer: getEmployerAddress(),
+      employee: getEmployeeAddress(assistant),
+      entries: hours.entries.map((e) => ({
+        date: e.date,
+        start_time: (e.start_time || '').slice(0, 5),
+        end_time: (e.end_time || '').slice(0, 5),
+        hours: Number((e.hours || 0).toFixed(2)),
+        is_night: Boolean(e.is_night),
+        category: e.category || '',
+      })),
       totalHours: Number(hours.totalHours.toFixed(2)),
-      totalNights: Math.round(hours.nightHours),
+      nightHours: Number(hours.nightHours.toFixed(2)),
+      includeActivities,
     });
-    doc.save(buildPersonPdfName(currentMonth, includeActivities ? 'Einsatzrapport_mit_Taetigkeiten' : 'Einsatzrapport', assistant.name));
-    toast.success('Einsatzrapport PDF heruntergeladen');
+    doc.save(buildPersonPdfName(currentMonth, includeActivities ? 'Arbeits-_und_Einsatzrapport_mit_Taetigkeiten' : 'Arbeits-_und_Einsatzrapport', assistant.name));
+    toast.success('Arbeits- und Einsatzrapport PDF heruntergeladen');
   };
 
   // Stats

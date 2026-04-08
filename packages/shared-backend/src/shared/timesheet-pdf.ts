@@ -12,12 +12,16 @@ interface TimesheetEntry {
 }
 
 interface TimesheetPdfData {
+  /** Titel des Dokuments (Default: "Stundenzettel") */
+  title?: string;
   month: string; // e.g. "März 2026"
   employer: { name: string; street?: string; plzCity?: string };
   employee: { name: string; street?: string; plzCity?: string };
   entries: TimesheetEntry[];
   totalHours: number;
   nightHours: number;
+  /** Tätigkeiten-Spalte anzeigen (Default: true) */
+  includeActivities?: boolean;
 }
 
 const DAY_NAMES = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
@@ -57,11 +61,12 @@ export function generateTimesheetPdf(data: TimesheetPdfData): jsPDF {
   const W = 190;
   const LM = 10;
   let y = 15;
+  const includeActivities = data.includeActivities !== false;
 
   // Title
   doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
-  doc.text('Stundenzettel', LM, y);
+  doc.text(data.title || 'Stundenzettel', LM, y);
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   doc.text(data.month, LM + W, y, { align: 'right' });
@@ -131,7 +136,7 @@ export function generateTimesheetPdf(data: TimesheetPdfData): jsPDF {
       e.end_time,
       fmt(e.hours),
       e.is_night ? '🌙' : '',
-      formatActivity(e.category),
+      ...(includeActivities ? [formatActivity(e.category)] : []),
     ];
   });
 
@@ -141,12 +146,15 @@ export function generateTimesheetPdf(data: TimesheetPdfData): jsPDF {
     '', '',
     { content: fmt(data.totalHours), styles: { fontStyle: 'bold' as const } } as any,
     data.nightHours > 0 ? fmt(data.nightHours) : '',
-    '',
+    ...(includeActivities ? [''] : []),
   ]);
 
   autoTable(doc, {
     startY: y,
-    head: [['Datum', 'Von', 'Bis', 'Stunden', 'Nacht', 'Tätigkeit']],
+    head: [[
+      'Datum', 'Von', 'Bis', 'Stunden', 'Nacht',
+      ...(includeActivities ? ['Tätigkeit'] : []),
+    ]],
     body,
     theme: 'grid',
     headStyles: { fillColor: [30, 64, 175], fontSize: 8, fontStyle: 'bold' },
@@ -157,7 +165,7 @@ export function generateTimesheetPdf(data: TimesheetPdfData): jsPDF {
       2: { cellWidth: 20, halign: 'center' },
       3: { cellWidth: 22, halign: 'right' },
       4: { cellWidth: 15, halign: 'center' },
-      5: { cellWidth: 60 },
+      ...(includeActivities ? { 5: { cellWidth: 60 } } : {}),
     },
     margin: { left: LM, right: LM },
   });
