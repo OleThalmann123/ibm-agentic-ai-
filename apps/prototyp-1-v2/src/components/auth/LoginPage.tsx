@@ -1,17 +1,19 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@asklepios/backend';
 import { toast } from 'sonner';
 import { Eye, EyeOff, LogIn, User } from 'lucide-react';
 
-export function LoginPage() {
+export function LoginPage({ autoDemo }: { autoDemo?: boolean }) {
   const { signIn, signUp, refreshProfile } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const demoTriggeredRef = useRef(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -119,6 +121,15 @@ export function LoginPage() {
       navigate('/assistants');
     }
   };
+
+  useEffect(() => {
+    const wantsDemo = autoDemo || searchParams.get('demo') === '1';
+    if (!wantsDemo) return;
+    if (demoTriggeredRef.current) return;
+    demoTriggeredRef.current = true;
+    handleQuickLogin();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoDemo, searchParams]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-primary/5 px-4">
