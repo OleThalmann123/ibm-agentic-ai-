@@ -22,6 +22,35 @@ interface TimesheetPdfData {
 
 const DAY_NAMES = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
 
+const ACTIVITY_BY_DISPLAY_NUMBER: Record<number, string> = {
+  1: 'Alltägliche Lebensverrichtungen',
+  2: 'Haushaltsführung',
+  3: 'Gesellschaftliche Teilhabe und Freizeitgestaltung',
+  4: 'Erziehung und Kinderbetreuung',
+  5: 'Gemeinnützig/ehrenamtlich',
+  6: 'Berufliche Aus- und Weiterbildung',
+  7: 'Erwerbstätigkeit (1. Arbeitsmarkt)',
+  8: 'Überwachung während des Tages',
+};
+
+function formatActivity(category?: string): string {
+  const raw = (category || '').trim();
+  if (!raw) return '–';
+
+  // If already formatted (e.g. "2 · Haushaltsführung"), keep it.
+  if (raw.includes('·')) return raw;
+
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return raw;
+
+  // Stored codes are 2–9, but the displayed numbering is 1–8.
+  const display = n >= 2 && n <= 9 ? (n - 1) : (n >= 1 && n <= 8 ? n : null);
+  if (!display) return raw;
+
+  const label = ACTIVITY_BY_DISPLAY_NUMBER[display];
+  return label ? `${display} · ${label}` : String(display);
+}
+
 export function generateTimesheetPdf(data: TimesheetPdfData): jsPDF {
   const doc = new jsPDF('p', 'mm', 'a4');
   const W = 190;
@@ -81,7 +110,7 @@ export function generateTimesheetPdf(data: TimesheetPdfData): jsPDF {
       e.end_time,
       fmt(e.hours),
       e.is_night ? '🌙' : '',
-      e.category || '–',
+      formatActivity(e.category),
     ];
   });
 
