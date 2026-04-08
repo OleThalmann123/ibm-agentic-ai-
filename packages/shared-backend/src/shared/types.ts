@@ -46,7 +46,6 @@ export interface Assistant {
   date_of_birth?: string;
   hourly_rate?: number;
   vacation_weeks?: number;
-  has_withholding_tax?: boolean;
   has_bvg?: boolean;
   is_active: boolean;
   time_entry_mode?: TimeEntryMode;
@@ -88,7 +87,6 @@ export interface Payroll {
   alv_employee: number;
   nbu_employee: number;
   bvg_employee: number;
-  withholding_tax: number;
   net_pay: number;
   ahv_employer: number;
   alv_employer: number;

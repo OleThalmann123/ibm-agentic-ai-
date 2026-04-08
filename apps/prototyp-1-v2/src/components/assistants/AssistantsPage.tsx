@@ -4,7 +4,8 @@ import { supabase } from '@asklepios/backend';
 import { formatCHF } from '@asklepios/backend';
 import type { Assistant } from '@asklepios/backend';
 import { toast } from 'sonner';
-import { Users, Pencil, X, UserPlus, Sparkles, Share2, Copy, Check, UploadCloud, Trash2 } from 'lucide-react';
+import { Users, Pencil, X, UserPlus, Share2, Copy, Check, UploadCloud, Trash2 } from 'lucide-react';
+import asklepiosLogo from '@/assets/asklepios-logo.png';
 
 
 import { AssistantOnboarding } from '@/components/onboarding/AssistantOnboarding';
@@ -142,21 +143,23 @@ export function AssistantsPage() {
       </div>
 
       {/* Prominent CTA Card */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-primary/5 via-primary/10 to-primary/5 rounded-2xl border-2 border-primary/20 p-8">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full -translate-y-1/2 translate-x-1/2" />
+      <div className="relative overflow-hidden rounded-2xl p-[1px] bg-[linear-gradient(90deg,rgba(59,130,246,0.55),rgba(168,85,247,0.50),rgba(16,185,129,0.38))] shadow-[0_20px_70px_rgba(2,6,23,0.18)]">
+        <div className="relative rounded-2xl border border-transparent p-8 text-white">
+          <div className="absolute inset-0 bg-[radial-gradient(900px_520px_at_15%_0%,rgba(59,130,246,0.25),transparent_60%),radial-gradient(780px_520px_at_85%_10%,rgba(168,85,247,0.25),transparent_55%),radial-gradient(620px_520px_at_45%_120%,rgba(16,185,129,0.18),transparent_55%),linear-gradient(to_bottom,rgba(2,6,23,0.92),rgba(2,6,23,0.78))] rounded-2xl" />
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2" />
         <div className="relative flex items-center justify-between">
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
-                <Sparkles className="w-5 h-5 text-primary" />
+              <div className="w-10 h-10 rounded-2xl bg-white/10 border border-white/15 flex items-center justify-center">
+                <img src={asklepiosLogo} alt="Asklepios" className="w-7 h-7 object-contain" />
               </div>
               <h2 className="text-xl font-bold">Neue Assistenzperson erfassen</h2>
             </div>
-            <p className="text-muted-foreground max-w-md">
-              Laden Sie einen Arbeitsvertrag hoch. Unser KI-Agent liest automatisch alle Stamm- und Abrechnungsdaten aus.
+            <p className="text-white/70 max-w-md">
+              Asklepios hilft dir bei der Anlage deiner Assistenzperson, indem er Stamm- und Vertragsdaten für dich aus dem Arbeitsvertrag ausliest.
             </p>
           </div>
-          <label className="flex items-center gap-2 px-6 py-3.5 rounded-xl bg-foreground text-background text-sm font-bold hover:bg-foreground/90 transition-all shadow-lg hover:shadow-xl hover:scale-[1.02] cursor-pointer">
+          <label className="flex items-center gap-2 px-6 py-3.5 rounded-xl bg-white text-slate-900 text-sm font-bold hover:bg-white/90 transition-all shadow-lg hover:shadow-xl hover:scale-[1.02] cursor-pointer">
             <UploadCloud className="w-5 h-5" />
             Vertrag hochladen & scannen
             <input 
@@ -171,6 +174,7 @@ export function AssistantsPage() {
               }}
             />
           </label>
+        </div>
         </div>
       </div>
 

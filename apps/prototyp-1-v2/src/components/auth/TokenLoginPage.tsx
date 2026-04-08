@@ -8,6 +8,17 @@ import {
 } from 'lucide-react';
 import { calculatePayroll, FAK_RATES, fmt, fmtPct, type PayrollInput } from '@asklepios/backend';
 
+const ACTIVITY_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: '2', label: '2) Alltägliche Lebensverrichtungen' },
+  { value: '3', label: '3) Haushaltsführung' },
+  { value: '4', label: '4) Gesellschaftliche Teilhabe und Freizeitgestaltung' },
+  { value: '5', label: '5) Erziehung und Kinderbetreuung' },
+  { value: '6', label: '6) Gemeinnützig/ehrenamtlich' },
+  { value: '7', label: '7) Berufliche Aus- und Weiterbildung' },
+  { value: '8', label: '8) Erwerbstätigkeit (1. Arbeitsmarkt)' },
+  { value: '9', label: '9) Überwachung während des Tages' },
+  { value: '10', label: '10) Nachtdienst' },
+];
 
 interface TimeEntry {
   id: string;
@@ -36,9 +47,10 @@ export function TokenLoginPage() {
   const [startM, setStartM] = useState(0);
   const [endH, setEndH] = useState(12);
   const [endM, setEndM] = useState(0);
-  const [category] = useState('');
+  const [category, setCategory] = useState('');
   const [isNight, setIsNight] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [showConfetti, setShowConfetti] = useState(false);
 
   // Protocol state
@@ -72,12 +84,17 @@ export function TokenLoginPage() {
 
   const loadEntries = async () => {
     if (!assistant) return;
-    const { data } = await supabase
+    const { data, error: err } = await supabase
       .from('time_entry').select('*')
       .eq('assistant_id', assistant.id)
       .order('date', { ascending: false })
       .order('start_time', { ascending: false })
       .limit(50);
+    if (err) {
+      setSaveError(err.message || 'Einträge konnten nicht geladen werden.');
+      setEntries([]);
+      return;
+    }
     if (data) setEntries(data as TimeEntry[]);
   };
 
@@ -99,20 +116,37 @@ export function TokenLoginPage() {
   const handleSave = async () => {
     if (!assistant) return;
     setSaving(true);
+    setSaveError(null);
     const startTime = fmtTime(startH, startM);
     const endTime = fmtTime(endH, endM);
+    // Tätigkeitsbereiche: wenn explizit deaktiviert => ausblenden; sonst standardmässig aktiv (MVP).
+    const requiresActivitiesFlag = (assistant.contract_data as any)?.time_entry_requires_activity_breakdown;
+    const requiresActivities = requiresActivitiesFlag !== false;
+    const categoryToSave = requiresActivities && !isNight ? (category || null) : null;
 
     if (editingId) {
-      await supabase.from('time_entry').update({
+      const { error: err } = await supabase.from('time_entry').update({
         date, start_time: startTime, end_time: endTime, is_night: isNight,
+        category: categoryToSave,
       }).eq('id', editingId);
+      if (err) {
+        setSaveError(err.message || 'Speichern fehlgeschlagen.');
+        setSaving(false);
+        return;
+      }
       setEditingId(null);
     } else {
-      await supabase.from('time_entry').insert({
+      const { error: err } = await supabase.from('time_entry').insert({
         assistant_id: assistant.id, date,
         start_time: startTime, end_time: endTime,
         is_night: isNight, entered_by: 'assistant', confirmed: false,
+        category: categoryToSave,
       });
+      if (err) {
+        setSaveError(err.message || 'Speichern fehlgeschlagen.');
+        setSaving(false);
+        return;
+      }
     }
 
     setSaving(false);
@@ -138,6 +172,7 @@ export function TokenLoginPage() {
     setStartH(Number(parts[0]) || 0); setStartM(Number(parts[1]) || 0);
     setEndH(Number(endParts[0]) || 0); setEndM(Number(endParts[1]) || 0);
     setIsNight(e.is_night);
+    setCategory(e.category || '');
     setEditingId(e.id);
     setTab('erfassen');
   };
@@ -278,6 +313,13 @@ export function TokenLoginPage() {
             </button>
           </div>
         </div>
+        {saveError ? (
+          <div className="max-w-lg mx-auto px-4 pb-3">
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+              <span className="font-semibold">Fehler:</span> {saveError}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <div className="flex-1 max-w-lg mx-auto w-full px-4 py-6 space-y-5">
@@ -329,12 +371,38 @@ export function TokenLoginPage() {
               </button>
             </div>
 
+            {/* Activity dropdown (only for day shifts, if required) */}
+            {(assistant ? ((assistant.contract_data as any)?.time_entry_requires_activity_breakdown !== false) : false) && !isNight ? (
+              <div className="bg-white rounded-2xl shadow-sm border p-4">
+                <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold text-center mb-2">
+                  Tätigkeitsbereich
+                </p>
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="w-full px-3 py-3 rounded-xl border bg-white text-base focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+                >
+                  <option value="">Bitte wählen…</option>
+                  {ACTIVITY_OPTIONS.filter(o => o.value !== '10').map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+
             {/* Save button */}
             <button onClick={handleSave} disabled={saving}
               className="w-full py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-lg transition-all shadow-lg shadow-emerald-200 active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-50">
               <CheckCircle2 className="w-6 h-6" />
               {editingId ? 'AKTUALISIEREN' : 'SPEICHERN'}
             </button>
+            {saveError ? (
+              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                <span className="font-semibold">Speichern/Laden fehlgeschlagen:</span> {saveError}
+              </div>
+            ) : null}
 
             {editingId && (
               <button onClick={() => { setEditingId(null); setTab('protokoll'); }}
@@ -431,7 +499,7 @@ function LohnTab({ assistant, employerName, entries }: { assistant: Assistant; e
   }, 0);
   
   // Build payroll from assistant's contract data
-  const stundenlohn = assistant.hourly_rate || (cd?.hourly_rate ? parseFloat(cd.hourly_rate) : 30);
+  const stundenlohn = assistant.hourly_rate || (cd?.hourly_rate ? parseFloat(cd.hourly_rate) : 0);
   const stunden = Number(trackedHours.toFixed(2));
   const kanton = cd?.canton || 'ZH';
   const vacWeeks = assistant.vacation_weeks || 4;
@@ -441,9 +509,11 @@ function LohnTab({ assistant, employerName, entries }: { assistant: Assistant; e
     stundenlohn,
     anzahlStunden: stunden,
     kanton,
-    abrechnungsverfahren: cd?.billing_method === 'standard' ? 'ordentlich' : 'vereinfacht',
+    abrechnungsverfahren: 'ordentlich',
     ferienzuschlag,
     nbuAN: cd?.nbu_employee ? parseFloat(cd.nbu_employee) / 100 : undefined,
+    agName: employerName,
+    anName: assistant.name,
   });
 
   // Wait, I already moved demo current month above to calculate trackedHours.
@@ -467,6 +537,18 @@ function LohnTab({ assistant, employerName, entries }: { assistant: Assistant; e
 
   return (
     <>
+      {entries.length === 0 ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 flex items-start gap-2">
+          <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="font-semibold">Keine Einträge sichtbar</p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              Wenn du soeben Stunden erfasst hast, ist das meist ein Berechtigungs-/Speicherfehler. Bitte im Tab „Erfassen“ speichern – die konkrete Fehlermeldung wird oben angezeigt.
+            </p>
+          </div>
+        </div>
+      ) : null}
+
       {/* Month header */}
       <div className="bg-white rounded-2xl shadow-sm border p-4 text-center">
         <p className="text-[10px] uppercase tracking-widest text-slate-400 font-semibold">Lohnabrechnung</p>
@@ -517,21 +599,21 @@ function LohnTab({ assistant, employerName, entries }: { assistant: Assistant; e
             <Row label="Ferienzuschlag" rate={result.ferienzuschlag.rate} perHour={result.ferienzuschlag.perHour} perYear={result.ferienzuschlag.perYear} />
           )}
           <div className="border-t my-1.5" />
-          <Row label="Bruttolohn" perHour={result.bruttolohn.perHour} perYear={result.bruttolohn.perYear} bold />
+          <Row label="Bruttolohn AN" perHour={result.bruttolohn.perHour} perYear={result.bruttolohn.perYear} bold />
 
           {/* AN deductions */}
-          <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold pt-3 pb-1">Abzüge</p>
+          <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold pt-3 pb-1">Beiträge AN</p>
           {result.anLines.map((l, i) => (
             <Row key={i} label={l.label} rate={l.rate} perHour={l.perHour} perYear={l.perYear} />
           ))}
           <div className="border-t my-1.5" />
-          <Row label="Total Abzüge" perHour={result.totalAN.perHour} perYear={result.totalAN.perYear} bold />
+          <Row label="Total AN" perHour={result.totalAN.perHour} perYear={result.totalAN.perYear} bold />
         </div>
 
         {/* Nettolohn highlight */}
         <div className="px-4 py-4 bg-emerald-50 border-t border-emerald-200">
           <div className="flex items-center justify-between">
-            <span className="font-bold text-emerald-800">Nettolohn</span>
+            <span className="font-bold text-emerald-800">Nettolohn AN</span>
             <span className="text-xl font-black tabular-nums text-emerald-700">CHF {fmt(result.nettolohn.perYear)}</span>
           </div>
           <p className="text-xs text-emerald-600 mt-0.5">CHF {fmt(result.nettolohn.perHour)} pro Stunde</p>

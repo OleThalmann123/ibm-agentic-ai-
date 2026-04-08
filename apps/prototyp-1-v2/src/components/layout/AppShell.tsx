@@ -4,6 +4,7 @@ import { cn } from '@asklepios/backend';
 import { Users, Settings, LogOut, Menu, X, LayoutDashboard, Calculator } from 'lucide-react';
 import { useState } from 'react';
 import { EmployerOnboarding } from '@/components/onboarding/EmployerOnboarding';
+import asklepiosLogo from '@/assets/asklepios-logo.png';
 
 const navItems = [
   { to: '/assistants', label: 'Assistenzpersonen', icon: Users },
@@ -41,11 +42,11 @@ export function AppShell() {
         {/* Logo */}
         <div className="flex items-center justify-between h-16 px-4 border-b border-sidebar-border">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-sm">IV</span>
+            <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
+              <img src={asklepiosLogo} alt="Asklepios" className="w-6 h-6 object-contain" />
             </div>
             <div>
-              <h1 className="font-semibold text-sm text-sidebar-foreground">IV Assistenz</h1>
+              <h1 className="font-semibold text-sm text-sidebar-foreground">Asklepios</h1>
               <p className="text-[10px] text-sidebar-foreground/60 truncate max-w-[140px]">
                 {employer?.name ?? 'IV-Assistenzbeitrag'}
               </p>
@@ -113,10 +114,10 @@ export function AppShell() {
             <Menu className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-xs">IV</span>
+            <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
+              <img src={asklepiosLogo} alt="Asklepios" className="w-5 h-5 object-contain" />
             </div>
-            <span className="font-semibold text-sm">IV Assistenz</span>
+            <span className="font-semibold text-sm">Asklepios</span>
           </div>
         </header>
 

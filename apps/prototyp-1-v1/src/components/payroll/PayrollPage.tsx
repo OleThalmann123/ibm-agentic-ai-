@@ -153,7 +153,7 @@ export function PayrollPage() {
       stundenlohn,
       anzahlStunden: hours.totalHours,
       kanton,
-      abrechnungsverfahren: cd?.billing_method === 'standard' ? 'ordentlich' : 'vereinfacht',
+      abrechnungsverfahren: 'ordentlich',
       ferienzuschlag,
       nbuAN: cd?.nbu_employee ? parseFloat(cd.nbu_employee) / 100 : undefined,
       agName: employer?.name,

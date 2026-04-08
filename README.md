@@ -89,7 +89,6 @@ Profil einer Assistenzperson, gebunden an genau einen Arbeitgeber.
 | `date_of_birth` | date (nullable) | Geburtsdatum |
 | `hourly_rate` | numeric (nullable) | Brutto-Stundenlohn in CHF |
 | `vacation_weeks` | integer (nullable) | Ferienanspruch: 4, 5 oder 6 Wochen. Bestimmt den Ferienzuschlag (8.33%, 10.64%, 13.04%) |
-| `has_withholding_tax` | boolean | Quellensteuer-pflichtig |
 | `has_bvg` | boolean | BVG-pflichtig |
 | `is_active` | boolean | Aktiv/Inaktiv-Status |
 | `time_entry_mode` | text (enum) | `schedule` (Wochenplan) oder `manual` (freie Eingabe) |
@@ -143,7 +142,6 @@ Berechnete Lohnabrechnungsdaten pro Assistenzperson und Monat.
 | `alv_employee` | numeric | ALV-Abzug Arbeitnehmer |
 | `nbu_employee` | numeric | NBU-Abzug Arbeitnehmer |
 | `bvg_employee` | numeric | BVG-Abzug Arbeitnehmer |
-| `withholding_tax` | numeric | Quellensteuer-Abzug |
 | `net_pay` | numeric | Nettolohn |
 | `ahv_employer` | numeric | AHV/IV/EO-Beitrag Arbeitgeber |
 | `alv_employer` | numeric | ALV-Beitrag Arbeitgeber |
@@ -256,7 +254,7 @@ Der End-to-End-Ablauf von der Registrierung bis zur Lohnabrechnung:
    Payroll-Engine berechnet:
      - Bruttolohn (Stundenlohn x Stunden + Ferienzuschlag)
      - AG-Beitraege: AHV/IV/EO (5.3%), ALV (1.1%), FAK (kantonal), VK, KTV, BU
-     - AN-Abzuege: AHV/IV/EO, ALV, KTV, NBU, Quellensteuer
+     - AN-Abzuege: AHV/IV/EO, ALV, KTV, NBU
      - Nettolohn nach 5-Rappen-Rundung
    PDF-Export: Lohnabrechnung und Stundenzettel (lokal via jspdf).
 ```
@@ -276,8 +274,6 @@ Die Lohnberechnung folgt den Bundesvorgaben fuer das Schweizer Sozialversicherun
 | AHV/IV/EO | 5.30% (AG und AN je haelftig) |
 | ALV | 1.10% (AG und AN je haelftig) |
 | Verwaltungskosten (VK) | 0.5275% (nur AG) |
-| Quellensteuer (vereinfacht) | 5.00% (nur AN) |
-| FAK AN Wallis | 0.17% (nur Kanton VS) |
 
 ### Kantonale FAK-Saetze
 
@@ -285,9 +281,7 @@ Die Engine enthaelt die FAK-Saetze aller 26 Kantone (z.B. ZH: 1.025%, BS: 1.65%,
 
 ### Abrechnungsverfahren
 
-- Vereinfacht: Pauschale Quellensteuer von 5% wird direkt abgezogen.
-- Ordentlich: Keine pauschale Quellensteuer.
-- Ordentlich mit Quellensteuer: Individueller Quellensteuersatz wird angewendet.
+- Ordentlich: MVP Standardfall (aktuell einzig unterstuetztes Verfahren).
 
 ### Ferienzuschlag
 
