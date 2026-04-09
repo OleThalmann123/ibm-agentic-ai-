@@ -36,7 +36,7 @@ const FAK_SAETZE: Record<string, number> = {
 const KANTONE = Object.keys(FAK_SAETZE).sort();
 
 type Abrechnungsverfahren = '' | 'ordentlich';
-type Ferienzuschlag = '' | 'kein' | '8.33' | '10.64' | '13.04';
+type Ferienzuschlag = '' | 'kein' | '8.33' | '10.64' | '13.04' | '15.56';
 
 // ─── Festwerte ─────────────────────────────────────────────────────────
 const AHV_IV_EO_SATZ = 0.053;
@@ -50,6 +50,7 @@ const FERIENZUSCHLAG_MAP: Record<string, number> = {
   '8.33': 0.0833,
   '10.64': 0.1064,
   '13.04': 0.1304,
+  '15.56': 0.1556,
 };
 
 interface Inputs {
@@ -322,6 +323,7 @@ export function LohnbudgetRechner() {
               { value: '8.33', label: '8.33% (4 Wo.)' },
               { value: '10.64', label: '10.64% (5 Wo.)' },
               { value: '13.04', label: '13.04% (6 Wo.)' },
+              { value: '15.56', label: '15.56% (7 Wo.)' },
             ]}
           />
         </div>

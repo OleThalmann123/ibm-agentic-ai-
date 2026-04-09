@@ -52,6 +52,7 @@ Regeln:
 - Sei streng: lieber einmal zu viel "review_required" als einen Fehler durchlassen.
 - Wert null + Feld nicht im Vertrag = korrekt (0.95).
 - Wert null + Feld steht im Vertrag = Fehler (0.2).
+- Wert gesetzt + KEIN wörtliches Zitat im Vertrag auffindbar = Halluzination (0.1). Besonders kritisch bei: vacation_weeks, holiday_supplement_pct, notice_period_days. Wenn das Wort "Ferien" nirgends im Vertrag vorkommt, MUSS vacation_weeks null sein.
 - Geschlecht: niemals aus Name ableiten. Null ist korrekt (0.95).
 - ISO-Übersetzungen erlaubt: "Schweiz" = CH = korrekt (high).
 - justification ist rein intern (Audit/Trace), nicht für Endbenutzer.

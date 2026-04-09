@@ -206,7 +206,7 @@ export function PayrollPage() {
 
     const kanton = cd?.canton || employer?.canton || 'ZH';
     const vacWeeks = assistant.vacation_weeks || 4;
-    const ferienzuschlag = vacWeeks === 5 ? 0.1064 : vacWeeks === 6 ? 0.1304 : 0.0833;
+    const ferienzuschlag = vacWeeks === 5 ? 0.1064 : vacWeeks === 6 ? 0.1304 : vacWeeks === 7 ? 0.1556 : 0.0833;
 
     return calculatePayroll({
       stundenlohn,
@@ -274,7 +274,31 @@ export function PayrollPage() {
     setEditEnd('');
   };
 
-  const saveEdit = async (entryId: string) => {
+  const resetPayrollConfirmationIfNeeded = async (assistantId: string, entryDate: string) => {
+    const monthFirst = entryDate.slice(0, 7) + '-01';
+    await supabase
+      .from('payroll_confirmation')
+      .update({ confirmed: false, confirmed_at: null })
+      .eq('assistant_id', assistantId)
+      .eq('month', monthFirst)
+      .eq('confirmed', true);
+    const { data: aRow } = await supabase
+      .from('assistant')
+      .select('contract_data')
+      .eq('id', assistantId)
+      .single();
+    if (aRow?.contract_data) {
+      const cd = { ...(aRow.contract_data as Record<string, unknown>) };
+      const fr = Array.isArray(cd.payroll_freigaben) ? cd.payroll_freigaben as string[] : [];
+      const updated = fr.filter(m => String(m).slice(0, 10) !== monthFirst);
+      if (updated.length !== fr.length) {
+        cd.payroll_freigaben = updated;
+        await supabase.from('assistant').update({ contract_data: cd }).eq('id', assistantId);
+      }
+    }
+  };
+
+  const saveEdit = async (entryId: string, assistantId?: string, entryDate?: string) => {
     const { error } = await supabase
       .from('time_entry')
       .update({ start_time: editStart, end_time: editEnd })
@@ -285,6 +309,9 @@ export function PayrollPage() {
     } else {
       toast.success('Eintrag aktualisiert');
       cancelEditing();
+      if (assistantId && entryDate) {
+        await resetPayrollConfirmationIfNeeded(assistantId, entryDate);
+      }
       loadData();
     }
   };
@@ -323,8 +350,8 @@ export function PayrollPage() {
     const kantonName = FAK_RATES[kanton]?.name || kanton;
     const stundenlohn = selectedAssistant.hourly_rate || 0;
     const vacWeeks = selectedAssistant.vacation_weeks || 4;
-    const ferienzuschlagRate = vacWeeks === 5 ? 0.1064 : vacWeeks === 6 ? 0.1304 : 0.0833;
-    const ferienzuschlagLabel = vacWeeks === 5 ? '10.64%' : vacWeeks === 6 ? '13.04%' : '8.33%';
+    const ferienzuschlagRate = vacWeeks === 5 ? 0.1064 : vacWeeks === 6 ? 0.1304 : vacWeeks === 7 ? 0.1556 : 0.0833;
+    const ferienzuschlagLabel = vacWeeks === 5 ? '10.64%' : vacWeeks === 6 ? '13.04%' : vacWeeks === 7 ? '15.56%' : '8.33%';
 
     const bm = String(cd?.billing_method || 'ordinary').toLowerCase();
     const accountingMethod: PayslipAccountingMethod =
@@ -622,7 +649,7 @@ export function PayrollPage() {
 
                         const stundenlohn = selectedAssistant.hourly_rate || 0;
                         const vacWeeks = selectedAssistant.vacation_weeks || 4;
-                        const ferienzuschlagRate = vacWeeks === 5 ? 0.1064 : vacWeeks === 6 ? 0.1304 : 0.0833;
+                        const ferienzuschlagRate = vacWeeks === 5 ? 0.1064 : vacWeeks === 6 ? 0.1304 : vacWeeks === 7 ? 0.1556 : 0.0833;
 
                         const bm = String(cd?.billing_method || 'ordinary').toLowerCase();
                         const accountingMethod: PayslipAccountingMethod =
@@ -831,7 +858,7 @@ export function PayrollPage() {
                               {isEditing ? (
                                 <>
                                   <button
-                                    onClick={() => saveEdit(e.id)}
+                                    onClick={() => saveEdit(e.id, selectedId || undefined, e.date)}
                                     className="p-1.5 rounded-lg bg-emerald-100 text-emerald-700 hover:bg-emerald-200 transition-colors"
                                     title="Speichern"
                                   >

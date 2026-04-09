@@ -60,6 +60,7 @@ export const VACATION_OPTIONS = [
   { label: '8.33% (4 Wochen)', value: 0.0833 },
   { label: '10.64% (5 Wochen)', value: 0.1064 },
   { label: '13.04% (6 Wochen)', value: 0.1304 },
+  { label: '15.56% (7 Wochen)', value: 0.1556 },
 ] as const;
 
 // ─── Billing method enum ───
@@ -75,7 +76,7 @@ export interface PayrollInput {
   anzahlStunden: number;
   kanton: string;
   abrechnungsverfahren: BillingMethod;
-  ferienzuschlag: number; // 0, 0.0833, 0.1064, or 0.1304
+  ferienzuschlag: number; // 0, 0.0833, 0.1064, 0.1304, or 0.1556
 
   // Optional employer contributions
   ktvAG?: number;  // KTV rate (decimal)

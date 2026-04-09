@@ -133,6 +133,41 @@ export function TokenLoginPage() {
     if (assistant) loadEntries();
   }, [assistant]);
 
+  // Load payroll confirmation for the month of the currently selected date
+  useEffect(() => {
+    if (!assistant) return;
+    const monthFirst = date.slice(0, 7) + '-01';
+    let cancelled = false;
+    (async () => {
+      setConfirmationLoading(true);
+      const { data: pcRow } = await supabase
+        .from('payroll_confirmation')
+        .select('confirmed')
+        .eq('assistant_id', assistant.id)
+        .eq('month', monthFirst)
+        .maybeSingle();
+      const fromTable = !!pcRow?.confirmed;
+
+      let fromAssistantJson = false;
+      if (token) {
+        let ac = await supabase.from('assistant').select('contract_data').eq('access_token', token).maybeSingle();
+        if (!ac.data) {
+          ac = await supabase.from('assistant').select('contract_data').eq('id', token).maybeSingle();
+        }
+        const fr = (ac.data?.contract_data as Record<string, unknown> | undefined)?.payroll_freigaben;
+        if (Array.isArray(fr)) {
+          fromAssistantJson = fr.some((m) => String(m).slice(0, 10) === monthFirst);
+        }
+      }
+
+      if (!cancelled) {
+        setPayrollConfirmed(fromTable || fromAssistantJson);
+        setConfirmationLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [assistant?.id, date, token]);
+
   const lookupAssistant = async (tkn: string) => {
     try {
       let { data, error: err } = await supabase
@@ -178,6 +213,31 @@ export function TokenLoginPage() {
     const d = new Date(iso + 'T12:00:00');
     const days = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
     return `${days[d.getDay()]}, ${pad(d.getDate())}.${pad(d.getMonth() + 1)}.`;
+  };
+
+  const resetPayrollConfirmationIfNeeded = async (assistantId: string, entryDate: string) => {
+    const monthFirst = entryDate.slice(0, 7) + '-01';
+    await supabase
+      .from('payroll_confirmation')
+      .update({ confirmed: false, confirmed_at: null })
+      .eq('assistant_id', assistantId)
+      .eq('month', monthFirst)
+      .eq('confirmed', true);
+    const { data: aRow } = await supabase
+      .from('assistant')
+      .select('contract_data')
+      .eq('id', assistantId)
+      .single();
+    if (aRow?.contract_data) {
+      const cd = { ...(aRow.contract_data as Record<string, unknown>) };
+      const fr = Array.isArray(cd.payroll_freigaben) ? cd.payroll_freigaben as string[] : [];
+      const updated = fr.filter(m => String(m).slice(0, 10) !== monthFirst);
+      if (updated.length !== fr.length) {
+        cd.payroll_freigaben = updated;
+        await supabase.from('assistant').update({ contract_data: cd }).eq('id', assistantId);
+      }
+    }
+    setPayrollConfirmed(false);
   };
 
   const handleSave = async () => {
@@ -278,6 +338,7 @@ export function TokenLoginPage() {
 
     setSaving(false);
     await loadEntries();
+    await resetPayrollConfirmationIfNeeded(assistant.id, date);
 
     // Show confetti, then switch to Protokoll
     setShowConfetti(true);
@@ -292,8 +353,14 @@ export function TokenLoginPage() {
       toast.error('Abrechnung ist bereits bestätigt – Stunden können nicht mehr geändert werden.');
       return;
     }
+    if (!assistant) return;
+    if (!confirm('Möchten Sie diesen Zeiteintrag wirklich löschen?')) return;
+    const entry = entries.find(e => e.id === id);
     await supabase.from('time_entry').delete().eq('id', id);
     await loadEntries();
+    if (entry) {
+      await resetPayrollConfirmationIfNeeded(assistant.id, entry.date);
+    }
   };
 
   const startEdit = (e: TimeEntry) => {
@@ -787,7 +854,7 @@ function LohnTab({
   const stunden = Number(trackedHours.toFixed(2));
   const kanton = (employer?.canton || contract?.canton || 'ZH') as string;
   const vacWeeks = assistant.vacation_weeks || 4;
-  const ferienzuschlagRate = vacWeeks === 5 ? 0.1064 : vacWeeks === 6 ? 0.1304 : 0.0833;
+  const ferienzuschlagRate = vacWeeks === 5 ? 0.1064 : vacWeeks === 6 ? 0.1304 : vacWeeks === 7 ? 0.1556 : 0.0833;
 
   const bm = String(contract?.billing_method || 'ordinary').toLowerCase();
   const accountingMethod: PayslipAccountingMethod =
@@ -830,7 +897,7 @@ function LohnTab({
   };
 
   const kantonName = FAK_RATES[kanton]?.name || kanton;
-  const ferienzuschlagLabel = vacWeeks === 5 ? '10.64%' : vacWeeks === 6 ? '13.04%' : '8.33%';
+  const ferienzuschlagLabel = vacWeeks === 5 ? '10.64%' : vacWeeks === 6 ? '13.04%' : vacWeeks === 7 ? '15.56%' : '8.33%';
   const accountingMethodLabel =
     accountingMethod === 'simplified'
       ? 'Vereinfachtes'

@@ -1530,12 +1530,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
           <select value={residencePermit} onChange={(e) => setResidencePermit(e.target.value)} className={`${selectStyle} mt-1`}>
             <option value="">Bitte wählen…</option>
             <option value="CH">Schweizer/in</option>
-            <option value="B">Ausweis B</option>
             <option value="C">Ausweis C</option>
-            <option value="G">Ausweis G</option>
-            <option value="L">Ausweis L</option>
-            <option value="N">Ausweis N</option>
-            <option value="F">Ausweis F</option>
           </select>
         );
       case 'contractStart':
@@ -1614,6 +1609,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
             <option value="4">4</option>
             <option value="5">5</option>
             <option value="6">6</option>
+            <option value="7">7</option>
           </select>
         );
       case 'vacationSurcharge':
@@ -2190,12 +2186,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                     <select value={residencePermit} onChange={e => setResidencePermit(e.target.value)} className={selectStyle}>
                       <option value="">Bitte wählen...</option>
                       <option value="CH">Schweizer/in</option>
-                      <option value="B">Ausweis B (Aufenthalt)</option>
                       <option value="C">Ausweis C (Niederlassung)</option>
-                      <option value="G">Ausweis G (Grenzgänger)</option>
-                      <option value="L">Ausweis L (Kurzaufenthalt)</option>
-                      <option value="N">Ausweis N (Asylsuchende)</option>
-                      <option value="F">Ausweis F (Vorläufig Aufgenommene)</option>
                     </select>
                   </MiniField>
                 </div>
@@ -2296,6 +2287,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                       <option value="4">4</option>
                       <option value="5">5</option>
                       <option value="6">6</option>
+                      <option value="7">7</option>
                     </select>
                   </MiniField>
                 </div>

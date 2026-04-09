@@ -364,10 +364,22 @@ export const contractDataSubmissionTool = tool(
       }
     }
 
+    // Guard against hallucinated vacation_weeks: require non-empty source_text
+    if (wageData.vacation_weeks?.value != null) {
+      const src = String(wageData.vacation_weeks.source_text ?? '').trim();
+      if (!src) {
+        corrections.push(
+          `vacation_weeks (${wageData.vacation_weeks.value}) hat keinen source_text – wahrscheinlich nicht im Vertrag vorhanden. Wert auf null gesetzt.`,
+        );
+        wageData.vacation_weeks.value = null;
+        wageData.vacation_weeks.note = 'Nicht im Vertrag gefunden (kein source_text vorhanden)';
+      }
+    }
+
     // Calculate holiday supplement from vacation weeks if missing
     if (!wageData.holiday_supplement_pct?.value && wageData.vacation_weeks?.value) {
       const weeks = Number(wageData.vacation_weeks.value);
-      const supplementMap: Record<number, number> = { 4: 0.0833, 5: 0.1064, 6: 0.1304 };
+      const supplementMap: Record<number, number> = { 4: 0.0833, 5: 0.1064, 6: 0.1304, 7: 0.1556 };
       const supplement = supplementMap[weeks];
       if (supplement) {
         corrections.push(`Holiday supplement derived from ${weeks} weeks: ${(supplement * 100).toFixed(2)}%`);

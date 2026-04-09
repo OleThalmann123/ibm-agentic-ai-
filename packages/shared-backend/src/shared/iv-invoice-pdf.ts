@@ -127,6 +127,7 @@ export function generateIvInvoicePdf(data: IvInvoicePdfData): jsPDF {
   doc.text('Asklepios', LM + (data.logoDataUrl ? 13 : 11), 17.5);
 
   // Header (briefartig, ohne Doppelungen)
+  y = 28;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(15);
   doc.text(`Rechnung für ${data.insuredPerson.name || '—'}`, LM, y);

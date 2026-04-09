@@ -530,12 +530,7 @@ export function AssistantOnboarding({ onComplete, onClose }: AssistantOnboarding
                     <select value={residencePermit} onChange={e => setResidencePermit(e.target.value)} className={selectStyle}>
                       <option value="">Bitte wählen...</option>
                       <option value="CH">Schweizer/in</option>
-                      <option value="B">Ausweis B (Aufenthalt)</option>
                       <option value="C">Ausweis C (Niederlassung)</option>
-                      <option value="G">Ausweis G (Grenzgänger)</option>
-                      <option value="L">Ausweis L (Kurzaufenthalt)</option>
-                      <option value="N">Ausweis N (Asylsuchende)</option>
-                      <option value="F">Ausweis F (Vorläufig Aufgenommene)</option>
                     </select>
                   </MiniField>
                   <MiniField status={email ? 'success' : 'warning'} title="E-Mail" message={email ? undefined : 'Optional'}>
@@ -575,6 +570,7 @@ export function AssistantOnboarding({ onComplete, onClose }: AssistantOnboarding
                       <option value="4">4</option>
                       <option value="5">5</option>
                       <option value="6">6</option>
+                      <option value="7">7</option>
                     </select>
                   </MiniField>
                 </div>

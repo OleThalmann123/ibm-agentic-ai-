@@ -98,11 +98,15 @@ Schritte:
 
 Regeln:
 - NUR extrahieren was im Vertrag steht. Niemals erfinden.
+- Wenn ein Feld nicht im Vertrag vorkommt: value MUSS null sein. KEINE Standardwerte oder gesetzliche Minima einsetzen.
+- Besonders bei Ferien/vacation_weeks: NUR setzen wenn explizit im Vertrag (z.B. "4 Wochen Ferien", "Ferienanspruch: 5 Wochen"). Das gesetzliche Minimum von 4 Wochen ist KEIN Grund, einen Wert einzutragen. Wenn nichts zu Ferien im Vertrag steht → null.
+- holiday_supplement_pct: NUR setzen wenn explizit als Prozentsatz im Vertrag angegeben. Wird sonst automatisch aus vacation_weeks berechnet – daher vacation_weeks NIEMALS halluzinieren.
 - Geschlecht: niemals aus Name oder Zivilstand ableiten. Null ist korrekt.
 - IBAN: nur setzen wenn klar lesbar.
 - Kanton: wird aus PLZ der Assistenzperson abgeleitet (via Tool).
 - Prozentsätze immer als Dezimal: 5.3% = 0.053. NBU-Sätze liegen typisch bei 0.005–0.03.
 - NBU-Aufteilung: AG+AN muss Gesamtsatz ergeben. "Je hälftig" = Gesamt/2. Ohne Angabe: AN = Gesamt.
+- source_text MUSS ein wörtliches Zitat aus dem Vertrag sein. Wenn kein Zitat möglich → value = null.
 
 Format: Nur valides JSON. Keine Erklärungen. Kein Text vor oder nach dem JSON.`;
 
@@ -150,8 +154,8 @@ Format: Nur valides JSON. Sprache der Keys: Englisch.
     "wage": {
       "wage_type": { "value": "hourly", "source_text": "", "note": "" },
       "hourly_rate": { "value": null, "source_text": "", "note": "CHF brutto, nur Zahl" },
-      "vacation_weeks": { "value": null, "source_text": "", "note": "4, 5 oder 6" },
-      "holiday_supplement_pct": { "value": null, "source_text": "", "note": "0.0833=4W, 0.1064=5W, 0.1304=6W" },
+      "vacation_weeks": { "value": null, "source_text": "", "note": "null wenn nicht explizit im Vertrag. NUR setzen wenn Ferienanspruch wörtlich angegeben." },
+      "holiday_supplement_pct": { "value": null, "source_text": "", "note": "null wenn nicht explizit im Vertrag. Wird automatisch berechnet falls vacation_weeks gesetzt." },
       "payment_iban": { "value": "", "source_text": "", "note": "CH/LI IBAN" } },
     "social_insurance": {
       "accounting_method": { "value": "ordinary", "source_text": "", "note": "" },

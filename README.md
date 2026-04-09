@@ -87,7 +87,7 @@ Profil einer Assistenzperson, gebunden an genau einen Arbeitgeber.
 | `email` | text (nullable) | Kontakt-E-Mail |
 | `date_of_birth` | date (nullable) | Geburtsdatum |
 | `hourly_rate` | numeric (nullable) | Brutto-Stundenlohn in CHF |
-| `vacation_weeks` | integer (nullable) | Ferienanspruch: 4, 5 oder 6 Wochen. Bestimmt den Ferienzuschlag (8.33%, 10.64%, 13.04%) |
+| `vacation_weeks` | integer (nullable) | Ferienanspruch: 4, 5, 6 oder 7 Wochen. Bestimmt den Ferienzuschlag (8.33%, 10.64%, 13.04%, 15.56%) |
 | `has_bvg` | boolean | BVG-pflichtig |
 | `is_active` | boolean | Aktiv/Inaktiv-Status |
 | `time_entry_mode` | text (enum) | `schedule` (Wochenplan) oder `manual` (freie Eingabe) |
