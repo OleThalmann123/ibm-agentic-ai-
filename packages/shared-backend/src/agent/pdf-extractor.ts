@@ -55,44 +55,102 @@ export async function extractPdfContent(file: File): Promise<PdfExtractionResult
 }
 
 /**
- * Read any supported file type and return text content.
- * Handles: PDF, TXT, DOCX (text extraction), images (as base64 for vision).
+ * Render plain text onto a canvas and return a base64 JPEG image.
+ * Used so that DOCX/TXT also go through the vision pipeline.
+ */
+function renderTextToImage(text: string): string[] {
+  const LINE_HEIGHT = 22;
+  const PADDING = 40;
+  const MAX_WIDTH = 800;
+  const FONT = '14px "Courier New", monospace';
+  const MAX_LINES_PER_PAGE = 60;
+
+  const measure = document.createElement('canvas').getContext('2d')!;
+  measure.font = FONT;
+
+  const wrappedLines: string[] = [];
+  for (const raw of text.split('\n')) {
+    if (!raw.trim()) { wrappedLines.push(''); continue; }
+    let line = '';
+    for (const word of raw.split(/\s+/)) {
+      const test = line ? `${line} ${word}` : word;
+      if (measure.measureText(test).width > MAX_WIDTH - PADDING * 2) {
+        if (line) wrappedLines.push(line);
+        line = word;
+      } else {
+        line = test;
+      }
+    }
+    if (line) wrappedLines.push(line);
+  }
+
+  const pages: string[] = [];
+  for (let i = 0; i < wrappedLines.length; i += MAX_LINES_PER_PAGE) {
+    const chunk = wrappedLines.slice(i, i + MAX_LINES_PER_PAGE);
+    const height = PADDING * 2 + chunk.length * LINE_HEIGHT;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = MAX_WIDTH;
+    canvas.height = Math.max(height, 200);
+    const ctx = canvas.getContext('2d')!;
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#111111';
+    ctx.font = FONT;
+
+    chunk.forEach((ln, idx) => {
+      ctx.fillText(ln, PADDING, PADDING + idx * LINE_HEIGHT);
+    });
+
+    pages.push(canvas.toDataURL('image/jpeg', 0.90));
+    canvas.remove();
+  }
+
+  return pages;
+}
+
+/**
+ * Read any supported file type and always return images for the vision model.
+ * Every format gets converted to page images — uniform pipeline, no text path.
  */
 export async function readFileContent(file: File): Promise<{ text: string; images?: string[] }> {
   const type = file.type;
   const name = file.name.toLowerCase();
 
-  // PDF → immer als Seitenbilder für Vision-Modell (Layout bleibt erhalten)
+  // PDF → Seiten als Bilder rendern
   if (type === 'application/pdf' || name.endsWith('.pdf')) {
     const result = await extractPdfContent(file);
     return { text: '[PDF: Vision-Analyse]', images: result.pageImages ?? [] };
   }
 
-  // Images → base64 for vision model
+  // Bilder → direkt durchreichen
   if (type.startsWith('image/')) {
     const base64 = await fileToBase64(file);
-    return { text: '[Bild-Upload: Vision-Analyse]', images: [base64] };
+    return { text: '[Bild: Vision-Analyse]', images: [base64] };
   }
 
-  // DOCX: extract text from zipped XML container
+  // DOCX → Text extrahieren, dann als Bild rendern
   if (
     type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
     name.endsWith('.docx')
   ) {
     const arrayBuffer = await file.arrayBuffer();
     const { value } = await mammoth.extractRawText({ arrayBuffer });
-    const text = (value ?? '').replace(/\s+/g, ' ').trim();
-    return { text };
+    const text = (value ?? '').trim();
+    if (!text) throw new Error('DOCX-Datei enthält keinen Text.');
+    return { text: '[DOCX: Vision-Analyse]', images: renderTextToImage(text) };
   }
 
-  // Legacy DOC (binary) is not reliably parseable in-browser without extra tooling.
+  // Legacy DOC — nicht zuverlässig im Browser parsebar
   if (type === 'application/msword' || name.endsWith('.doc')) {
     throw new Error('Das DOC-Format (.doc) wird nicht unterstützt. Bitte als PDF oder DOCX hochladen.');
   }
 
-  // Text-based files (txt, etc.)
+  // TXT und andere Textformate → als Bild rendern
   const text = await file.text();
-  return { text };
+  if (!text.trim()) throw new Error('Datei ist leer.');
+  return { text: '[Text: Vision-Analyse]', images: renderTextToImage(text) };
 }
 
 function fileToBase64(file: File): Promise<string> {
