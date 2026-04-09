@@ -169,6 +169,7 @@ export function generateIvInvoicePdf(data: IvInvoicePdfData): jsPDF {
   const sortedLines = [...data.lines].sort((a, b) =>
     (a.assistantName + a.activityLabel).localeCompare(b.assistantName + b.activityLabel),
   );
+  const totalHours = Number(sortedLines.reduce((s, l) => s + (l.hours || 0), 0).toFixed(2));
   const body: any[] = [];
   let lastAssistant = '';
   for (const l of sortedLines) {
@@ -181,6 +182,15 @@ export function generateIvInvoicePdf(data: IvInvoicePdfData): jsPDF {
       money(l.amountCHF),
     ]);
   }
+
+  // Explizite Berechnungslogik sichtbar machen
+  body.push([
+    {
+      content: `Berechnung: Σ Stunden (${fmt(totalHours)}) × ${money(rateCHF)} = ${money(data.totalCHF)}`,
+      colSpan: 4,
+      styles: { fontStyle: 'normal' as const, textColor: PDF_THEME.textMuted as any },
+    } as any,
+  ]);
 
   body.push([
     {
