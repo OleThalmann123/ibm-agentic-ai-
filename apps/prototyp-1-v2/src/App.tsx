@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { AppShell } from '@/components/layout/AppShell';
+import { AsklepiosLogo } from '@/components/brand/AsklepiosLogo';
 import { LoginPage } from '@/components/auth/LoginPage';
 import { RegisterPage } from '@/components/auth/RegisterPage';
 import { DashboardPage } from '@/components/dashboard/DashboardPage';
@@ -15,8 +16,11 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      <div className="flex flex-col items-center justify-center min-h-screen gap-4">
+        <div className="w-14 h-14 rounded-2xl bg-white border border-border shadow-md flex items-center justify-center overflow-hidden">
+          <AsklepiosLogo className="w-full h-full object-contain p-1.5" />
+        </div>
+        <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-primary" />
       </div>
     );
   }
@@ -31,10 +35,13 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <div className="text-center space-y-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto" />
-          <p className="text-muted-foreground">Laden...</p>
+      <div className="flex flex-col items-center justify-center min-h-screen bg-background gap-5">
+        <div className="w-16 h-16 rounded-3xl bg-white border border-border shadow-lg flex items-center justify-center overflow-hidden">
+          <AsklepiosLogo className="w-full h-full object-contain p-2" />
+        </div>
+        <div className="text-center space-y-3">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto" />
+          <p className="text-muted-foreground text-sm">Laden...</p>
         </div>
       </div>
     );
