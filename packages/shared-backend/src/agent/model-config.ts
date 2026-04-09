@@ -2,25 +2,29 @@
  * Zentrale OpenRouter-Modellwahl für die IDP-Pipeline.
  *
  * Env (Vite):
- * - VITE_OPENROUTER_MODEL — ein Modell für Extraktion + Judge (Override für beides)
- * - VITE_OPENROUTER_EXTRACTOR_MODEL — nur Agent 1 (Extraktion / Vision)
- * - VITE_OPENROUTER_JUDGE_MODEL — nur Agent 2 (Qualitätsprüfung)
+ * - VITE_OPENROUTER_MODEL            — Override für Extraktion + Judge
+ * - VITE_OPENROUTER_EXTRACTOR_MODEL  — nur Agent 1 (Extraktion / Vision)
+ * - VITE_OPENROUTER_JUDGE_MODEL      — nur Agent 2 (Qualitätsprüfung)
  *
- * Tipp: Für maximale Geschwindigkeit bei akzeptabler Qualität Judge auf Haiku/Flash;
- * Extraktion mit Tool-Calls bleibt auf einem stärkeren Modell (z. B. Sonnet).
+ * Agent 1 (Gemini 2.5 Flash): schnellstes Tool-Calling-Modell auf OpenRouter
+ *   – ~200 tok/s, $0.30 / $2.50 pro M Tokens
+ *   – #2 Health, #2 Legal — top Qualität für Datenextraktion
+ *
+ * Agent 2 (Sonnet 4.6): höchste Qualität für den Qualitätscheck
+ *   – Frontier-Reasoning für präzise Konfidenz-Bewertung
  */
-
-/** Agent 1: Tool-Calling + komplexes JSON — Sonnet ist ein guter Kompromiss aus Speed und Zuverlässigkeit */
-export const DEFAULT_EXTRACTOR_MODEL = 'anthropic/claude-sonnet-4.6';
 
 /**
- * Agent 2: ein strukturierter JSON-Score pro Feld — deutlich schneller als Sonnet,
- * ohne die Extraktion zu beeinflussen.
+ * Agent 1 — Extraktion mit Tool-Calls.
+ * Gemini 2.5 Flash: extrem schnell, tool-calling + vision + structured JSON.
  */
-export const DEFAULT_JUDGE_MODEL = 'anthropic/claude-3.5-haiku';
+export const DEFAULT_EXTRACTOR_MODEL = 'google/gemini-2.5-flash';
 
-/** Nur für Rückwärtskompatibilität in Kommentaren / Docs */
-export const LEGACY_PREMIUM_MODEL = 'anthropic/claude-opus-4.6';
+/**
+ * Agent 2 — LLM-as-a-Judge (strukturierter JSON-Score pro Feld).
+ * Sonnet 4.6: Frontier-Qualität für die Konfidenz-Bewertung.
+ */
+export const DEFAULT_JUDGE_MODEL = 'anthropic/claude-sonnet-4.6';
 
 export function getExtractorModelName(): string {
   return (

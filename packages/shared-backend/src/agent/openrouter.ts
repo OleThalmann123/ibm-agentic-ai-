@@ -204,9 +204,14 @@ function getModel(apiKey: string, modelName: string = DEFAULT_EXTRACTOR_MODEL): 
     },
     modelName,
     temperature: 0.1,
-    maxRetries: 2,
+    maxRetries: 1,
+    timeout: 300_000,
     modelKwargs: {
       response_format: { type: 'json_object' },
+      provider: {
+        order: ['Google', 'Anthropic'],
+        allow_fallbacks: true,
+      },
     },
   });
 }

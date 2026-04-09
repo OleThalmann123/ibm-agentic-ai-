@@ -120,9 +120,14 @@ function getJudgeModel(apiKey: string): ChatOpenAI {
     },
     modelName: getJudgeModelName(),
     temperature: 0.0,
-    maxRetries: 2,
+    maxRetries: 1,
+    timeout: 300_000,
     modelKwargs: {
       response_format: { type: 'json_object' },
+      provider: {
+        order: ['Anthropic'],
+        allow_fallbacks: true,
+      },
     },
   });
 }
