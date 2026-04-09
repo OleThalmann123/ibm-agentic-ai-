@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@asklepios/backend';
 import { toast } from 'sonner';
 import { Eye, EyeOff, LogIn, User } from 'lucide-react';
+import { AsklepiosLogo } from '@/components/brand/AsklepiosLogo';
 
 export function LoginPage() {
   const { signIn, signUp, refreshProfile } = useAuth();
@@ -125,8 +126,8 @@ export function LoginPage() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center mx-auto mb-4 shadow-lg shadow-primary/20">
-            <span className="text-primary-foreground font-bold text-2xl">A</span>
+          <div className="w-20 h-20 rounded-3xl bg-white border border-border flex items-center justify-center mx-auto mb-4 shadow-lg overflow-hidden">
+            <AsklepiosLogo className="w-full h-full object-contain p-3" alt="Asklepios" />
           </div>
           <h1 className="text-2xl font-bold">AssistAdmin</h1>
           <p className="text-muted-foreground mt-1">Verwaltung des IV-Assistenzbeitrags</p>

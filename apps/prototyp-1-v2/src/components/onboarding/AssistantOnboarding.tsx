@@ -30,6 +30,23 @@ import { ContractExtractionResult, IDPField, ConfidenceLevel, BinaryStatus } fro
 import type { PipelineTrace } from '@asklepios/backend';
 const REQUIRED_FIELDS = ['firstName', 'lastName', 'birthDate', 'ahvNumber', 'contractStart', 'hoursPerWeek', 'hourlyRate'];
 
+const PIPELINE_TIMEOUT_MS = 120_000;
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = window.setTimeout(() => reject(new Error(`${label} (Timeout nach ${Math.round(ms / 1000)}s)`)), ms);
+    promise.then(
+      (v) => {
+        window.clearTimeout(t);
+        resolve(v);
+      },
+      (e) => {
+        window.clearTimeout(t);
+        reject(e);
+      },
+    );
+  });
+}
+
 const normalizeCountryToIso2 = (raw: string) => {
   const v = raw.trim();
   if (!v) return '';
@@ -273,12 +290,17 @@ function buildPopupAttentionFields(
     if (missing && !needsReview && OPTIONAL_MISSING_PATHS.has(path)) continue;
     if (!missing && !needsReview) continue;
 
-    const hint =
-      (rawField as { judge_justification?: string }).judge_justification ||
-      rawField.note ||
-      (missing
-        ? 'Nicht im Arbeitsvertrag identifiziert – bitte ergänzen oder bestätigen.'
-        : undefined);
+    const sourceText = (rawField as any).source_text;
+    const hasSourceInContract = typeof sourceText === 'string' && sourceText.trim().length > 0;
+
+    let hint: string | undefined;
+    if (missing) {
+      hint = hasSourceInContract
+        ? 'Im Vertrag vorhanden, aber nicht automatisch extrahierbar. Bitte manuell eintragen.'
+        : `${FIELD_LABELS[path] || path} nicht im Vertrag vorhanden.`;
+    } else {
+      hint = 'Unsicherer Wert im Vertrag – bitte mit dem Arbeitsvertrag rechts abgleichen.';
+    }
 
     out.push({
       path,
@@ -350,6 +372,8 @@ function ReviewPopup({
 
   const reviewRows = mode === 'pruefen' ? reviewRowsAll : [];
   const missingRows = mode === 'ergaenzen' ? missingRowsAll : [];
+  const hasMissing = missingRowsAll.length > 0;
+  const canContinueToMissing = mode === 'pruefen' && hasMissing;
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/45 backdrop-blur-sm animate-in fade-in duration-200 p-3 sm:p-4 sm:pt-6">
@@ -553,13 +577,32 @@ function ReviewPopup({
         </div>
 
         <div className="shrink-0 border-t border-slate-100 px-4 py-3 sm:px-5">
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-full py-3 rounded-xl bg-foreground text-background font-bold text-sm hover:bg-foreground/90 transition-colors"
-          >
-            Fertig – weiter im Formular
-          </button>
+          {canContinueToMissing ? (
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-full py-3 rounded-xl border border-slate-200 bg-white text-slate-900 font-bold text-sm hover:bg-slate-50 transition-colors"
+              >
+                Überspringen – weiter im Formular
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode('ergaenzen')}
+                className="w-full py-3 rounded-xl bg-foreground text-background font-bold text-sm hover:bg-foreground/90 transition-colors"
+              >
+                Weiter zu Ergänzen
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full py-3 rounded-xl bg-foreground text-background font-bold text-sm hover:bg-foreground/90 transition-colors"
+            >
+              Fertig – weiter im Formular
+            </button>
+          )}
         </div>
         </div>
       </div>
@@ -682,28 +725,22 @@ function MiniField({
   aiDetected = false,
   fieldStatus,
   attentionHighlight = false,
-  reviewed = false,
-  onReviewToggle,
   required = false,
   hasValue = false,
   error,
   hint,
-  reviewHint,
   className = "" 
 }: { 
   title: string, 
   children: ReactNode,
   aiDetected?: boolean,
   fieldStatus?: 'ok' | 'review_required',
-  /** Feld steht auch im Prüf-Dialog – orange bis im Formular bestätigt */
+  /** Feld steht auch im Prüf-Dialog – orange hervorgehoben */
   attentionHighlight?: boolean,
-  reviewed?: boolean,
-  onReviewToggle?: () => void,
   required?: boolean,
   hasValue?: boolean,
   error?: string | null,
   hint?: string,
-  reviewHint?: string,
   className?: string
 }) {
   const isReviewRequired = fieldStatus === 'review_required';
@@ -711,7 +748,7 @@ function MiniField({
   // UX: Karten immer weiss; Status nur über Rahmen/Farbe kommunizieren.
   const borderColor = error
     ? 'border-red-300 bg-white'
-    : needsCheck && !reviewed
+    : needsCheck
       ? 'border-amber-300 bg-white'
       : 'border-slate-200 bg-white';
   // Wording-Konsistenz: überall nur "Prüfen" und "Ergänzen"
@@ -729,7 +766,7 @@ function MiniField({
                 OK
               </span>
             )}
-            {needsCheck && !reviewed && (
+            {needsCheck && (
               <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-600 flex items-center gap-0.5">
                 {hasValue ? <AlertTriangle className="w-2.5 h-2.5" /> : <HelpCircle className="w-2.5 h-2.5" />}
                 {badgeText}
@@ -740,25 +777,6 @@ function MiniField({
         <div className="w-full">{children}</div>
       </div>
       <div className="min-h-[20px]">
-        {needsCheck && hasValue && onReviewToggle ? (
-          <div className="mt-1.5 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onReviewToggle}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[10px] font-semibold transition-colors ${
-                reviewed
-                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
-                  : 'bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100'
-              }`}
-            >
-              <Check className="w-3 h-3" />
-              {reviewed ? 'Bestätigt' : 'Bestätigen'}
-            </button>
-            {!reviewed ? (
-              <span className="text-[10px] text-slate-500">Nur nötig bei «Prüfen».</span>
-            ) : null}
-          </div>
-        ) : null}
         {error ? (
           <p className="text-[10px] mt-1.5 text-red-500 font-medium">{error}</p>
         ) : hint && hasValue ? (
@@ -829,9 +847,10 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
   const [saving, setSaving] = useState(false);
   // Binary review state
   const [reviewFields, setReviewFields] = useState<string[]>([]);
-  const [reviewedFields, setReviewedFields] = useState<Set<string>>(new Set());
   const [showReviewPopup, setShowReviewPopup] = useState(false);
   const [pipelineTrace, setPipelineTrace] = useState<PipelineTrace | null>(null);
+  const extractionRunIdRef = useRef(0);
+  const [extractingStartedAt, setExtractingStartedAt] = useState<number | null>(null);
 
   const [contractPreviewUrl, setContractPreviewUrl] = useState<string | null>(null);
   const [contractFileName, setContractFileName] = useState('');
@@ -865,6 +884,32 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
     };
   }, []);
 
+  useEffect(() => {
+    if (step === 'extracting') setExtractingStartedAt(Date.now());
+    else setExtractingStartedAt(null);
+  }, [step]);
+
+  const pipelineTimingSummary = useMemo(() => {
+    const t = pipelineTrace;
+    if (!t?.steps?.length) return null;
+    const get = (type: string) =>
+      t.steps.find((s) => s.type === type)?.durationMs ?? null;
+    const total = t.totalDurationMs ?? null;
+    const pdf = get('pdf_extraction');
+    const gate = get('contract_gate');
+    const extract = get('agent_extraction');
+    const judge = get('agent_judge');
+    const fmt = (ms: number | null) => (ms == null ? null : `${Math.round(ms / 1000)}s`);
+    const parts = [
+      total != null ? `Total ${fmt(total)}` : null,
+      pdf != null ? `Dokument ${fmt(pdf)}` : null,
+      gate != null ? `Gate ${fmt(gate)}` : null,
+      extract != null ? `Extraktion ${fmt(extract)}` : null,
+      judge != null ? `Judge ${fmt(judge)}` : null,
+    ].filter(Boolean);
+    return parts.length ? parts.join(' · ') : null;
+  }, [pipelineTrace]);
+
   // UX: "Extraktion abgeschlossen" erst anzeigen, wenn UI wirklich im Review angekommen ist.
   useEffect(() => {
     if (step !== 'review') return;
@@ -891,23 +936,6 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
     return s;
   }, [popupAttentionFields]);
 
-  const reviewedAttentionCount = useMemo(() => {
-    let n = 0;
-    for (const k of attentionFormKeys) {
-      if (reviewedFields.has(k)) n++;
-    }
-    return n;
-  }, [attentionFormKeys, reviewedFields]);
-
-  const toggleFieldReviewed = (fieldKey: string) => {
-    setReviewedFields(prev => {
-      const next = new Set(prev);
-      if (next.has(fieldKey)) next.delete(fieldKey);
-      else next.add(fieldKey);
-      return next;
-    });
-  };
-
   const getFieldStatus = (key: string): 'ok' | 'review_required' | undefined => {
     if (key === 'contractEnd' && contractUnbefristet) return 'ok';
 
@@ -923,21 +951,6 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
     if (path && reviewFields.includes(path)) return 'review_required';
 
     return field.confidence_score >= 0.8 ? 'ok' : 'review_required';
-  };
-
-  const getFieldReviewHint = (key: string): string | undefined => {
-    const field = confidenceMap[key];
-    if (!field) return undefined;
-
-    if ((field as any).judge_justification) return (field as any).judge_justification;
-
-    if (field.value === null || field.value === undefined) {
-      return field.note || 'Ergänzen';
-    }
-    if (field.confidence_score < 0.8) {
-      return field.note || 'Prüfen';
-    }
-    return undefined;
   };
 
   // Trigger extraction immediately if initialUploadFile is provided
@@ -1181,6 +1194,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
     }
 
     const run = (async () => {
+      const runId = ++extractionRunIdRef.current;
       setStep('extracting');
       setExtractionError(null);
       setContractPreviewFromFile(file);
@@ -1191,8 +1205,19 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
       });
 
       try {
-        const { text } = await readFileContent(file);
-        const pipelineResult = await runDocumentPipeline(file, text);
+        const { text } = await withTimeout(
+          readFileContent(file),
+          PIPELINE_TIMEOUT_MS,
+          'Dokument lesen dauert ungewöhnlich lange',
+        );
+        const pipelineResult = await withTimeout(
+          runDocumentPipeline(file, text),
+          PIPELINE_TIMEOUT_MS,
+          'KI-Analyse dauert ungewöhnlich lange',
+        );
+
+        // Falls der User abgebrochen oder neu gestartet hat: späte Resultate ignorieren.
+        if (runId !== extractionRunIdRef.current) return;
 
         if (pipelineResult.classification !== 'contract') {
           toast.dismiss(TOAST_EXTRACTION_LOADING);
@@ -1256,6 +1281,8 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
         // Toast erst nach UI-Wechsel auf "review" anzeigen, damit er nicht "zu früh" wirkt.
         setPendingExtractionToast({ description, hasWarnings });
       } catch (err) {
+        // Run invalidieren, damit späte Promises nie mehr den State überschreiben.
+        extractionRunIdRef.current++;
         toast.dismiss(TOAST_EXTRACTION_LOADING);
         setContractPreviewFromFile(null);
         const msg = err instanceof Error ? err.message : 'Unbekannter Fehler';
@@ -1383,9 +1410,6 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
     aiDetected: isFieldAi(key),
     fieldStatus: getFieldStatus(key),
     attentionHighlight: attentionFormKeys.has(key),
-    reviewed: reviewedFields.has(key),
-    onReviewToggle: () => toggleFieldReviewed(key),
-    reviewHint: getFieldReviewHint(key),
     required: isRequired(key),
   });
 
@@ -1844,7 +1868,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                 <div className="pt-1.5">
                   <p className="text-sm font-bold text-white/90">Schritt 3 Agentic Workflow: Manuelle Überprüfung</p>
                   <p className="text-xs text-white/60 mt-0.5">
-                    Bitte prüfen und bestätigen Sie die markierten Felder, bevor Sie speichern.
+                    Bitte prüfen Sie die markierten Felder und passen Sie sie bei Bedarf an, bevor Sie speichern.
                   </p>
                 </div>
               </div>
@@ -1873,6 +1897,22 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                     style={{ animation: 'ask-progress 1.15s ease-in-out infinite' }}
                   />
                 </div>
+              </div>
+
+              <div className="mt-6 flex items-center justify-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    extractionRunIdRef.current++;
+                    toast.dismiss(TOAST_EXTRACTION_LOADING);
+                    setExtractionError(null);
+                    setContractPreviewFromFile(null);
+                    setStep('upload');
+                  }}
+                  className="text-xs font-semibold text-white/70 hover:text-white transition-colors underline underline-offset-4"
+                >
+                  Analyse abbrechen
+                </button>
               </div>
             </div>
           </div>
@@ -1963,17 +2003,17 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                 ? 'bg-amber-50 border-amber-200' 
                 : 'bg-emerald-50 border-emerald-200'
             }`}>
+              {pipelineTimingSummary ? (
+                <p className="text-[11px] text-muted-foreground whitespace-nowrap mr-2">
+                  {pipelineTimingSummary}
+                </p>
+              ) : null}
               {popupAttentionFields.length > 0 ? (
                 <>
                   <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
                   <p className="text-xs text-amber-700">
                     <span className="font-bold">{popupAttentionFields.length} Felder prüfen oder ergänzen</span> – 
-                    Liste im Dialog; im Formular sind dieselben Felder orange – dort bitte einmal «Bestätigen», wenn die Werte stimmen.
-                    {reviewedAttentionCount > 0 && (
-                      <span className="ml-1">
-                        ({reviewedAttentionCount}/{attentionFormKeys.size} bestätigt)
-                      </span>
-                    )}
+                    Liste im Dialog; im Formular sind dieselben Felder orange markiert – bitte mit dem Vertrag abgleichen und bei Bedarf anpassen.
                   </p>
                   <button type="button" onClick={() => setShowReviewPopup(true)} className="text-xs text-amber-700 underline font-medium shrink-0 ml-auto">
                     Dialog öffnen
@@ -2136,7 +2176,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
             {tab === 'abrechnungsdaten' && (
               <div className="space-y-4 animate-in fade-in duration-200">
                 <h4 className="text-sm font-bold">Vertragsdetails & Pensum</h4>
-                <div className="grid grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <MiniField title="Vertragsbeginn" {...fieldProps('contractStart')} hasValue={!!contractStart}>
                     <input type="date" value={contractStart} onChange={e => setContractStart(e.target.value)} className={inputStyle} />
                   </MiniField>
@@ -2178,7 +2218,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                 </div>
 
                 <h4 className="text-sm font-bold">Lohn</h4>
-                <div className="grid grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <MiniField title="Lohnart" {...fieldProps('wageType')} hasValue={!!wageType}>
                     <select value={wageType} onChange={e => setWageType(e.target.value)} className={selectStyle}>
                       <option value="hourly">Stundenlohn</option>
@@ -2196,16 +2236,12 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                   </MiniField>
                 </div>
 
-                <div className="rounded-2xl border border-primary/25 bg-primary/5 p-3.5 relative">
-
-                  <div className="flex items-baseline justify-between gap-3 mb-3">
+                <div className="mt-2">
+                  <div className="flex items-baseline justify-between gap-3 mb-2">
                     <h4 className="text-sm font-bold">Versicherung & Konto</h4>
-                    <p className="text-[11px] text-muted-foreground">
-                      Aus dem Vertrag erkannt – bitte die markierten Felder prüfen.
-                    </p>
                   </div>
 
-                  <div className="grid grid-cols-4 gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <MiniField title="Ferienzuschlag %" {...fieldProps('vacationSurcharge')} hasValue={!!vacationSurcharge}>
                     <input
                       type="number"

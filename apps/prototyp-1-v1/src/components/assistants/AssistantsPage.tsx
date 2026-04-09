@@ -286,8 +286,8 @@ export function AssistantsPage() {
 
       {/* Add/Edit modal */}
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-          <div className="bg-card rounded-xl border shadow-xl w-full max-w-md p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4 py-8">
+          <div className="bg-card rounded-2xl border shadow-2xl w-full max-w-2xl p-8 space-y-6 max-h-[85vh] overflow-auto">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold">{editId ? 'Assistenzperson bearbeiten' : 'Neue Assistenzperson'}</h3>
               <button onClick={resetForm} className="p-1"><X className="w-4 h-4" /></button>

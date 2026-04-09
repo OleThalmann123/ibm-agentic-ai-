@@ -3,6 +3,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@asklepios/backend';
 import { Users, Settings, LogOut, Menu, X, LayoutDashboard, ClipboardCheck, Calculator } from 'lucide-react';
 import { useState } from 'react';
+import { AsklepiosLogo } from '@/components/brand/AsklepiosLogo';
 
 const navItems = [
   { to: '/onboarding', label: 'Einrichtung', icon: ClipboardCheck },
@@ -41,8 +42,8 @@ export function AppShell() {
         {/* Logo */}
         <div className="flex items-center justify-between h-16 px-4 border-b border-sidebar-border">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-sm">IV</span>
+            <div className="w-10 h-10 rounded-xl bg-white/70 border border-sidebar-border flex items-center justify-center overflow-hidden">
+              <AsklepiosLogo className="w-full h-full object-contain p-1.5" alt="Asklepios" />
             </div>
             <div>
               <h1 className="font-semibold text-sm text-sidebar-foreground">IV Assistenz</h1>
@@ -136,8 +137,8 @@ export function AppShell() {
             <Menu className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-xs">IV</span>
+            <div className="w-8 h-8 rounded-xl bg-white border border-border flex items-center justify-center overflow-hidden">
+              <AsklepiosLogo className="w-full h-full object-contain p-1.5" alt="Asklepios" />
             </div>
             <span className="font-semibold text-sm">IV Assistenz</span>
           </div>

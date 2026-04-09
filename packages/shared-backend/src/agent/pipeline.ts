@@ -1,15 +1,14 @@
 /**
  * IDP Pipeline – Agentic Workflow
  * 
- * New architecture (Meeting Decisions #2, #4, #5, #10):
- * 
- * Step 1: PDF/Document Extraction (Tool: read_document)
- * Step 2: Agent 1 – Data Extraction with Tools (validate_swiss, lookup_canton)
- * Step 3: Classification – Is this a contract?
- * Step 4: Agent 2 – LLM-as-a-Judge (reviews extraction, assigns confidence)
+ * Step 1: PDF/Document Extraction
+ * Step 2: Agent 1 – Extraktion + Validierung (Tools: document_classification, contract_data_submission)
+ * Step 3: Safety-Check – Hat Agent 1 Vertragsdaten zurückgegeben?
+ * Step 4: Agent 2 – Konfidenz-Bewertung (LLM-as-a-Judge)
  * Step 5: Binary Mapping – confidence → ok / review_required
  * Step 6: Return result with full trace (observability)
  * 
+ * Tools liegen beim Agent, nicht in der Pipeline.
  * Everything runs in the browser – no separate backend needed.
  */
 
@@ -20,13 +19,11 @@ import {
   mergeWithJudgeResult,
 } from './openrouter';
 import { readFileContent } from './pdf-extractor';
-import { documentClassificationTool } from './tools';
 import { runJudge } from './judge';
 import {
   startTrace,
   addTraceStep,
   completeTraceStep,
-  failTraceStep,
   completeTrace,
   failTrace,
   type PipelineTrace,
@@ -86,54 +83,8 @@ async function runDocumentPipelineImpl(
       isScanned: !!images?.length,
     });
 
-    // ── Step 1.5: Contract yes/no (Tool: document_classification) ──
-    // Requirement: First determine whether it's a contract. If not, stop early.
-    const step15 = addTraceStep('contract_gate', 'Ist das ein Vertrag? (Tool)', {
-      mode: images?.length ? 'vision' : 'text',
-    });
-    const documentType =
-      images?.length
-        ? 'pdf_scanned'
-        : file
-          ? (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
-              ? 'pdf_text'
-              : file.type.startsWith('image/')
-                ? 'image'
-                : 'text_file')
-          : 'text_file';
-    const classificationRaw = await (documentClassificationTool as any).invoke({
-      documentText,
-      documentType,
-    });
-    let isRelevant = false;
-    try {
-      const parsed = JSON.parse(classificationRaw);
-      isRelevant = parsed?.is_relevant === true;
-    } catch {
-      isRelevant = false;
-    }
-    completeTraceStep(step15, {
-      is_relevant: isRelevant,
-    });
-    if (!isRelevant) {
-      const finalTrace = completeTrace({
-        fieldsExtracted: 0,
-        fieldsMissing: 0,
-        fieldsRequiringReview: 0,
-        overallConfidence: 0,
-        modelUsed: 'n/a',
-        judgeModelUsed: 'n/a',
-        toolsCalled: ['document_classification'],
-      });
-      return {
-        classification: 'other',
-        requiresReview: false,
-        reviewFields: [],
-        trace: finalTrace,
-      };
-    }
-
-    // ── Step 2: Agent 1 – Extraction with Tools ──
+    // ── Step 2: Agent 1 – Extraktion mit Tools ──
+    // Agent 1 nutzt document_classification + contract_data_submission selbständig.
     const step2 = addTraceStep('agent_extraction', 'Agent 1: Datenextraktion', {
       mode: images?.length ? 'vision' : 'text',
     });
@@ -158,8 +109,8 @@ async function runDocumentPipelineImpl(
       toolsUsed: toolCalls,
     });
 
-    // ── Step 3: Classification ──
-    const step3 = addTraceStep('classification', 'Dokumentklassifikation');
+    // ── Step 3: Safety-Check – Hat Agent 1 Vertragsdaten erkannt? ──
+    const step3 = addTraceStep('classification', 'Vertragserkennung (Safety-Check)');
 
     const hasContracts =
       rawResult.contracts &&
@@ -227,8 +178,8 @@ async function runDocumentPipelineImpl(
       fieldsMissing: finalExtraction.extraction_metadata.fields_missing,
       fieldsRequiringReview: finalExtraction.extraction_metadata.fields_requiring_review ?? 0,
       overallConfidence: finalExtraction.extraction_metadata.overall_confidence,
-      modelUsed: 'anthropic/claude-opus-4.6',
-      judgeModelUsed: 'anthropic/claude-opus-4.6',
+      modelUsed: import.meta.env.VITE_OPENROUTER_EXTRACTOR_MODEL || import.meta.env.VITE_OPENROUTER_MODEL || 'anthropic/claude-opus-4.6',
+      judgeModelUsed: import.meta.env.VITE_OPENROUTER_JUDGE_MODEL || import.meta.env.VITE_OPENROUTER_MODEL || 'anthropic/claude-opus-4.6',
       toolsCalled: toolCalls,
     });
 

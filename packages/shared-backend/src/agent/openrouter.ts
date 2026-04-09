@@ -22,6 +22,7 @@ import type { JudgeFieldResult } from './judge';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1';
 const DEFAULT_MODEL = 'anthropic/claude-opus-4.6';
+const DEFAULT_FAST_MODEL = 'anthropic/claude-sonnet-4.6';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -93,8 +94,9 @@ Du hast Zugriff auf folgende Tools:
 
 Workflow:
 1. Verwende document_classification um das Dokument zu klassifizieren
-2. Extrahiere die Daten aus dem Vertrag
-3. Verwende contract_data_submission um die Daten zu validieren und zu übermitteln
+2. Wenn is_relevant=false → sofort abbrechen und ein JSON mit leeren contracts zurückgeben (alle Felder null, fields_extracted=0, warnings=["KEIN_ARBEITSVERTRAG"])
+3. Extrahiere die Daten aus dem Vertrag
+4. Verwende contract_data_submission um die Daten zu validieren und zu übermitteln
 
 Extraktionsregeln:
 - Extrahiere nur was explizit im Vertrag steht. Erfinde niemals Werte.
@@ -117,7 +119,7 @@ Warnungen (warnings) einfügen wenn zutreffend:
 
 Du gibst ausschliesslich ein JSON-Objekt zurück. Kein erklärender Text davor oder danach.`;
 
-const USER_PROMPT_TEMPLATE = (contractText: string) => `Extrahiere die Daten aus folgendem Arbeitsvertrag. Verwende deine Tools zur Validierung.
+const USER_PROMPT_TEMPLATE = (contractText: string) => `Klassifiziere und extrahiere die Daten aus dem folgenden Dokument. Verwende deine Tools.
 
 ---
 ${contractText}
@@ -185,6 +187,15 @@ Gib ein JSON in exakt diesem Format zurück. Jedes Feld hat: value, source_text,
 
 function getApiKey(): string | null {
   return import.meta.env.VITE_OPENROUTER_API_KEY || null;
+}
+
+function getExtractorModelName(): string {
+  return (
+    import.meta.env.VITE_OPENROUTER_EXTRACTOR_MODEL ||
+    import.meta.env.VITE_OPENROUTER_MODEL ||
+    DEFAULT_FAST_MODEL ||
+    DEFAULT_MODEL
+  );
 }
 
 function getModel(apiKey: string, modelName: string = DEFAULT_MODEL): ChatOpenAI {
@@ -381,7 +392,7 @@ async function runAgentWithTools(
     console.warn(`[Agent 1] Tool-calling limit reached (${MAX_TOOL_ROUNDS} rounds). Forcing final response.`);
     const forceModel = getModel(
       import.meta.env.VITE_OPENROUTER_API_KEY!,
-      DEFAULT_MODEL,
+      getExtractorModelName(),
     );
     response = await forceModel.invoke(
       allMessages,
@@ -403,7 +414,7 @@ export async function extractContractData(
     throw new Error('VITE_OPENROUTER_API_KEY ist nicht konfiguriert.');
   }
 
-  const model = getModel(apiKey, DEFAULT_MODEL);
+  const model = getModel(apiKey, getExtractorModelName());
 
   return runAgentWithTools(model, [
     new SystemMessage(SYSTEM_PROMPT),
@@ -433,7 +444,7 @@ export async function extractContractFromImages(
     throw new Error('VITE_OPENROUTER_API_KEY ist nicht konfiguriert.');
   }
 
-  const model = getModel(apiKey, DEFAULT_MODEL);
+  const model = getModel(apiKey, getExtractorModelName());
 
   const response = await model.invoke(
     [new SystemMessage(SYSTEM_PROMPT), new HumanMessage({ content: userContent })],
@@ -456,9 +467,15 @@ export function confidenceToStatus(
 export function reviewMessage(field: ExtractionField): string | undefined {
   if (field.status === 'ok' && field.value !== null) return undefined;
   if (field.status === 'review_required') {
-    return field.judge_justification || field.note || 'Bitte prüfen';
+    if (field.value === null) {
+      const hasSource = typeof field.source_text === 'string' && field.source_text.trim().length > 0;
+      return hasSource
+        ? 'Im Vertrag vorhanden, aber nicht automatisch extrahierbar. Bitte manuell eintragen.'
+        : 'Nicht im Vertrag gefunden – bitte ergänzen.';
+    }
+    return 'Unsicherer Wert – bitte prüfen.';
   }
-  if (field.value === null) return field.note || 'Nicht im Vertrag gefunden';
+  if (field.value === null) return 'Nicht im Vertrag gefunden';
   return undefined;
 }
 

@@ -17,6 +17,7 @@ import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 import { getLangSmithInvokeConfig } from './langsmith';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1';
+const DEFAULT_JUDGE_MODEL = 'anthropic/claude-sonnet-4.6';
 
 export interface JudgeFieldResult {
   confidence: 'high' | 'medium' | 'low';
@@ -35,49 +36,49 @@ export interface JudgeResult {
   summary: string;
 }
 
-const JUDGE_SYSTEM_PROMPT = `Du bist ein Qualitätsprüfer für Datenextraktionen aus Schweizer Arbeitsverträgen. 
+const JUDGE_SYSTEM_PROMPT = `Du bist ein Qualitätsprüfer für Datenextraktionen aus Schweizer Arbeitsverträgen.
 
-Deine Aufgabe: Du erhältst den Originaltext eines Arbeitsvertrags und die daraus extrahierten Daten. Du prüfst JEDES extrahierte Feld und bewertest:
+Deine Aufgabe: Prüfe jedes extrahierte Feld gegen den Originalvertrag und vergib einen confidence_score (0.0–1.0).
 
-1. **Korrektheit**: Stimmt der extrahierte Wert mit dem Originaltext überein?
-2. **Vollständigkeit**: Wurde der Wert vollständig erfasst?
-3. **Quellennachweis**: Kannst du die Stelle im Original finden, aus der der Wert stammt?
+Prüfe pro Feld:
+1. Korrektheit: Stimmt der extrahierte Wert mit dem Originaltext überein?
+2. Vollständigkeit: Wurde der Wert vollständig erfasst?
+3. Quellennachweis: Kannst du die Stelle im Original finden?
 
-Bewertungsskala:
-- **high** (0.8–1.0): Wert steht explizit und eindeutig im Vertrag, korrekt extrahiert
-- **medium** (0.50–0.84): Wert wurde interpretiert, abgeleitet, oder ist teilweise korrekt
-- **low** (0.00–0.49): Wert fehlt im Vertrag, ist falsch extrahiert, oder widersprüchlich
+Scoring:
+- 0.85–1.0 (high): Wert steht explizit und eindeutig im Vertrag, korrekt extrahiert
+- 0.50–0.84 (medium): Wert interpretiert, abgeleitet oder teilweise korrekt
+- 0.00–0.49 (low): Wert fehlt im Vertrag, falsch extrahiert oder widersprüchlich
 
-Binäre Zuordnung:
-- confidence_score >= 0.8 → status: "ok" (Auto-stored, Human Out of the Loop)
-- confidence_score 0.5–0.79 → status: "review_required" (Flagged, Human On the Loop)  
-- confidence_score < 0.5 → status: "review_required" (Empty/n/a, Human In the Loop)
+Binäre Zuordnung (wird automatisch berechnet):
+- confidence_score >= 0.8 → "ok"
+- confidence_score < 0.8 → "review_required"
 
 Regeln:
-- Sei streng: Lieber einmal zu viel "review_required" als einen Fehler durchlassen
-- Wenn ein Wert null ist und das Feld im Vertrag nicht vorkommt, ist das KORREKT (high confidence)
-- Wenn ein Wert null ist aber im Vertrag steht, ist das ein FEHLER (low confidence)
-- **Geschlecht**: niemals aus Zivilstand ableiten. Wenn Geschlecht nicht explizit im Vertrag steht, ist null korrekt (high). Wenn ein Geschlecht nur aus Vor-/Nachname vermutet wurde, dann ist das nicht explizit → mindestens "review_required" mit Begründung (Name ist kein belastbarer Nachweis).
-- ISO-Übersetzungen sind erlaubt: Wenn im Vertrag z.B. "Schweiz" oder "Italien" steht und der extrahierte Wert das passende ISO-3166-1 Alpha-2 Kürzel ist (z.B. CH, IT), dann ist das "explizit & korrekt" und darf high/ok sein (keine unnötige Review-Flag).
-- Gib für jedes Feld eine kurze Begründung (justification) auf Deutsch
-- Zitiere die relevante Stelle aus dem Vertrag (source_quote)
+- Sei streng: lieber einmal zu viel "review_required" als einen Fehler durchlassen
+- Wert null + Feld nicht im Vertrag → korrekt (0.95, high)
+- Wert null + Feld steht im Vertrag → Fehler (0.2, low)
+- Geschlecht: niemals aus Name oder Zivilstand ableiten. Null ist korrekt wenn nicht explizit im Vertrag (0.95)
+- ISO-Übersetzungen erlaubt: "Schweiz"→CH, "Italien"→IT = korrekt (high)
+
+Deine justification wird NICHT dem Endbenutzer angezeigt – sie dient rein der internen Nachvollziehbarkeit (Audit/Trace). Schreibe eine präzise, fachliche Begründung pro Feld. Zitiere die relevante Stelle aus dem Vertrag in source_quote.
 
 Du gibst ausschliesslich ein JSON-Objekt zurück. Kein erklärender Text davor oder danach.`;
 
 const JUDGE_USER_PROMPT = (
   originalText: string,
   extractedData: Record<string, unknown>,
-) => `Prüfe die folgende Extraktion gegen den Originalvertrag.
+) => `Bewerte die Extraktion. Vergib NUR confidence_scores.
 
-=== ORIGINALVERTRAG ===
+=== VERTRAG ===
 ${originalText}
-=== ENDE ORIGINALVERTRAG ===
+=== ENDE ===
 
-=== EXTRAHIERTE DATEN ===
+=== EXTRAKTION ===
 ${JSON.stringify(extractedData, null, 2)}
-=== ENDE EXTRAHIERTE DATEN ===
+=== ENDE ===
 
-Bewerte JEDES Feld in der Extraktion. Gib ein JSON in diesem Format zurück:
+Bewerte JEDES Feld. Gib ein JSON in diesem Format zurück:
 
 {
   "fields": {
@@ -86,7 +87,7 @@ Bewerte JEDES Feld in der Extraktion. Gib ein JSON in diesem Format zurück:
         "confidence": "high|medium|low",
         "confidence_score": 0.0-1.0,
         "status": "ok|review_required",
-        "justification": "Begründung auf Deutsch",
+        "justification": "Fachliche Begründung (intern, nicht für Endbenutzer)",
         "source_found": true|false,
         "source_quote": "Zitat aus dem Vertrag"
       }
@@ -99,11 +100,20 @@ Bewerte JEDES Feld in der Extraktion. Gib ein JSON in diesem Format zurück:
   "overall_confidence": 0.0-1.0,
   "overall_status": "ok|review_required",
   "review_required_fields": ["section.field_name", ...],
-  "summary": "Zusammenfassung der Bewertung auf Deutsch"
+  "summary": "Zusammenfassung der Bewertung"
 }`;
 
 function getApiKey(): string | null {
   return import.meta.env.VITE_OPENROUTER_API_KEY || null;
+}
+
+function getJudgeModelName(): string {
+  return (
+    import.meta.env.VITE_OPENROUTER_JUDGE_MODEL ||
+    import.meta.env.VITE_OPENROUTER_MODEL ||
+    DEFAULT_JUDGE_MODEL ||
+    'anthropic/claude-opus-4.6'
+  );
 }
 
 function getJudgeModel(apiKey: string): ChatOpenAI {
@@ -117,7 +127,7 @@ function getJudgeModel(apiKey: string): ChatOpenAI {
         'X-Title': 'IV-Assistenzbeitrag Judge',
       },
     },
-    modelName: 'anthropic/claude-opus-4.6',
+    modelName: getJudgeModelName(),
     temperature: 0.0,
     maxRetries: 2,
     modelKwargs: {

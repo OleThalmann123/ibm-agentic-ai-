@@ -3,7 +3,7 @@ import { supabase } from '@asklepios/backend';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { UploadCloud, CheckCircle2, FileText, ArrowRight, AlertCircle, HelpCircle, User, ArrowLeft, Loader2, Share2, Copy, Check } from 'lucide-react';
-import { extractContractData, extractContractFromImages, confidenceToStatus, confidenceMessage, type ExtractionField, type ExtractionResult } from '@asklepios/backend';
+import { extractContractData, extractContractFromImages, reviewMessage, type ExtractionField, type ExtractionResult } from '@asklepios/backend';
 import { readFileContent } from '@asklepios/backend';
 
 // Swiss PLZ → City mapping (minimal prototype set)
@@ -332,12 +332,15 @@ export function AssistantOnboarding({ onComplete, onClose }: AssistantOnboarding
 
   // Get field status from confidence map, fallback to value check
   const getStatus = (key: string, value: string): 'success' | 'warning' | 'error' => {
-    if (confidenceMap[key]) return confidenceToStatus(confidenceMap[key].confidence);
-    return value ? 'success' : 'error';
+    const f = confidenceMap[key];
+    if (!f) return value ? 'success' : 'error';
+    if (f.value === null || f.value === undefined || String(f.value).trim() === '') return 'error';
+    return f.status === 'ok' ? 'success' : 'warning';
   };
 
   const getMessage = (key: string, value: string): string | undefined => {
-    if (confidenceMap[key]) return confidenceMessage(confidenceMap[key]);
+    const f = confidenceMap[key];
+    if (f) return reviewMessage(f);
     return value ? undefined : 'Bitte ergänzen';
   };
 
