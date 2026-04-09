@@ -11,6 +11,7 @@ import { supabase } from '@asklepios/backend';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { getCityFromChPlz, isValidChPlz } from '@/utils/chPlz';
+import asklepiosMark from '@/assets/asklepios-mark.svg';
 
 const formatAIWarning = (code: string) => {
   const map: Record<string, string> = {
@@ -1781,10 +1782,15 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
               <div className="relative w-12 h-12">
                 <div className="absolute inset-0 rounded-2xl bg-white/10 backdrop-blur border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.35)]" />
                 <div
-                  className="relative w-12 h-12 rounded-2xl bg-white/10 border border-white/10 shadow-[0_14px_26px_rgba(59,130,246,0.25)] flex items-center justify-center"
+                  className="relative w-12 h-12 rounded-2xl bg-white/10 border border-white/10 shadow-[0_14px_26px_rgba(59,130,246,0.25)] flex items-center justify-center overflow-hidden"
                   style={{ animation: 'ask-float 2.8s ease-in-out infinite' }}
                 >
-                  <span className="text-white text-xl font-bold">A</span>
+                  <img
+                    src={asklepiosMark}
+                    alt="Asklepios"
+                    className="h-8 w-8 select-none pointer-events-none"
+                    draggable={false}
+                  />
                 </div>
               </div>
               <div>
