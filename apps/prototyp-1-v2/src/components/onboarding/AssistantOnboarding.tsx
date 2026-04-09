@@ -2006,7 +2006,8 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                 ? 'bg-amber-50 border-amber-200' 
                 : 'bg-emerald-50 border-emerald-200'
             }`}>
-              {pipelineTimingSummary ? (
+              {/* Pipeline-Timing nur im Dev-Modus */}
+              {import.meta.env.DEV && pipelineTimingSummary ? (
                 <p className="text-[11px] text-muted-foreground whitespace-nowrap mr-2">
                   {pipelineTimingSummary}
                 </p>
