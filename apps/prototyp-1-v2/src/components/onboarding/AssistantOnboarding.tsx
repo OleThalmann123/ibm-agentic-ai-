@@ -1674,8 +1674,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
     <div className="space-y-6">
       {/* Header */}
       {step !== 'extracting' ? (
-        <div className="rounded-2xl p-[1px] bg-[linear-gradient(90deg,rgba(59,130,246,0.35),rgba(168,85,247,0.30),rgba(16,185,129,0.22))] shadow-[0_18px_60px_rgba(2,6,23,0.08)]">
-          <div className="rounded-2xl border border-transparent bg-card/95 backdrop-blur px-5 py-4 sm:px-6 sm:py-5">
+        <div className="rounded-2xl border bg-card px-5 py-4 sm:px-6 sm:py-5">
           <button onClick={onClose} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-2 transition-colors">
             <ArrowLeft className="w-4 h-4" /> Zurück zur Übersicht
           </button>
@@ -1706,7 +1705,6 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                 </span>
               </div>
             ) : null}
-          </div>
           </div>
         </div>
       ) : null}
@@ -1887,7 +1885,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                   <p className="text-xs font-semibold text-white/80" aria-live="polite">
                     Analyse läuft…
                   </p>
-                  <p className="text-[11px] text-white/55">Das kann kurz dauern – bitte Fenster offen lassen.</p>
+                  <p className="text-[11px] text-white/55">Der Prozess kann ca. 2 Minuten dauern – lehn dich zurück.</p>
                 </div>
               </div>
 

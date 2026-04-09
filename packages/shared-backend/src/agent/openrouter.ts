@@ -209,7 +209,7 @@ function getModel(apiKey: string, modelName: string = DEFAULT_EXTRACTOR_MODEL): 
     modelKwargs: {
       response_format: { type: 'json_object' },
       provider: {
-        order: ['Google', 'Anthropic'],
+        order: ['Anthropic'],
         allow_fallbacks: true,
       },
     },
