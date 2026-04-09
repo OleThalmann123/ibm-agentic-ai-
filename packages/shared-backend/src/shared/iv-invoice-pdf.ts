@@ -186,7 +186,7 @@ export function generateIvInvoicePdf(data: IvInvoicePdfData): jsPDF {
   // Explizite Berechnungslogik sichtbar machen
   body.push([
     {
-      content: `Berechnung: Σ Stunden (${fmt(totalHours)}) × ${money(rateCHF)} = ${money(data.totalCHF)}`,
+      content: `Berechnung: ${fmt(totalHours)} Stunden x ${money(rateCHF)} = ${money(data.totalCHF)}`,
       colSpan: 4,
       styles: { fontStyle: 'normal' as const, textColor: PDF_THEME.textMuted as any },
     } as any,
@@ -234,17 +234,17 @@ export function generateIvInvoicePdf(data: IvInvoicePdfData): jsPDF {
   doc.text(data.invoiceIssuer.name || '—', LM, y);
   y += 8;
 
-  // Klarer Hinweistext (unten, vor Zahlungsinfos)
+  // Hinweisbox (farbig hinterlegt)
+  const hintText = `Bitte überweisen Sie den Betrag von ${money(data.totalCHF)} an folgendes Konto:`;
+  const hintH = 10;
+  doc.setFillColor(37, 99, 235);
+  doc.roundedRect(LM, y - 2, TABLE_WIDTH_MM, hintH, 1.5, 1.5, 'F');
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.setTextColor(...PDF_THEME.accentRgb);
-  doc.text(
-    `Bitte überweisen Sie den Betrag von ${money(data.totalCHF)} an folgendes Konto:`,
-    LM,
-    y,
-  );
+  doc.setFontSize(10);
+  doc.setTextColor(255, 255, 255);
+  doc.text(hintText, LM + 4, y + 4.5);
   doc.setTextColor(PDF_THEME.textDark);
-  y += 6;
+  y += hintH + 4;
 
   autoTable(doc, {
     startY: y,
