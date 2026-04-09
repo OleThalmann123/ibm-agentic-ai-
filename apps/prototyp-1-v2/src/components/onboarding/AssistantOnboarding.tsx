@@ -1044,7 +1044,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
     setField('email', (a as any).email, setEmail);
     setField('birthDate', a.birth_date, setBirthDate);
     setField('gender', (a as any).gender, setGender);
-    setField('ahvNumber', a.ahv_number, setAhvNumber);
+    setField('ahvNumber', a.ahv_number, (v) => setAhvNumber(formatAhvNumber(v)));
     setField('civilStatus', a.civil_status, setCivilStatus);
     setField('residencePermit', a.residence_permit, setResidencePermit);
 

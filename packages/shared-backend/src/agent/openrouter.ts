@@ -422,6 +422,9 @@ export async function extractContractData(
 
 /**
  * Extract contract data from IMAGES (Agent 1, vision path).
+ * Uses the same tool-calling loop as the text path so that
+ * document_classification + contract_data_submission (AHV/IBAN/Kanton
+ * normalisierung) auch bei Vision-Extraktion durchlaufen werden.
  */
 export async function extractContractFromImages(
   images: string[],
@@ -444,12 +447,10 @@ export async function extractContractFromImages(
 
   const model = getModel(apiKey, getExtractorModelName());
 
-  const response = await model.invoke(
-    [new SystemMessage(SYSTEM_PROMPT), new HumanMessage({ content: userContent })],
-    await getLangSmithInvokeConfig('agent-1-extractor', { mode: 'vision' }),
-  );
-
-  return { raw: parseResponse(response.content as string), toolCalls: [] };
+  return runAgentWithTools(model, [
+    new SystemMessage(SYSTEM_PROMPT),
+    new HumanMessage({ content: userContent }),
+  ]);
 }
 
 // ─── Binary Status Helpers ──────────────────────────────
