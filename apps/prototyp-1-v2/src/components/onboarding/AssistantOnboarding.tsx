@@ -589,22 +589,13 @@ function ReviewPopup({
 
         <div className="shrink-0 border-t border-slate-100 px-5 py-4 sm:px-8">
           {canContinueToMissing ? (
-            <div className="flex flex-col sm:flex-row gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="w-full py-3 rounded-xl border border-slate-200 bg-white text-slate-900 font-bold text-sm hover:bg-slate-50 transition-colors"
-              >
-                Überspringen – weiter im Formular
-              </button>
-              <button
-                type="button"
-                onClick={() => setMode('ergaenzen')}
-                className="w-full py-3 rounded-xl bg-foreground text-background font-bold text-sm hover:bg-foreground/90 transition-colors"
-              >
-                Weiter zu Ergänzen
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setMode('ergaenzen')}
+              className="w-full py-3 rounded-xl bg-foreground text-background font-bold text-sm hover:bg-foreground/90 transition-colors"
+            >
+              Weiter zu Ergänzen
+            </button>
           ) : (
             <button
               type="button"
