@@ -24,60 +24,34 @@ export interface PdfExtractionResult {
 }
 
 /**
- * Extract text from a PDF file.
- * If the PDF is scanned (image-only), renders pages as base64 images.
+ * Extract PDF content by rendering every page as an image for the vision model.
+ * Text-only extraction loses document layout (columns, sections, headers) which
+ * causes the LLM to confuse employer/employee data. Vision preserves the layout.
  */
 export async function extractPdfContent(file: File): Promise<PdfExtractionResult> {
   const arrayBuffer = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-  
+
   const pageCount = pdf.numPages;
-  const textParts: string[] = [];
+  const pageImages: string[] = [];
 
-  // Extract text from each page
-  for (let i = 1; i <= pageCount; i++) {
+  for (let i = 1; i <= Math.min(pageCount, 10); i++) {
     const page = await pdf.getPage(i);
-    const textContent = await page.getTextContent();
-    const pageText = textContent.items
-      .map((item) => ('str' in item ? item.str : ''))
-      .join(' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-    
-    if (pageText) {
-      textParts.push(`--- Seite ${i} ---\n${pageText}`);
-    }
+    const viewport = page.getViewport({ scale: 2.0 });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) continue;
+
+    await page.render({ canvasContext: ctx, viewport, canvas } as any).promise;
+    pageImages.push(canvas.toDataURL('image/jpeg', 0.85));
+    canvas.remove();
   }
 
-  const fullText = textParts.join('\n\n');
-  
-  // Check if PDF is scanned (very little text extracted)
-  const isScanned = fullText.length < 50;
-
-  if (isScanned) {
-    // Render pages as images for vision model fallback
-    const pageImages: string[] = [];
-    
-    for (let i = 1; i <= Math.min(pageCount, 10); i++) { // Max 10 pages
-      const page = await pdf.getPage(i);
-      const viewport = page.getViewport({ scale: 2.0 }); // 2x for quality
-      
-      const canvas = document.createElement('canvas');
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      
-      const ctx = canvas.getContext('2d');
-      if (!ctx) continue;
-      
-      await page.render({ canvasContext: ctx, viewport, canvas } as any).promise;
-      pageImages.push(canvas.toDataURL('image/jpeg', 0.85));
-      canvas.remove();
-    }
-
-    return { text: fullText, pageCount, pageImages, isScanned };
-  }
-
-  return { text: fullText, pageCount, isScanned };
+  return { text: '', pageCount, pageImages, isScanned: true };
 }
 
 /**
@@ -88,13 +62,10 @@ export async function readFileContent(file: File): Promise<{ text: string; image
   const type = file.type;
   const name = file.name.toLowerCase();
 
-  // PDF
+  // PDF → immer als Seitenbilder für Vision-Modell (Layout bleibt erhalten)
   if (type === 'application/pdf' || name.endsWith('.pdf')) {
     const result = await extractPdfContent(file);
-    if (result.isScanned && result.pageImages) {
-      return { text: result.text || '[Gescanntes PDF: Vision-Analyse]', images: result.pageImages };
-    }
-    return { text: result.text };
+    return { text: '[PDF: Vision-Analyse]', images: result.pageImages ?? [] };
   }
 
   // Images → base64 for vision model
