@@ -34,6 +34,7 @@ import {
   isLangSmithEnabled,
   setPipelineLangSmithRoot,
 } from './langsmith';
+import { getExtractorModelName, getJudgeModelName } from './model-config';
 
 export interface PipelineResult {
   classification: DocumentClassification;
@@ -125,7 +126,7 @@ async function runDocumentPipelineImpl(
         fieldsMissing: 0,
         fieldsRequiringReview: 0,
         overallConfidence: 0,
-        modelUsed: 'anthropic/claude-opus-4.6',
+        modelUsed: getExtractorModelName(),
         judgeModelUsed: 'n/a',
         toolsCalled: toolCalls,
       });
@@ -178,8 +179,8 @@ async function runDocumentPipelineImpl(
       fieldsMissing: finalExtraction.extraction_metadata.fields_missing,
       fieldsRequiringReview: finalExtraction.extraction_metadata.fields_requiring_review ?? 0,
       overallConfidence: finalExtraction.extraction_metadata.overall_confidence,
-      modelUsed: import.meta.env.VITE_OPENROUTER_EXTRACTOR_MODEL || import.meta.env.VITE_OPENROUTER_MODEL || 'anthropic/claude-opus-4.6',
-      judgeModelUsed: import.meta.env.VITE_OPENROUTER_JUDGE_MODEL || import.meta.env.VITE_OPENROUTER_MODEL || 'anthropic/claude-opus-4.6',
+      modelUsed: getExtractorModelName(),
+      judgeModelUsed: getJudgeModelName(),
       toolsCalled: toolCalls,
     });
 

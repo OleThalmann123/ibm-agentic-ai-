@@ -19,10 +19,12 @@ import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 import { agentTools } from './tools';
 import { getLangSmithInvokeConfig } from './langsmith';
 import type { JudgeFieldResult } from './judge';
+import {
+  DEFAULT_EXTRACTOR_MODEL,
+  getExtractorModelName,
+} from './model-config';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1';
-const DEFAULT_MODEL = 'anthropic/claude-opus-4.6';
-const DEFAULT_FAST_MODEL = 'anthropic/claude-sonnet-4.6';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -189,16 +191,7 @@ function getApiKey(): string | null {
   return import.meta.env.VITE_OPENROUTER_API_KEY || null;
 }
 
-function getExtractorModelName(): string {
-  return (
-    import.meta.env.VITE_OPENROUTER_EXTRACTOR_MODEL ||
-    import.meta.env.VITE_OPENROUTER_MODEL ||
-    DEFAULT_FAST_MODEL ||
-    DEFAULT_MODEL
-  );
-}
-
-function getModel(apiKey: string, modelName: string = DEFAULT_MODEL): ChatOpenAI {
+function getModel(apiKey: string, modelName: string = DEFAULT_EXTRACTOR_MODEL): ChatOpenAI {
   return new ChatOpenAI({
     apiKey,
     configuration: {

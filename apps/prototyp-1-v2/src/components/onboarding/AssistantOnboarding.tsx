@@ -1780,9 +1780,10 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
             }
           `}</style>
 
-          {/* Gradient + AI dust backdrop */}
+          {/* Gradient + AI dust backdrop — undurchsichtige Basis verhindert Streifen (bg-card durch halbtransparente Layer) */}
           <div className="absolute inset-0 pointer-events-none">
-            <div className="absolute inset-0 bg-[radial-gradient(1200px_600px_at_15%_0%,rgba(59,130,246,0.25),transparent_55%),radial-gradient(900px_520px_at_85%_15%,rgba(168,85,247,0.25),transparent_50%),radial-gradient(700px_520px_at_40%_110%,rgba(16,185,129,0.18),transparent_55%),linear-gradient(to_bottom,rgba(2,6,23,0.92),rgba(2,6,23,0.78))]" />
+            <div className="absolute inset-0 bg-[#020617]" aria-hidden />
+            <div className="absolute inset-0 bg-[radial-gradient(1200px_600px_at_15%_0%,rgba(59,130,246,0.25),transparent_55%),radial-gradient(900px_520px_at_85%_15%,rgba(168,85,247,0.25),transparent_50%),radial-gradient(700px_520px_at_40%_110%,rgba(16,185,129,0.18),transparent_55%),linear-gradient(to_bottom,rgb(15_23_42),rgb(2_6_23))]" aria-hidden />
             <div
               className="absolute inset-0 mix-blend-screen opacity-60"
               style={{
