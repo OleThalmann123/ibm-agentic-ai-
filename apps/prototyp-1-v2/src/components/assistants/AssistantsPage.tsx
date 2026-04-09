@@ -5,7 +5,7 @@ import { formatCHF } from '@asklepios/backend';
 import type { Assistant } from '@asklepios/backend';
 import { toast } from 'sonner';
 import { Users, Pencil, X, UserPlus, Share2, Copy, Check, UploadCloud, Trash2 } from 'lucide-react';
-
+import { AsklepiosLogo } from '@/components/brand/AsklepiosLogo';
 
 import { AssistantOnboarding } from '@/components/onboarding/AssistantOnboarding';
 
@@ -164,8 +164,8 @@ export function AssistantsPage() {
           <div className="relative flex flex-wrap items-center justify-between gap-6">
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/15 bg-white/10">
-                  <span className="text-white text-lg font-bold">A</span>
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/15 bg-white/10 overflow-hidden">
+                  <AsklepiosLogo className="w-full h-full object-contain p-1.5" />
                 </div>
                 <h2 className="text-xl font-bold">Neue Assistenzperson erfassen</h2>
               </div>

@@ -12,6 +12,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { getCityFromChPlz, isValidChPlz } from '@/utils/chPlz';
 import asklepiosMark from '@/assets/asklepios-mark.svg';
+import asklepiosLogoUrl from '@/assets/asklepios-logo.png';
 
 const formatAIWarning = (code: string) => {
   const map: Record<string, string> = {
@@ -29,6 +30,23 @@ import { runDocumentPipeline } from '@asklepios/backend';
 import { ContractExtractionResult, IDPField, ConfidenceLevel, BinaryStatus } from '@asklepios/backend';
 import type { PipelineTrace } from '@asklepios/backend';
 const REQUIRED_FIELDS = ['firstName', 'lastName', 'birthDate', 'ahvNumber', 'contractStart', 'hoursPerWeek', 'hourlyRate'];
+
+const PIPELINE_TIMEOUT_MS = 120_000;
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = window.setTimeout(() => reject(new Error(`${label} (Timeout nach ${Math.round(ms / 1000)}s)`)), ms);
+    promise.then(
+      (v) => {
+        window.clearTimeout(t);
+        resolve(v);
+      },
+      (e) => {
+        window.clearTimeout(t);
+        reject(e);
+      },
+    );
+  });
+}
 
 const normalizeCountryToIso2 = (raw: string) => {
   const v = raw.trim();
@@ -350,19 +368,24 @@ function ReviewPopup({
 
   const reviewRows = mode === 'pruefen' ? reviewRowsAll : [];
   const missingRows = mode === 'ergaenzen' ? missingRowsAll : [];
+  const hasMissing = missingRowsAll.length > 0;
+  const canContinueToMissing = mode === 'pruefen' && hasMissing;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/45 backdrop-blur-sm animate-in fade-in duration-200 p-3 sm:p-4 sm:pt-6">
-      <div className="w-full max-w-7xl max-h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-300 rounded-2xl p-[1px] bg-[linear-gradient(90deg,rgba(59,130,246,0.55),rgba(168,85,247,0.50),rgba(16,185,129,0.38))] shadow-[0_26px_90px_rgba(2,6,23,0.35)]">
-        <div className="bg-white rounded-2xl overflow-hidden flex flex-col max-h-[92vh]">
-        <div className="shrink-0 px-4 py-3 sm:px-5 text-white relative overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/45 backdrop-blur-sm animate-in fade-in duration-200 p-2 sm:p-4 sm:pt-4">
+      <div className="w-full max-w-[96vw] xl:max-w-[1400px] max-h-[96vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-300 rounded-2xl p-[1px] bg-[linear-gradient(90deg,rgba(59,130,246,0.55),rgba(168,85,247,0.50),rgba(16,185,129,0.38))] shadow-[0_26px_90px_rgba(2,6,23,0.35)]">
+        <div className="bg-white rounded-2xl overflow-hidden flex flex-col max-h-[96vh]">
+        <div className="shrink-0 px-5 py-4 sm:px-8 sm:py-5 text-white relative overflow-hidden">
           <div className="absolute inset-0 bg-[radial-gradient(1200px_600px_at_15%_0%,rgba(59,130,246,0.22),transparent_55%),radial-gradient(900px_520px_at_85%_15%,rgba(168,85,247,0.22),transparent_50%),radial-gradient(700px_520px_at_40%_120%,rgba(16,185,129,0.16),transparent_55%),linear-gradient(to_bottom,rgba(2,6,23,0.92),rgba(2,6,23,0.82))]" />
-          <div className="flex items-start justify-between gap-3">
-            <div className="relative">
-              <h3 className="text-lg font-bold leading-tight">Asklepios braucht deine Hilfe</h3>
+          <div className="flex items-start justify-between gap-4">
+            <div className="relative flex items-start gap-4">
+              <img src={asklepiosLogoUrl} alt="Asklepios" className="w-14 h-14 rounded-2xl border border-white/15 bg-white/10 object-contain p-1.5 shrink-0 shadow-lg" />
+              <div>
+              <h3 className="text-xl font-bold leading-tight">Asklepios braucht deine Hilfe</h3>
               <p className="text-sm text-white/70 mt-0.5">
                 Bitte <span className="font-semibold text-white">prüfen</span> (mit Arbeitsvertrag) und <span className="font-semibold text-white">ergänzen</span> (falls nicht im Vertrag).
               </p>
+              </div>
             </div>
           <button
             type="button"
@@ -417,8 +440,8 @@ function ReviewPopup({
 
         <div className="flex flex-1 min-h-0 flex-col lg:flex-row">
           {/* Links: Feldliste */}
-          <div className={`${mode === 'pruefen' ? 'lg:w-[48%] lg:border-r' : 'w-full'} flex flex-col min-h-0 border-b lg:border-b-0 border-slate-100 max-h-[50vh] lg:max-h-none`}>
-            <div className="overflow-y-auto flex-1 px-4 py-3 space-y-5">
+          <div className={`${mode === 'pruefen' ? 'lg:w-[48%] lg:border-r' : 'w-full'} flex flex-col min-h-0 border-b lg:border-b-0 border-slate-100 max-h-[55vh] lg:max-h-none`}>
+            <div className="overflow-y-auto flex-1 px-5 py-4 sm:px-6 space-y-5">
               {(mode === 'pruefen' ? reviewRowsAll.length === 0 : missingRowsAll.length === 0) ? (
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <p className="text-sm font-semibold text-slate-800">
@@ -552,14 +575,33 @@ function ReviewPopup({
           ) : null}
         </div>
 
-        <div className="shrink-0 border-t border-slate-100 px-4 py-3 sm:px-5">
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-full py-3 rounded-xl bg-foreground text-background font-bold text-sm hover:bg-foreground/90 transition-colors"
-          >
-            Fertig – weiter im Formular
-          </button>
+        <div className="shrink-0 border-t border-slate-100 px-5 py-4 sm:px-8">
+          {canContinueToMissing ? (
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="w-full py-3 rounded-xl border border-slate-200 bg-white text-slate-900 font-bold text-sm hover:bg-slate-50 transition-colors"
+              >
+                Überspringen – weiter im Formular
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode('ergaenzen')}
+                className="w-full py-3 rounded-xl bg-foreground text-background font-bold text-sm hover:bg-foreground/90 transition-colors"
+              >
+                Weiter zu Ergänzen
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-full py-3 rounded-xl bg-foreground text-background font-bold text-sm hover:bg-foreground/90 transition-colors"
+            >
+              Fertig – weiter im Formular
+            </button>
+          )}
         </div>
         </div>
       </div>
@@ -832,6 +874,8 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
   const [reviewedFields, setReviewedFields] = useState<Set<string>>(new Set());
   const [showReviewPopup, setShowReviewPopup] = useState(false);
   const [pipelineTrace, setPipelineTrace] = useState<PipelineTrace | null>(null);
+  const extractionRunIdRef = useRef(0);
+  const [extractingStartedAt, setExtractingStartedAt] = useState<number | null>(null);
 
   const [contractPreviewUrl, setContractPreviewUrl] = useState<string | null>(null);
   const [contractFileName, setContractFileName] = useState('');
@@ -864,6 +908,32 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (step === 'extracting') setExtractingStartedAt(Date.now());
+    else setExtractingStartedAt(null);
+  }, [step]);
+
+  const pipelineTimingSummary = useMemo(() => {
+    const t = pipelineTrace;
+    if (!t?.steps?.length) return null;
+    const get = (type: string) =>
+      t.steps.find((s) => s.type === type)?.durationMs ?? null;
+    const total = t.totalDurationMs ?? null;
+    const pdf = get('pdf_extraction');
+    const gate = get('contract_gate');
+    const extract = get('agent_extraction');
+    const judge = get('agent_judge');
+    const fmt = (ms: number | null) => (ms == null ? null : `${Math.round(ms / 1000)}s`);
+    const parts = [
+      total != null ? `Total ${fmt(total)}` : null,
+      pdf != null ? `Dokument ${fmt(pdf)}` : null,
+      gate != null ? `Gate ${fmt(gate)}` : null,
+      extract != null ? `Extraktion ${fmt(extract)}` : null,
+      judge != null ? `Judge ${fmt(judge)}` : null,
+    ].filter(Boolean);
+    return parts.length ? parts.join(' · ') : null;
+  }, [pipelineTrace]);
 
   // UX: "Extraktion abgeschlossen" erst anzeigen, wenn UI wirklich im Review angekommen ist.
   useEffect(() => {
@@ -1181,6 +1251,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
     }
 
     const run = (async () => {
+      const runId = ++extractionRunIdRef.current;
       setStep('extracting');
       setExtractionError(null);
       setContractPreviewFromFile(file);
@@ -1191,8 +1262,19 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
       });
 
       try {
-        const { text } = await readFileContent(file);
-        const pipelineResult = await runDocumentPipeline(file, text);
+        const { text } = await withTimeout(
+          readFileContent(file),
+          PIPELINE_TIMEOUT_MS,
+          'Dokument lesen dauert ungewöhnlich lange',
+        );
+        const pipelineResult = await withTimeout(
+          runDocumentPipeline(file, text),
+          PIPELINE_TIMEOUT_MS,
+          'KI-Analyse dauert ungewöhnlich lange',
+        );
+
+        // Falls der User abgebrochen oder neu gestartet hat: späte Resultate ignorieren.
+        if (runId !== extractionRunIdRef.current) return;
 
         if (pipelineResult.classification !== 'contract') {
           toast.dismiss(TOAST_EXTRACTION_LOADING);
@@ -1256,6 +1338,8 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
         // Toast erst nach UI-Wechsel auf "review" anzeigen, damit er nicht "zu früh" wirkt.
         setPendingExtractionToast({ description, hasWarnings });
       } catch (err) {
+        // Run invalidieren, damit späte Promises nie mehr den State überschreiben.
+        extractionRunIdRef.current++;
         toast.dismiss(TOAST_EXTRACTION_LOADING);
         setContractPreviewFromFile(null);
         const msg = err instanceof Error ? err.message : 'Unbekannter Fehler';
@@ -1653,8 +1737,8 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
           </button>
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-start gap-3 min-w-0">
-              <div className="w-10 h-10 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
-                <span className="text-primary text-lg font-bold">A</span>
+              <div className="w-12 h-12 rounded-2xl bg-white/80 border border-primary/20 flex items-center justify-center shrink-0 overflow-hidden shadow-sm">
+                <img src={asklepiosLogoUrl} alt="Asklepios" className="w-full h-full object-contain p-1" draggable={false} />
               </div>
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
@@ -1782,13 +1866,13 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
               <div className="relative w-12 h-12">
                 <div className="absolute inset-0 rounded-2xl bg-white/10 backdrop-blur border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.35)]" />
                 <div
-                  className="relative w-12 h-12 rounded-2xl bg-white/10 border border-white/10 shadow-[0_14px_26px_rgba(59,130,246,0.25)] flex items-center justify-center overflow-hidden"
+                  className="relative w-14 h-14 rounded-2xl bg-white/10 border border-white/10 shadow-[0_14px_26px_rgba(59,130,246,0.25)] flex items-center justify-center overflow-hidden"
                   style={{ animation: 'ask-float 2.8s ease-in-out infinite' }}
                 >
                   <img
-                    src={asklepiosMark}
+                    src={asklepiosLogoUrl}
                     alt="Asklepios"
-                    className="h-8 w-8 select-none pointer-events-none"
+                    className="w-full h-full object-contain p-1.5 select-none pointer-events-none"
                     draggable={false}
                   />
                 </div>
@@ -1873,6 +1957,22 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                     style={{ animation: 'ask-progress 1.15s ease-in-out infinite' }}
                   />
                 </div>
+              </div>
+
+              <div className="mt-6 flex items-center justify-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    extractionRunIdRef.current++;
+                    toast.dismiss(TOAST_EXTRACTION_LOADING);
+                    setExtractionError(null);
+                    setContractPreviewFromFile(null);
+                    setStep('upload');
+                  }}
+                  className="text-xs font-semibold text-white/70 hover:text-white transition-colors underline underline-offset-4"
+                >
+                  Analyse abbrechen
+                </button>
               </div>
             </div>
           </div>
@@ -1963,6 +2063,11 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                 ? 'bg-amber-50 border-amber-200' 
                 : 'bg-emerald-50 border-emerald-200'
             }`}>
+              {pipelineTimingSummary ? (
+                <p className="text-[11px] text-muted-foreground whitespace-nowrap mr-2">
+                  {pipelineTimingSummary}
+                </p>
+              ) : null}
               {popupAttentionFields.length > 0 ? (
                 <>
                   <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
@@ -2136,7 +2241,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
             {tab === 'abrechnungsdaten' && (
               <div className="space-y-4 animate-in fade-in duration-200">
                 <h4 className="text-sm font-bold">Vertragsdetails & Pensum</h4>
-                <div className="grid grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <MiniField title="Vertragsbeginn" {...fieldProps('contractStart')} hasValue={!!contractStart}>
                     <input type="date" value={contractStart} onChange={e => setContractStart(e.target.value)} className={inputStyle} />
                   </MiniField>
@@ -2178,7 +2283,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                 </div>
 
                 <h4 className="text-sm font-bold">Lohn</h4>
-                <div className="grid grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <MiniField title="Lohnart" {...fieldProps('wageType')} hasValue={!!wageType}>
                     <select value={wageType} onChange={e => setWageType(e.target.value)} className={selectStyle}>
                       <option value="hourly">Stundenlohn</option>
@@ -2196,16 +2301,12 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                   </MiniField>
                 </div>
 
-                <div className="rounded-2xl border border-primary/25 bg-primary/5 p-3.5 relative">
-
-                  <div className="flex items-baseline justify-between gap-3 mb-3">
+                <div className="mt-2">
+                  <div className="flex items-baseline justify-between gap-3 mb-2">
                     <h4 className="text-sm font-bold">Versicherung & Konto</h4>
-                    <p className="text-[11px] text-muted-foreground">
-                      Aus dem Vertrag erkannt – bitte die markierten Felder prüfen.
-                    </p>
                   </div>
 
-                  <div className="grid grid-cols-4 gap-4">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <MiniField title="Ferienzuschlag %" {...fieldProps('vacationSurcharge')} hasValue={!!vacationSurcharge}>
                     <input
                       type="number"

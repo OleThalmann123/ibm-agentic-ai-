@@ -6,6 +6,7 @@ import {
   Clock, XCircle, ChevronLeft, ChevronRight, ChevronUp, ChevronDown,
   CheckCircle2, List, Pencil, Trash2, Moon, FileText, ShieldCheck, AlertCircle, Download,
 } from 'lucide-react';
+import { AsklepiosLogo } from '@/components/brand/AsklepiosLogo';
 import {
   calculatePayslip,
   generatePayslipPdf,
@@ -328,7 +329,9 @@ export function TokenLoginPage() {
       <div className="bg-white border-b">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-emerald-500" />
+            <div className="w-8 h-8 rounded-xl bg-white border border-slate-200 flex items-center justify-center overflow-hidden">
+              <AsklepiosLogo className="w-full h-full object-contain p-1.5" alt="Asklepios" />
+            </div>
             <span className="font-semibold text-sm">{assistant.name}</span>
           </div>
           {/* Tabs */}

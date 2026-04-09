@@ -17,6 +17,7 @@ import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 import { getLangSmithInvokeConfig } from './langsmith';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1';
+const DEFAULT_JUDGE_MODEL = 'anthropic/claude-sonnet-4.6';
 
 export interface JudgeFieldResult {
   confidence: 'high' | 'medium' | 'low';
@@ -106,6 +107,15 @@ function getApiKey(): string | null {
   return import.meta.env.VITE_OPENROUTER_API_KEY || null;
 }
 
+function getJudgeModelName(): string {
+  return (
+    import.meta.env.VITE_OPENROUTER_JUDGE_MODEL ||
+    import.meta.env.VITE_OPENROUTER_MODEL ||
+    DEFAULT_JUDGE_MODEL ||
+    'anthropic/claude-opus-4.6'
+  );
+}
+
 function getJudgeModel(apiKey: string): ChatOpenAI {
   return new ChatOpenAI({
     apiKey,
@@ -117,7 +127,7 @@ function getJudgeModel(apiKey: string): ChatOpenAI {
         'X-Title': 'IV-Assistenzbeitrag Judge',
       },
     },
-    modelName: 'anthropic/claude-opus-4.6',
+    modelName: getJudgeModelName(),
     temperature: 0.0,
     maxRetries: 2,
     modelKwargs: {

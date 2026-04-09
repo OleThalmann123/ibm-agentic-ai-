@@ -227,8 +227,8 @@ async function runDocumentPipelineImpl(
       fieldsMissing: finalExtraction.extraction_metadata.fields_missing,
       fieldsRequiringReview: finalExtraction.extraction_metadata.fields_requiring_review ?? 0,
       overallConfidence: finalExtraction.extraction_metadata.overall_confidence,
-      modelUsed: 'anthropic/claude-opus-4.6',
-      judgeModelUsed: 'anthropic/claude-opus-4.6',
+      modelUsed: import.meta.env.VITE_OPENROUTER_EXTRACTOR_MODEL || import.meta.env.VITE_OPENROUTER_MODEL || 'anthropic/claude-opus-4.6',
+      judgeModelUsed: import.meta.env.VITE_OPENROUTER_JUDGE_MODEL || import.meta.env.VITE_OPENROUTER_MODEL || 'anthropic/claude-opus-4.6',
       toolsCalled: toolCalls,
     });
 

@@ -22,6 +22,7 @@ import type { JudgeFieldResult } from './judge';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1';
 const DEFAULT_MODEL = 'anthropic/claude-opus-4.6';
+const DEFAULT_FAST_MODEL = 'anthropic/claude-sonnet-4.6';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -185,6 +186,15 @@ Gib ein JSON in exakt diesem Format zurück. Jedes Feld hat: value, source_text,
 
 function getApiKey(): string | null {
   return import.meta.env.VITE_OPENROUTER_API_KEY || null;
+}
+
+function getExtractorModelName(): string {
+  return (
+    import.meta.env.VITE_OPENROUTER_EXTRACTOR_MODEL ||
+    import.meta.env.VITE_OPENROUTER_MODEL ||
+    DEFAULT_FAST_MODEL ||
+    DEFAULT_MODEL
+  );
 }
 
 function getModel(apiKey: string, modelName: string = DEFAULT_MODEL): ChatOpenAI {
@@ -381,7 +391,7 @@ async function runAgentWithTools(
     console.warn(`[Agent 1] Tool-calling limit reached (${MAX_TOOL_ROUNDS} rounds). Forcing final response.`);
     const forceModel = getModel(
       import.meta.env.VITE_OPENROUTER_API_KEY!,
-      DEFAULT_MODEL,
+      getExtractorModelName(),
     );
     response = await forceModel.invoke(
       allMessages,
@@ -403,7 +413,7 @@ export async function extractContractData(
     throw new Error('VITE_OPENROUTER_API_KEY ist nicht konfiguriert.');
   }
 
-  const model = getModel(apiKey, DEFAULT_MODEL);
+  const model = getModel(apiKey, getExtractorModelName());
 
   return runAgentWithTools(model, [
     new SystemMessage(SYSTEM_PROMPT),
@@ -433,7 +443,7 @@ export async function extractContractFromImages(
     throw new Error('VITE_OPENROUTER_API_KEY ist nicht konfiguriert.');
   }
 
-  const model = getModel(apiKey, DEFAULT_MODEL);
+  const model = getModel(apiKey, getExtractorModelName());
 
   const response = await model.invoke(
     [new SystemMessage(SYSTEM_PROMPT), new HumanMessage({ content: userContent })],

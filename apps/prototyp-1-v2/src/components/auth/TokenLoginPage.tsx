@@ -17,6 +17,7 @@ import {
 } from '@asklepios/backend';
 import { toast } from 'sonner';
 import { sanitizeFilenamePart } from '@/utils/filename';
+import { AsklepiosLogo } from '@/components/brand/AsklepiosLogo';
 
 /** Acht IV-Kategorien (Art. 39c IVG); gespeicherte Codes 2–9, Anzeige 1–8. */
 const ACTIVITY_OPTIONS = getIvAssistanceActivityOptions();
@@ -464,7 +465,9 @@ export function TokenLoginPage() {
       <div className="bg-white border-b">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-emerald-500" />
+            <div className="w-8 h-8 rounded-xl bg-white border border-slate-200 flex items-center justify-center overflow-hidden shadow-sm">
+              <AsklepiosLogo className="w-full h-full object-contain p-1" />
+            </div>
             <span className="font-semibold text-sm">{assistant.name}</span>
           </div>
           {/* Tabs */}
