@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 import { Users, Settings, LogOut, Menu, X, Calculator } from 'lucide-react';
 import { useState } from 'react';
 import { EmployerOnboarding } from '@/components/onboarding/EmployerOnboarding';
+import { AsklepiosLogo } from '@/components/brand/AsklepiosLogo';
 
 const navItems = [
   { to: '/assistants', label: 'Assistenzpersonen', icon: Users },
@@ -41,8 +42,8 @@ export function AppShell() {
         {/* Logo */}
         <div className="flex items-center justify-between h-16 px-4 border-b border-sidebar-border">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
-              <span className="text-primary text-xs font-semibold">A</span>
+            <div className="w-10 h-10 rounded-xl bg-white/80 border border-sidebar-border flex items-center justify-center overflow-hidden shadow-sm">
+              <AsklepiosLogo className="w-full h-full object-contain p-1" />
             </div>
             <div>
               <h1 className="font-semibold text-sm text-sidebar-foreground">Asklepios</h1>
@@ -113,8 +114,8 @@ export function AppShell() {
             <Menu className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
-              <span className="text-primary text-[10px] font-semibold">A</span>
+            <div className="w-8 h-8 rounded-xl bg-white border border-border flex items-center justify-center overflow-hidden shadow-sm">
+              <AsklepiosLogo className="w-full h-full object-contain p-1" />
             </div>
             <span className="font-semibold text-sm">Asklepios</span>
           </div>

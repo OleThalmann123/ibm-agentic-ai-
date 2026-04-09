@@ -12,6 +12,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { getCityFromChPlz, isValidChPlz } from '@/utils/chPlz';
 import asklepiosMark from '@/assets/asklepios-mark.svg';
+import asklepiosLogoUrl from '@/assets/asklepios-logo.png';
 
 const formatAIWarning = (code: string) => {
   const map: Record<string, string> = {
@@ -376,17 +377,20 @@ function ReviewPopup({
   const canContinueToMissing = mode === 'pruefen' && hasMissing;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/45 backdrop-blur-sm animate-in fade-in duration-200 p-3 sm:p-4 sm:pt-6">
-      <div className="w-full max-w-7xl max-h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-300 rounded-2xl p-[1px] bg-[linear-gradient(90deg,rgba(59,130,246,0.55),rgba(168,85,247,0.50),rgba(16,185,129,0.38))] shadow-[0_26px_90px_rgba(2,6,23,0.35)]">
-        <div className="bg-white rounded-2xl overflow-hidden flex flex-col max-h-[92vh]">
-        <div className="shrink-0 px-4 py-3 sm:px-5 text-white relative overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/45 backdrop-blur-sm animate-in fade-in duration-200 p-2 sm:p-4 sm:pt-4">
+      <div className="w-full max-w-[96vw] xl:max-w-[1400px] max-h-[96vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-300 rounded-2xl p-[1px] bg-[linear-gradient(90deg,rgba(59,130,246,0.55),rgba(168,85,247,0.50),rgba(16,185,129,0.38))] shadow-[0_26px_90px_rgba(2,6,23,0.35)]">
+        <div className="bg-white rounded-2xl overflow-hidden flex flex-col max-h-[96vh]">
+        <div className="shrink-0 px-5 py-4 sm:px-8 sm:py-5 text-white relative overflow-hidden">
           <div className="absolute inset-0 bg-[radial-gradient(1200px_600px_at_15%_0%,rgba(59,130,246,0.22),transparent_55%),radial-gradient(900px_520px_at_85%_15%,rgba(168,85,247,0.22),transparent_50%),radial-gradient(700px_520px_at_40%_120%,rgba(16,185,129,0.16),transparent_55%),linear-gradient(to_bottom,rgba(2,6,23,0.92),rgba(2,6,23,0.82))]" />
-          <div className="flex items-start justify-between gap-3">
-            <div className="relative">
-              <h3 className="text-lg font-bold leading-tight">Asklepios braucht deine Hilfe</h3>
+          <div className="flex items-start justify-between gap-4">
+            <div className="relative flex items-start gap-4">
+              <img src={asklepiosLogoUrl} alt="Asklepios" className="w-14 h-14 rounded-2xl border border-white/15 bg-white/10 object-contain p-1.5 shrink-0 shadow-lg" />
+              <div>
+              <h3 className="text-xl font-bold leading-tight">Asklepios braucht deine Hilfe</h3>
               <p className="text-sm text-white/70 mt-0.5">
                 Bitte <span className="font-semibold text-white">prüfen</span> (mit Arbeitsvertrag) und <span className="font-semibold text-white">ergänzen</span> (falls nicht im Vertrag).
               </p>
+              </div>
             </div>
           <button
             type="button"
@@ -441,8 +445,8 @@ function ReviewPopup({
 
         <div className="flex flex-1 min-h-0 flex-col lg:flex-row">
           {/* Links: Feldliste */}
-          <div className={`${mode === 'pruefen' ? 'lg:w-[48%] lg:border-r' : 'w-full'} flex flex-col min-h-0 border-b lg:border-b-0 border-slate-100 max-h-[50vh] lg:max-h-none`}>
-            <div className="overflow-y-auto flex-1 px-4 py-3 space-y-5">
+          <div className={`${mode === 'pruefen' ? 'lg:w-[48%] lg:border-r' : 'w-full'} flex flex-col min-h-0 border-b lg:border-b-0 border-slate-100 max-h-[55vh] lg:max-h-none`}>
+            <div className="overflow-y-auto flex-1 px-5 py-4 sm:px-6 space-y-5">
               {(mode === 'pruefen' ? reviewRowsAll.length === 0 : missingRowsAll.length === 0) ? (
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <p className="text-sm font-semibold text-slate-800">
@@ -576,7 +580,7 @@ function ReviewPopup({
           ) : null}
         </div>
 
-        <div className="shrink-0 border-t border-slate-100 px-4 py-3 sm:px-5">
+        <div className="shrink-0 border-t border-slate-100 px-5 py-4 sm:px-8">
           {canContinueToMissing ? (
             <div className="flex flex-col sm:flex-row gap-2">
               <button
@@ -1677,8 +1681,8 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
           </button>
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-start gap-3 min-w-0">
-              <div className="w-10 h-10 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
-                <span className="text-primary text-lg font-bold">A</span>
+              <div className="w-12 h-12 rounded-2xl bg-white/80 border border-primary/20 flex items-center justify-center shrink-0 overflow-hidden shadow-sm">
+                <img src={asklepiosLogoUrl} alt="Asklepios" className="w-full h-full object-contain p-1" draggable={false} />
               </div>
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
@@ -1806,13 +1810,13 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
               <div className="relative w-12 h-12">
                 <div className="absolute inset-0 rounded-2xl bg-white/10 backdrop-blur border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.35)]" />
                 <div
-                  className="relative w-12 h-12 rounded-2xl bg-white/10 border border-white/10 shadow-[0_14px_26px_rgba(59,130,246,0.25)] flex items-center justify-center overflow-hidden"
+                  className="relative w-14 h-14 rounded-2xl bg-white/10 border border-white/10 shadow-[0_14px_26px_rgba(59,130,246,0.25)] flex items-center justify-center overflow-hidden"
                   style={{ animation: 'ask-float 2.8s ease-in-out infinite' }}
                 >
                   <img
-                    src={asklepiosMark}
+                    src={asklepiosLogoUrl}
                     alt="Asklepios"
-                    className="h-8 w-8 select-none pointer-events-none"
+                    className="w-full h-full object-contain p-1.5 select-none pointer-events-none"
                     draggable={false}
                   />
                 </div>
