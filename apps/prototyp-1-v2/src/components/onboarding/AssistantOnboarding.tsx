@@ -13,7 +13,8 @@ import { toast } from 'sonner';
 import { getCityFromChPlz, isValidChPlz } from '@/utils/chPlz';
 import asklepiosMark from '@/assets/asklepios-mark.svg';
 import asklepiosLogoUrl from '@/assets/asklepios-logo.png';
-import { UploadCloud, CheckCircle2, FileText, ArrowRight, AlertCircle, HelpCircle, User, ArrowLeft, Loader2, Share2, Copy, Check, ShieldCheck, AlertTriangle, X } from 'lucide-react';
+import { UploadCloud, CheckCircle2, FileText, ArrowRight, AlertCircle, HelpCircle, User, ArrowLeft, Loader2, Share2, Copy, Check, ShieldCheck, AlertTriangle, X, Clock } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { runDocumentPipeline } from '@asklepios/backend';
 import { ContractExtractionResult, IDPField, ConfidenceLevel, BinaryStatus } from '@asklepios/backend';
 import type { PipelineTrace } from '@asklepios/backend';
@@ -1805,8 +1806,8 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
           </div>
           {/* Header */}
           <div className="px-8 py-6 text-white relative">
-            <div className="flex items-center gap-4">
-              <div className="relative w-12 h-12">
+            <div className="flex items-start gap-4">
+              <div className="relative w-12 h-12 flex-shrink-0">
                 <div className="absolute inset-0 rounded-2xl bg-white/10 backdrop-blur border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.35)]" />
                 <div
                   className="relative w-14 h-14 rounded-2xl bg-white/10 border border-white/10 shadow-[0_14px_26px_rgba(59,130,246,0.25)] flex items-center justify-center overflow-hidden"
@@ -1820,13 +1821,17 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                   />
                 </div>
               </div>
-              <div>
+              <div className="flex-1 min-w-0">
                 <p className="text-[11px] font-semibold tracking-wide text-white/70 uppercase">
                   Agentic Workflow aktiv
                 </p>
                 <h3 className="text-lg font-bold leading-tight">Asklepios legt deine Assistenzperson an</h3>
                 <p className="text-sm text-white/70">Vertrag wird analysiert und Stammdaten werden vorbereitet.</p>
               </div>
+              <Badge variant="outline" className="flex-shrink-0 mt-1 gap-1.5 rounded-full border-white/20 bg-white/5 text-white/80 px-3 py-1.5 text-[11px] font-medium backdrop-blur">
+                <Clock className="w-3.5 h-3.5 text-white/60" />
+                ca. 2 Min.
+              </Badge>
             </div>
           </div>
 
@@ -1877,46 +1882,32 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
               </div>
             </div>
 
-            {/* Progress hint */}
-            <div className="mt-8 text-center">
-              <div className="inline-flex items-center gap-2.5 rounded-full bg-white/5 border border-white/10 px-4 py-2">
-                <Loader2 className="w-4 h-4 text-white/70 animate-spin" />
-                <div className="text-left">
-                  <p className="text-xs font-semibold text-white/80" aria-live="polite">
-                    Analyse läuft…
-                  </p>
-                  <p className="text-[11px] text-white/55">Der Prozess kann ca. 2 Minuten dauern – lehn dich zurück.</p>
-                </div>
-              </div>
-
-              <div className="mt-3 flex justify-center">
+            {/* Progress bar + cancel */}
+            <div className="mt-8 flex flex-col items-center gap-4">
+              <div
+                className="relative h-1 w-56 overflow-hidden rounded-full bg-white/10"
+                role="progressbar"
+                aria-label="Analyse Fortschritt"
+              >
                 <div
-                  className="relative h-1 w-56 overflow-hidden rounded-full bg-white/10"
-                  role="progressbar"
-                  aria-label="Analyse Fortschritt"
-                >
-                  <div
-                    className="absolute inset-y-0 left-0 w-1/3 rounded-full bg-[linear-gradient(90deg,rgba(59,130,246,0.70),rgba(168,85,247,0.65),rgba(16,185,129,0.55))]"
-                    style={{ animation: 'ask-progress 1.15s ease-in-out infinite' }}
-                  />
-                </div>
+                  className="absolute inset-y-0 left-0 w-1/3 rounded-full bg-[linear-gradient(90deg,rgba(59,130,246,0.70),rgba(168,85,247,0.65),rgba(16,185,129,0.55))]"
+                  style={{ animation: 'ask-progress 1.15s ease-in-out infinite' }}
+                />
               </div>
 
-              <div className="mt-6 flex items-center justify-center">
-                <button
-                  type="button"
-                  onClick={() => {
-                    extractionRunIdRef.current++;
-                    toast.dismiss(TOAST_EXTRACTION_LOADING);
-                    setExtractionError(null);
-                    setContractPreviewFromFile(null);
-                    setStep('upload');
-                  }}
-                  className="text-xs font-semibold text-white/70 hover:text-white transition-colors underline underline-offset-4"
-                >
-                  Analyse abbrechen
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  extractionRunIdRef.current++;
+                  toast.dismiss(TOAST_EXTRACTION_LOADING);
+                  setExtractionError(null);
+                  setContractPreviewFromFile(null);
+                  setStep('upload');
+                }}
+                className="text-xs font-medium text-white/50 hover:text-white/80 transition-colors"
+              >
+                Analyse abbrechen
+              </button>
             </div>
           </div>
         </div>
