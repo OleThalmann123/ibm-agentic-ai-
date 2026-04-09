@@ -100,6 +100,18 @@ export function generateIvInvoicePdf(data: IvInvoicePdfData): jsPDF {
   const firstLine = data.lines?.[0];
   const rateCHF = Number.isFinite(firstLine?.rateCHF) ? (firstLine!.rateCHF as number) : 35.3;
 
+  // Asklepios Branding (farbig, ohne externes Bild)
+  doc.setFillColor(...PDF_THEME.accentRgb);
+  doc.roundedRect(LM, 12, 8, 8, 2, 2, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.text('A', LM + 2.7, 17.8);
+  doc.setTextColor(PDF_THEME.textDark);
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Asklepios', LM + 11, 17.5);
+
   // Header (briefartig, ohne Doppelungen)
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(15);
@@ -211,6 +223,18 @@ export function generateIvInvoicePdf(data: IvInvoicePdfData): jsPDF {
   y += 6;
   doc.text(data.invoiceIssuer.name || '—', LM, y);
   y += 8;
+
+  // Klarer Hinweistext (unten, vor Zahlungsinfos)
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(...PDF_THEME.accentRgb);
+  doc.text(
+    `Bitte überweisen Sie den Betrag von ${money(data.totalCHF)} an folgendes Konto:`,
+    LM,
+    y,
+  );
+  doc.setTextColor(PDF_THEME.textDark);
+  y += 6;
 
   autoTable(doc, {
     startY: y,
