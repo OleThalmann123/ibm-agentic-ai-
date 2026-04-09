@@ -79,11 +79,6 @@ const extractSuggestedIso2 = (text?: string) => {
 };
 
 const FIELD_LABELS: Record<string, string> = {
-  'employer.first_name': 'Auftraggeber Vorname',
-  'employer.last_name': 'Auftraggeber Nachname',
-  'employer.street': 'Auftraggeber Strasse',
-  'employer.zip': 'Auftraggeber PLZ',
-  'employer.city': 'Auftraggeber Ort',
   'assistant.first_name': 'Vorname',
   'assistant.last_name': 'Nachname',
   'assistant.street': 'Strasse',
@@ -264,6 +259,7 @@ function buildPopupAttentionFields(
     const dot = path.indexOf('.');
     if (dot === -1) continue;
     const section = path.slice(0, dot) as keyof ContractExtractionResult['contracts'];
+    if (section === 'employer') continue;
     const fieldName = path.slice(dot + 1);
     const contractSection = extraction.contracts[section];
     if (!contractSection || typeof contractSection !== 'object') continue;
