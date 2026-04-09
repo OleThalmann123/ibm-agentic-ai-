@@ -7,3 +7,10 @@ dist/
 .DS_Store
 .vite/
 .vercel
+
+# Agent/IDE tooling (not product code)
+.agent/plugins/superpowers/
+
+# Generated Word exports / temp files (source of truth is .md)
+Arbeitsanweisungen/*.docx
+Arbeitsanweisungen/*.tmp

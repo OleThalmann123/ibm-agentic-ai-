@@ -1,10 +1,9 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { cn } from '@asklepios/backend';
-import { Users, Settings, LogOut, Menu, X, LayoutDashboard, Calculator } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Users, Settings, LogOut, Menu, X, Calculator } from 'lucide-react';
 import { useState } from 'react';
 import { EmployerOnboarding } from '@/components/onboarding/EmployerOnboarding';
-import asklepiosLogo from '@/assets/asklepios-logo.png';
 
 const navItems = [
   { to: '/assistants', label: 'Assistenzpersonen', icon: Users },
@@ -43,7 +42,7 @@ export function AppShell() {
         <div className="flex items-center justify-between h-16 px-4 border-b border-sidebar-border">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
-              <img src={asklepiosLogo} alt="Asklepios" className="w-6 h-6 object-contain" />
+              <span className="text-primary text-xs font-semibold">A</span>
             </div>
             <div>
               <h1 className="font-semibold text-sm text-sidebar-foreground">Asklepios</h1>
@@ -115,7 +114,7 @@ export function AppShell() {
           </button>
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
-              <img src={asklepiosLogo} alt="Asklepios" className="w-5 h-5 object-contain" />
+              <span className="text-primary text-[10px] font-semibold">A</span>
             </div>
             <span className="font-semibold text-sm">Asklepios</span>
           </div>

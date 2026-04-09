@@ -24,7 +24,7 @@ import { toast } from 'sonner';
 import type { Assistant } from '@asklepios/backend';
 import { Badge, badgeVariants } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import asklepiosLogo from '@/assets/asklepios-logo.png';
+import { sanitizeFilenamePart } from '@/utils/filename';
 
 // ─── Types ───
 interface MonthlyHours {
@@ -86,16 +86,6 @@ function monthLabel(key: string): string {
   const y = parts[0] ?? '';
   const m = parts[1] ?? '01';
   return `${MONTH_NAMES[parseInt(m, 10) - 1]} ${y}`;
-}
-
-function sanitizeFilenamePart(input: string): string {
-  return (input || '')
-    .trim()
-    .replace(/\s+/g, '_')
-    .replace(/[\/\\?%*:|"<>]/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/_+/g, '_')
-    .replace(/^[-_]+|[-_]+$/g, '');
 }
 
 function buildPersonPdfName(monthKeyStr: string, docType: string, personName: string): string {
@@ -439,9 +429,8 @@ export function PayrollPage() {
           : insuredName;
 
       const invoiceIssuerEmailPhone = [cd?.email || '', cd?.phone || ''].filter(Boolean).join(' · ');
-      const rate =
-        Number(String(employer?.iv_rate ?? IV_INVOICE_DEFAULT_RATE_CHF).replace(',', '.')) ||
-        IV_INVOICE_DEFAULT_RATE_CHF;
+      // Fixer IV-Ansatz gemäss Vorgabe: CHF 35.30 pro Stunde
+      const rate = IV_INVOICE_DEFAULT_RATE_CHF;
 
       const ivLines: IvInvoiceLine[] = [];
       for (const a of assistants) {
@@ -466,9 +455,10 @@ export function PayrollPage() {
         }
       }
       ivLines.sort((x, y) => (x.assistantName + x.activityLabel).localeCompare(y.assistantName + y.activityLabel));
-      const ivTotalCHF = Number(ivLines.reduce((s, l) => s + (l.amountCHF || 0), 0).toFixed(2));
+      const ivTotalHours = Number(ivLines.reduce((s, l) => s + (l.hours || 0), 0).toFixed(2));
+      const ivTotalCHF = Number((ivTotalHours * rate).toFixed(2));
 
-      const logoDataUrl = await loadImageAsDataUrl(asklepiosLogo);
+      const logoDataUrl = '';
 
       const recipientAuthorityManual = String(cd?.iv_invoice_authority_name ?? '').trim();
       const recipientPlzManual =

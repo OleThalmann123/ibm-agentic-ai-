@@ -24,7 +24,7 @@ Die Assistenzpersonen erhalten einen passwortfreien Zugangslink und tragen ihre 
 │   └── prototyp-1-v2/     # Frontend (React, TypeScript, Vite)
 ├── packages/
 │   └── shared-backend/    # Gemeinsame Logik: Agent, Payroll, PDF, Types, Supabase-Client
-└── Demo_Dateien/           # Muster-Arbeitsvertraege (PDF) fuer Demos
+└── supabase/              # SQL Migration(en) fuer DB-Schema
 ```
 
 ### Module
@@ -207,13 +207,13 @@ Datei: `packages/shared-backend/src/agent/pipeline.ts`
 
 Die Pipeline klassifiziert das Dokument als `contract`, `invoice` oder `other`. Nur bei `contract` wird die Extraktion ausgefuehrt. Die Pipeline prueft ausserdem, ob ein manuelles Review noetig ist (Konfidenz unter 0.85 oder fehlende Pflichtfelder wie AHV-Nummer oder Vorname).
 
-### Modelle
+### Modelle (OpenRouter, LangChain `ChatOpenAI`)
 
 | Parameter | Wert |
 |-----------|------|
-| Text-Extraktion | `openrouter/auto` (automatische Modellauswahl) |
-| Vision-Extraktion | `google/gemini-2.0-flash-001` |
-| Temperatur | 0.1 (deterministische Ausgabe) |
+| Agent 1 Extraktion | `anthropic/claude-opus-4.6` (Text und Vision, multimodal) |
+| Agent 2 Judge | `anthropic/claude-opus-4.6` (Temperatur 0.0) |
+| Temperatur Extraktion | 0.1 |
 | Response-Format | `json_object` (erzwingt JSON-Ausgabe) |
 
 ---

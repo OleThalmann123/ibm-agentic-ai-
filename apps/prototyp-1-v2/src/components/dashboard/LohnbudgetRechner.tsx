@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import { Calculator, ChevronDown, ChevronUp, Download, RotateCcw, Info, Building2, User } from 'lucide-react';
 import { formatCHF } from '@asklepios/backend';
-import { cn } from '@asklepios/backend';
+import { cn } from '@/lib/utils';
 
 // ─── FAK-Sätze nach Kanton ────────────────────────────────────────────
 const FAK_SAETZE: Record<string, number> = {

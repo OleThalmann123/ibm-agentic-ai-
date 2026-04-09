@@ -174,7 +174,7 @@ async function runDocumentPipelineImpl(
         fieldsMissing: 0,
         fieldsRequiringReview: 0,
         overallConfidence: 0,
-        modelUsed: images?.length ? 'gemini-2.0-flash' : 'openrouter/auto',
+        modelUsed: 'anthropic/claude-opus-4.6',
         judgeModelUsed: 'n/a',
         toolsCalled: toolCalls,
       });
@@ -227,8 +227,8 @@ async function runDocumentPipelineImpl(
       fieldsMissing: finalExtraction.extraction_metadata.fields_missing,
       fieldsRequiringReview: finalExtraction.extraction_metadata.fields_requiring_review ?? 0,
       overallConfidence: finalExtraction.extraction_metadata.overall_confidence,
-      modelUsed: images?.length ? 'gemini-2.0-flash' : 'openrouter/auto',
-      judgeModelUsed: 'gemini-2.0-flash',
+      modelUsed: 'anthropic/claude-opus-4.6',
+      judgeModelUsed: 'anthropic/claude-opus-4.6',
       toolsCalled: toolCalls,
     });
 

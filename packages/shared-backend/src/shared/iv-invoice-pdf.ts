@@ -7,6 +7,25 @@ const TABLE_WIDTH_MM = PDF_THEME.INNER_W;
 const LABEL_COL_MM = PDF_THEME.labelColMm;
 const VALUE_COL_MM = pdfValueColMm();
 
+const TABLE_COMMON = {
+  theme: 'grid' as const,
+  margin: { left: PDF_THEME.LM, right: PDF_THEME.RM },
+  styles: {
+    lineColor: PDF_THEME.borderRgb as unknown as [number, number, number],
+    lineWidth: 0.1,
+    cellPadding: 2.2,
+    valign: 'middle' as const,
+  },
+  headStyles: {
+    fillColor: [...PDF_THEME.accentRgb] as any,
+    textColor: PDF_THEME.textDark,
+    fontSize: 9,
+    fontStyle: 'bold' as const,
+    cellPadding: 2.6,
+  },
+  bodyStyles: { fontSize: 9, cellPadding: 2.2 },
+};
+
 export type IvInvoiceLine = {
   assistantName: string;
   /** Tätigkeit/Kategorie aus Zeiterfassung (z. B. "1) Alltägliche Lebensverrichtungen") */
@@ -76,7 +95,7 @@ export function generateIvInvoicePdf(data: IvInvoicePdfData): jsPDF {
   const doc = new jsPDF('p', 'mm', 'a4');
   const W = PDF_THEME.INNER_W;
   const LM = PDF_THEME.LM;
-  let y = 15;
+  let y = 16;
 
   doc.setFillColor(...PDF_THEME.headerBandRgb);
   doc.rect(0, 0, 210, 32, 'F');
@@ -92,13 +111,25 @@ export function generateIvInvoicePdf(data: IvInvoicePdfData): jsPDF {
   }
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(16);
-  doc.text('Rechnung für Assistenzbeitrag (IV)', LM + (data.logoDataUrl ? 22 : 0), y);
+  doc.setFontSize(17);
+  doc.text(`Rechnung für ${data.insuredPerson.name || '—'}`, LM + (data.logoDataUrl ? 22 : 0), y);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
-  doc.text(`Rechnungsdatum: ${data.invoiceDateLabel}`, LM + W, y, { align: 'right' });
+  doc.text(`${data.invoiceDateLabel}`, LM + W, y, { align: 'right' });
   doc.text(`Rechnungsperiode: ${data.monthLabel}`, LM + W, y + 6, { align: 'right' });
-  y += 12;
+  y += 14;
+
+  // Empfängerblock (oben rechts versetzt) – falls vorhanden
+  if (data.invoiceRecipient?.authorityName || data.invoiceRecipient?.plzCity) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    const rx = LM + W;
+    const lines = [
+      String(data.invoiceRecipient?.authorityName || '').trim(),
+      String(data.invoiceRecipient?.plzCity || '').trim(),
+    ].filter(Boolean);
+    doc.text(lines, rx, 38, { align: 'right' });
+  }
 
   // Boxes (insured + issuer)
   autoTable(doc, {
@@ -111,19 +142,10 @@ export function generateIvInvoicePdf(data: IvInvoicePdfData): jsPDF {
       ['Strasse, Hausnummer', data.insuredPerson.street || ''],
       ['Postleitzahl, Ort', data.insuredPerson.plzCity || ''],
     ],
-    theme: 'grid',
-    headStyles: {
-      fillColor: [...PDF_THEME.accentRgb],
-      textColor: PDF_THEME.textDark,
-      fontSize: 9,
-      fontStyle: 'bold',
-    },
-    bodyStyles: { fontSize: 9 },
+    ...TABLE_COMMON,
     columnStyles: { 0: { cellWidth: LABEL_COL_MM }, 1: { cellWidth: VALUE_COL_MM } },
-    margin: { left: LM, right: PDF_THEME.RM },
-    styles: { lineColor: PDF_THEME.borderRgb, lineWidth: 0.1 },
   });
-  y = (doc as any).lastAutoTable.finalY + 6;
+  y = (doc as any).lastAutoTable.finalY + 8;
 
   autoTable(doc, {
     startY: y,
@@ -135,19 +157,10 @@ export function generateIvInvoicePdf(data: IvInvoicePdfData): jsPDF {
       ['Strasse, Hausnummer', data.invoiceIssuer.street || ''],
       ['Postleitzahl, Ort', data.invoiceIssuer.plzCity || ''],
     ],
-    theme: 'grid',
-    headStyles: {
-      fillColor: [...PDF_THEME.accentRgb],
-      textColor: PDF_THEME.textDark,
-      fontSize: 9,
-      fontStyle: 'bold',
-    },
-    bodyStyles: { fontSize: 9 },
+    ...TABLE_COMMON,
     columnStyles: { 0: { cellWidth: LABEL_COL_MM }, 1: { cellWidth: VALUE_COL_MM } },
-    margin: { left: LM, right: PDF_THEME.RM },
-    styles: { lineColor: PDF_THEME.borderRgb, lineWidth: 0.1 },
   });
-  y = (doc as any).lastAutoTable.finalY + 6;
+  y = (doc as any).lastAutoTable.finalY + 8;
 
   // Billing section
   autoTable(doc, {
@@ -164,21 +177,27 @@ export function generateIvInvoicePdf(data: IvInvoicePdfData): jsPDF {
       ['Bankverbindung', data.billing.bankName || ''],
       ['Zahlungskondition', data.billing.paymentTermsDays ? `${data.billing.paymentTermsDays} Tage` : ''],
     ],
-    theme: 'grid',
-    headStyles: {
-      fillColor: [...PDF_THEME.accentRgb],
-      textColor: PDF_THEME.textDark,
-      fontSize: 9,
-      fontStyle: 'bold',
-    },
-    bodyStyles: { fontSize: 9 },
+    ...TABLE_COMMON,
     columnStyles: { 0: { cellWidth: LABEL_COL_MM }, 1: { cellWidth: VALUE_COL_MM } },
-    margin: { left: LM, right: PDF_THEME.RM },
-    styles: { lineColor: PDF_THEME.borderRgb, lineWidth: 0.1 },
   });
   y = (doc as any).lastAutoTable.finalY + 8;
 
-  // Lines table – nach Assistenzpersonen aufgeschlüsselt
+  // Betreff + Anrede
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.setDrawColor(...PDF_THEME.borderRgb);
+  doc.rect(LM, y, W, 8);
+  doc.text(`Rechnung für ${data.insuredPerson.name || '—'}`, LM + 2, y + 5.5);
+  y += 12;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text('Sehr geehrte Damen und Herren', LM, y);
+  y += 6;
+  doc.text('Ich stelle wie folgt in Rechnung:', LM, y);
+  y += 6;
+
+  // Leistungstabelle – nach Assistenzpersonen/Kategorien aufgeschlüsselt
   const sortedLines = [...data.lines].sort((a, b) =>
     (a.assistantName + a.activityLabel).localeCompare(b.assistantName + b.activityLabel),
   );
@@ -189,25 +208,22 @@ export function generateIvInvoicePdf(data: IvInvoicePdfData): jsPDF {
     lastAssistant = l.assistantName;
     body.push([
       firstRowForAssistant ? l.assistantName : '',
-      'Assistenzleistung Wohnen',
       l.activityLabel,
       fmt(l.hours),
       money(l.amountCHF),
-      '',
     ]);
   }
 
   body.push([
     {
-      content: 'TOTAL',
-      colSpan: 4,
+      content: 'Total',
+      colSpan: 3,
       styles: { fontStyle: 'bold' as const, halign: 'right' as const },
     } as any,
     {
       content: money(data.totalCHF),
       styles: { fontStyle: 'bold' as const, halign: 'right' as const },
     } as any,
-    '',
   ]);
 
   autoTable(doc, {
@@ -215,31 +231,44 @@ export function generateIvInvoicePdf(data: IvInvoicePdfData): jsPDF {
     tableWidth: TABLE_WIDTH_MM,
     head: [[
       'Leistungserbringer',
-      'Leistung',
       'Beschreibung der erbrachten Leistung',
       'Anz. Std. (Min. in 1/100h)',
       'Betrag Total (in CHF)',
-      'Beilagen',
     ]],
     body,
-    theme: 'grid',
-    headStyles: {
-      fillColor: [...PDF_THEME.accentRgb],
-      textColor: PDF_THEME.textDark,
-      fontSize: 8,
-      fontStyle: 'bold',
-    },
-    bodyStyles: { fontSize: 9 },
+    ...TABLE_COMMON,
+    headStyles: { ...TABLE_COMMON.headStyles, fontSize: 8 },
     columnStyles: {
-      0: { cellWidth: 34 },
-      1: { cellWidth: 26 },
-      2: { cellWidth: 58 },
-      3: { cellWidth: 22, halign: 'right' },
-      4: { cellWidth: 26, halign: 'right' },
-      5: { cellWidth: 24 },
+      0: { cellWidth: 44 },
+      1: { cellWidth: 78 },
+      2: { cellWidth: 28, halign: 'right' },
+      3: { cellWidth: 30, halign: 'right' },
     },
-    margin: { left: LM, right: PDF_THEME.RM },
-    styles: { lineColor: PDF_THEME.borderRgb, lineWidth: 0.1 },
+  });
+
+  y = (doc as any).lastAutoTable.finalY + 12;
+
+  // Grussformel + Zahlungsinformationen (an wen das Geld geht)
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text('Freundliche Grüsse', LM, y);
+  y += 6;
+  doc.text(data.invoiceIssuer.name || '—', LM, y);
+  y += 8;
+
+  autoTable(doc, {
+    startY: y,
+    tableWidth: TABLE_WIDTH_MM,
+    head: [['Zahlungsinformationen', '']],
+    body: [
+      ['Kontoinhaber/in', data.billing.accountHolderName || ''],
+      ['Adresse, Ort', [data.billing.accountHolderStreet || '', data.billing.accountHolderPlzCity || ''].filter(Boolean).join(', ')],
+      ['Bankverbindung', data.billing.bankName || ''],
+      ['IBAN- / Konto-Nr.', data.billing.iban || ''],
+      ['Zahlungskondition', data.billing.paymentTermsDays ? `${data.billing.paymentTermsDays} Tage` : ''],
+    ],
+    ...TABLE_COMMON,
+    columnStyles: { 0: { cellWidth: LABEL_COL_MM }, 1: { cellWidth: VALUE_COL_MM } },
   });
 
   // Footer

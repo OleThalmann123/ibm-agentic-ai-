@@ -10,7 +10,6 @@ import {
 import { supabase } from '@asklepios/backend';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import asklepiosLogo from '@/assets/asklepios-logo.png';
 import { getCityFromChPlz, isValidChPlz } from '@/utils/chPlz';
 
 const formatAIWarning = (code: string) => {
@@ -1654,7 +1653,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-start gap-3 min-w-0">
               <div className="w-10 h-10 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
-                <img src={asklepiosLogo} alt="Asklepios" className="w-7 h-7 object-contain" />
+                <span className="text-primary text-lg font-bold">A</span>
               </div>
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
@@ -1781,12 +1780,12 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
             <div className="flex items-center gap-4">
               <div className="relative w-12 h-12">
                 <div className="absolute inset-0 rounded-2xl bg-white/10 backdrop-blur border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.35)]" />
-                <img
-                  src={asklepiosLogo}
-                  alt="Asklepios Agent"
-                  className="relative w-12 h-12 object-contain drop-shadow-[0_14px_26px_rgba(59,130,246,0.25)]"
+                <div
+                  className="relative w-12 h-12 rounded-2xl bg-white/10 border border-white/10 shadow-[0_14px_26px_rgba(59,130,246,0.25)] flex items-center justify-center"
                   style={{ animation: 'ask-float 2.8s ease-in-out infinite' }}
-                />
+                >
+                  <span className="text-white text-xl font-bold">A</span>
+                </div>
               </div>
               <div>
                 <p className="text-[11px] font-semibold tracking-wide text-white/70 uppercase">

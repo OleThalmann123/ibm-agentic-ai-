@@ -16,6 +16,7 @@ import {
   type PayslipAccountingMethod,
 } from '@asklepios/backend';
 import { toast } from 'sonner';
+import { sanitizeFilenamePart } from '@/utils/filename';
 
 /** Acht IV-Kategorien (Art. 39c IVG); gespeicherte Codes 2–9, Anzeige 1–8. */
 const ACTIVITY_OPTIONS = getIvAssistanceActivityOptions();
@@ -89,16 +90,6 @@ function startOfMonthDate(d: Date = new Date()): Date {
 
 function addMonths(d: Date, delta: number): Date {
   return new Date(d.getFullYear(), d.getMonth() + delta, 1, 12, 0, 0, 0);
-}
-
-function sanitizeFilenamePart(input: string): string {
-  return (input || '')
-    .trim()
-    .replace(/\s+/g, '_')
-    .replace(/[\/\\?%*:|"<>]/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/_+/g, '_')
-    .replace(/^[-_]+|[-_]+$/g, '');
 }
 
 export function TokenLoginPage() {

@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Eye, EyeOff, UserPlus } from 'lucide-react';
-import asklepiosLogo from '@/assets/asklepios-logo.png';
 
 export function RegisterPage() {
   const { signUp } = useAuth();
@@ -37,7 +36,7 @@ export function RegisterPage() {
         {/* Logo */}
         <div className="text-center mb-8">
           <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto mb-4 shadow-sm shadow-primary/10">
-            <img src={asklepiosLogo} alt="Asklepios" className="w-12 h-12 object-contain" />
+            <span className="text-primary text-2xl font-bold">A</span>
           </div>
           <h1 className="text-2xl font-bold">Konto erstellen</h1>
           <p className="text-muted-foreground mt-1">Starten Sie mit Asklepios</p>

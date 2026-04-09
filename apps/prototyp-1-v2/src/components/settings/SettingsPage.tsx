@@ -10,35 +10,7 @@ import {
   Settings as SettingsIcon, User, Save, MapPin, CreditCard,
   Users, Moon, Shield, RotateCcw, HeartHandshake, Mail, Home
 } from 'lucide-react';
-
-// Swiss PLZ → Canton mapping
-const PLZ_CANTON_MAP: [number, number, string, string][] = [
-  [1000, 1299, 'VD', 'Waadt'], [1300, 1499, 'VD', 'Waadt'],
-  [1500, 1799, 'FR', 'Freiburg'], [1800, 1899, 'VD', 'Waadt'],
-  [1900, 1999, 'VS', 'Wallis'], [2000, 2099, 'NE', 'Neuenburg'],
-  [2300, 2399, 'NE', 'Neuenburg'], [2500, 2599, 'BE', 'Bern'],
-  [2800, 2899, 'JU', 'Jura'], [3000, 3999, 'BE', 'Bern'],
-  [4000, 4099, 'BS', 'Basel-Stadt'], [4100, 4299, 'BL', 'Basel-Landschaft'],
-  [4300, 4799, 'SO', 'Solothurn'], [4800, 4899, 'AG', 'Aargau'],
-  [4900, 4999, 'BE', 'Bern'], [5000, 5799, 'AG', 'Aargau'],
-  [6000, 6299, 'LU', 'Luzern'], [6300, 6399, 'ZG', 'Zug'],
-  [6400, 6499, 'SZ', 'Schwyz'], [6500, 6999, 'TI', 'Tessin'],
-  [7000, 7799, 'GR', 'Graubünden'], [8000, 8499, 'ZH', 'Zürich'],
-  [8500, 8599, 'TG', 'Thurgau'], [8600, 8699, 'ZH', 'Zürich'],
-  [8700, 8799, 'SG', 'St. Gallen'], [8800, 8899, 'SZ', 'Schwyz'],
-  [8900, 8999, 'AG', 'Aargau'], [9000, 9099, 'SG', 'St. Gallen'],
-  [9100, 9199, 'AR', 'Appenzell AR'], [9200, 9499, 'SG', 'St. Gallen'],
-  [9500, 9599, 'TG', 'Thurgau'], [9600, 9699, 'SG', 'St. Gallen'],
-];
-
-function getCantonFromPLZ(plz: string): { code: string; name: string } | null {
-  const num = parseInt(plz.trim(), 10);
-  if (isNaN(num)) return null;
-  for (const [from, to, code, name] of PLZ_CANTON_MAP) {
-    if (num >= from && num <= to) return { code, name };
-  }
-  return null;
-}
+import { getCantonFromPLZ } from '@/utils/chPlz';
 
 export function SettingsPage() {
   const { user, employer, employerAccess, refreshProfile } = useAuth();
