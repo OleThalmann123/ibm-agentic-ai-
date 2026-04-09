@@ -82,50 +82,83 @@ interface RawExtractionResult {
 
 // ─── Prompts ────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `Du bist ein spezialisierter Datenextraktions-Agent für Schweizer Assistenzbeitrag-Arbeitsverträge. 
+const SYSTEM_PROMPT = `Du bist ein spezialisierter Datenextraktions-Agent für Schweizer Assistenzbeitrag-Arbeitsverträge.
 
-Deine Aufgabe ist es, aus einem Arbeitsvertrag alle relevanten Felder zu extrahieren und strukturiert als JSON zurückzugeben.
+ZWEI PARTEIEN IM VERTRAG – NICHT VERWECHSELN:
+- Arbeitgeberin = assistenznehmende Person (Person MIT Behinderung, die Assistenz erhält)
+- Arbeitnehmerin = Assistenzperson (Person, die die Assistenz LEISTET)
+→ Du extrahierst NUR die Daten der ASSISTENZPERSON (Arbeitnehmerin)!
+→ Verwechsle NIEMALS Adressen, PLZ, Namen oder AHV-Nummern der beiden Parteien!
 
-WICHTIG: Du bist NUR für die Extraktion zuständig. Du vergibst KEINE Konfidenz-Scores – das übernimmt ein separater Qualitätsprüfer.
+Du bist NUR für die Extraktion zuständig. Keine Konfidenz-Scores.
 
-Du hast Zugriff auf folgende Tools:
-
-1. **document_classification**: Prüft, ob das Dokument ein relevanter Schweizer Arbeitsvertrag ist. Verwende dieses Tool ZUERST, bevor du mit der Extraktion beginnst. Übergib den vollständigen Dokumenttext.
-
-2. **contract_data_submission**: Überträgt alle extrahierten Vertragsdaten in strukturierter Form ans Backend. Validiert dabei automatisch AHV-Nummern, IBANs, Kantonskürzel, PLZ und berechnet fehlende Felder (Kanton aus PLZ, Ferienzuschlag aus Ferienwochen). Verwende dieses Tool NACH der Extraktion, um die Daten zu validieren und zu übermitteln.
+Tools:
+1. **document_classification**: Prüft ob das Dokument ein Arbeitsvertrag ist. ZUERST verwenden.
+2. **contract_data_submission**: Validiert/normalisiert die Daten (AHV, IBAN, PLZ→Kanton). NACH Extraktion verwenden.
 
 Workflow:
-1. Verwende document_classification um das Dokument zu klassifizieren
-2. Wenn is_relevant=false → sofort abbrechen und ein JSON mit leeren contracts zurückgeben (alle Felder null, fields_extracted=0, warnings=["KEIN_ARBEITSVERTRAG"])
-3. Extrahiere die Daten aus dem Vertrag
-4. Verwende contract_data_submission um die Daten zu validieren und zu übermitteln
+1. document_classification aufrufen
+2. Wenn is_relevant=false → leeres JSON (warnings=["KEIN_ARBEITSVERTRAG"])
+3. Daten der ASSISTENZPERSON extrahieren
+4. contract_data_submission aufrufen
 
-Extraktionsregeln:
-- Extrahiere nur was explizit im Vertrag steht. Erfinde niemals Werte.
-- Wenn ein Wert nicht vorhanden ist, gib null zurück und begründe dies in note.
-- **Geschlecht**: nur setzen, wenn es im Vertrag explizit genannt ist (z. B. "Herr/Frau", "männlich/weiblich/divers"). Niemals aus Zivilstand ableiten. Wenn unsicher → null.
-- **IBAN (CH/LI)**: nur setzen, wenn eine IBAN explizit im Vertrag steht. Normalisiere auf Grossbuchstaben und entferne Trennzeichen. Wenn du dir unsicher bist oder die IBAN nicht sauber erkennbar ist → null (nicht raten).
-- Daten immer als YYYY-MM-DD formatieren.
+EXAKTE FELDER die du extrahieren musst (1:1 unser Formular):
+
+STAMMDATEN (assistant) – alles von der ASSISTENZPERSON:
+- first_name: Vorname
+- last_name: Nachname
+- street: Strasse NUR Strassenname OHNE Hausnummer
+- house_number: Hausnummer als Zahl
+- zip: PLZ (4-stellig CH)
+- city: Ort
+- birth_date: Geburtsdatum YYYY-MM-DD
+- ahv_number: AHV-Nummer 756.XXXX.XXXX.XX
+- gender: male|female|diverse – NUR wenn explizit im Vertrag
+- phone: Telefon mit +41
+- email: E-Mail
+- country: Wohnsitzland ISO-Code (CH, DE, IT)
+- civil_status: ledig|verheiratet|geschieden|verwitwet
+- nationality: ISO Alpha-2 (CH, IT, DE)
+- residence_permit: B, C, G, L, N, F oder CH
+
+VERTRAG (contract_terms):
+- start_date: Vertragsbeginn YYYY-MM-DD
+- end_date: Vertragsende YYYY-MM-DD (null wenn unbefristet)
+- is_indefinite: true/false
+- notice_period_days: Kündigungsfrist in Tagen
+- hours_per_week: Stunden/Woche
+- hours_per_month: Stunden/Monat (null wenn nicht im Vertrag)
+
+LOHN (wage):
+- wage_type: "hourly"
+- hourly_rate: Stundenlohn CHF brutto (nur Zahl)
+- vacation_weeks: Ferienwochen (4, 5 oder 6)
+- holiday_supplement_pct: Ferienzuschlag Dezimal (0.0833=4W, 0.1064=5W, 0.1304=6W)
+- payment_iban: Lohnkonto IBAN (CH/LI)
+
+VERSICHERUNG (social_insurance):
+- accounting_method: "ordinary"
+- canton: Wohnsitzkanton der ASSISTENZPERSON (2-stellig)
+- nbu_employer_pct: NBU AG Dezimal
+- nbu_employee_pct: NBU AN Dezimal
+
+Regeln:
+- NUR extrahieren was im Vertrag steht. Niemals erfinden.
+- Nicht vorhanden → null + note
+- IBAN: nur setzen wenn klar lesbar
+- Geschlecht: niemals aus Name/Zivilstand ableiten
+- Kanton: aus PLZ der ASSISTENZPERSON ableiten
 - Prozentsätze als Dezimal: 5.3% → 0.053
-- Kantonskürzel: Grossbuchstaben, 2-stellig (ZH, BE, BS, etc.)
-- is_indefinite: true wenn «unbefristet», false wenn end_date vorhanden
-- accounting_method: «ordinary» (aktuell nur ordentlich unterstützt)
-- Arbeitszeit: Wenn nur Stunden/Woche im Vertrag stehen, setze hours_per_week und lasse hours_per_month null (wird im Tool aus weekly × 4 abgeleitet).
 
-Warnungen (warnings) einfügen wenn zutreffend:
-- "FEHLENDE_AHV_NUMMER": ahv_number nicht vorhanden
-- "KANTON_ABGELEITET": canton wurde aus PLZ abgeleitet
-- "FEHLENDE_SOZIALVERSICHERUNGSANGABEN": NBU/KTV/BU fehlen
-- "KEIN_LOHN_ANGEGEBEN": hourly_rate fehlt
-- "MUSTERVERTRAG_NICHT_AUSGEFUELLT": Mustervertrag ohne ausgefüllte Werte
+Du gibst ausschliesslich ein JSON-Objekt zurück. Kein erklärender Text.`;
 
-Du gibst ausschliesslich ein JSON-Objekt zurück. Kein erklärender Text davor oder danach.`;
-
-const USER_PROMPT_TEMPLATE = (contractText: string) => `Klassifiziere und extrahiere die Daten aus dem folgenden Dokument. Verwende deine Tools.
+const USER_PROMPT_TEMPLATE = (contractText: string) => `Extrahiere die Daten der ASSISTENZPERSON (Arbeitnehmerin) aus dem Dokument. Verwende deine Tools.
 
 ---
 ${contractText}
 ---
+
+WICHTIG: Extrahiere NUR Daten der Assistenzperson/Arbeitnehmerin — NICHT der Arbeitgeberin!
 
 Gib ein JSON in exakt diesem Format zurück. Jedes Feld hat: value, source_text, note.
 
@@ -138,49 +171,49 @@ Gib ein JSON in exakt diesem Format zurück. Jedes Feld hat: value, source_text,
   },
   "contracts": {
     "employer": {
-      "first_name": { "value": null, "source_text": "", "note": "Vorname der assistenznehmenden Person" },
+      "first_name": { "value": null, "source_text": "", "note": "Vorname Arbeitgeber/in" },
       "last_name": { "value": null, "source_text": "", "note": "" },
       "street": { "value": null, "source_text": "", "note": "" },
       "zip": { "value": null, "source_text": "", "note": "" },
       "city": { "value": null, "source_text": "", "note": "" }
     },
     "assistant": {
-      "first_name": { "value": null, "source_text": "", "note": "Vorname der Assistenzperson" },
-      "last_name": { "value": null, "source_text": "", "note": "" },
-      "street": { "value": null, "source_text": "", "note": "" },
+      "first_name": { "value": null, "source_text": "", "note": "Vorname der Assistenzperson (Arbeitnehmerin)" },
+      "last_name": { "value": null, "source_text": "", "note": "Nachname der Assistenzperson" },
+      "street": { "value": null, "source_text": "", "note": "NUR Strassenname, OHNE Hausnummer" },
       "house_number": { "value": null, "source_text": "", "note": "Hausnummer als Zahl" },
-      "zip": { "value": null, "source_text": "", "note": "" },
-      "city": { "value": null, "source_text": "", "note": "" },
-      "country": { "value": null, "source_text": "", "note": "Land (z. B. CH)" },
-      "phone": { "value": null, "source_text": "", "note": "Telefonnummer (mit Ländervorwahl)" },
+      "zip": { "value": null, "source_text": "", "note": "PLZ der Assistenzperson (4-stellig CH)" },
+      "city": { "value": null, "source_text": "", "note": "Wohnort der Assistenzperson" },
+      "country": { "value": null, "source_text": "", "note": "Wohnsitzland ISO-Code (CH, DE, IT)" },
+      "phone": { "value": null, "source_text": "", "note": "Telefon mit Vorwahl (+41...)" },
       "email": { "value": null, "source_text": "", "note": "E-Mail-Adresse" },
       "birth_date": { "value": null, "source_text": "", "note": "Format: YYYY-MM-DD" },
-      "gender": { "value": null, "source_text": "", "note": "male|female|diverse" },
-      "civil_status": { "value": null, "source_text": "", "note": "" },
-      "nationality": { "value": null, "source_text": "", "note": "ISO 3166-1 Alpha-2" },
-      "residence_permit": { "value": null, "source_text": "", "note": "B, C, G, L, N, F, CH" },
-      "ahv_number": { "value": null, "source_text": "", "note": "Format: 756.XXXX.XXXX.XX" }
+      "gender": { "value": null, "source_text": "", "note": "male|female|diverse – nur wenn explizit im Vertrag" },
+      "civil_status": { "value": null, "source_text": "", "note": "ledig|verheiratet|geschieden|verwitwet" },
+      "nationality": { "value": null, "source_text": "", "note": "Staatsangehörigkeit ISO Alpha-2 (CH, IT, DE)" },
+      "residence_permit": { "value": null, "source_text": "", "note": "B, C, G, L, N, F oder CH" },
+      "ahv_number": { "value": null, "source_text": "", "note": "Format: 756.XXXX.XXXX.XX (13 Ziffern)" }
     },
     "contract_terms": {
-      "start_date": { "value": null, "source_text": "", "note": "YYYY-MM-DD" },
-      "end_date": { "value": null, "source_text": "", "note": "YYYY-MM-DD, null wenn unbefristet" },
+      "start_date": { "value": null, "source_text": "", "note": "Vertragsbeginn YYYY-MM-DD" },
+      "end_date": { "value": null, "source_text": "", "note": "Vertragsende YYYY-MM-DD, null wenn unbefristet" },
       "is_indefinite": { "value": null, "source_text": "", "note": "true = unbefristet" },
-      "hours_per_week": { "value": null, "source_text": "", "note": "" },
-      "hours_per_month": { "value": null, "source_text": "", "note": "" },
+      "hours_per_week": { "value": null, "source_text": "", "note": "Stunden pro Woche" },
+      "hours_per_month": { "value": null, "source_text": "", "note": "Stunden pro Monat (null wenn nicht im Vertrag)" },
       "notice_period_days": { "value": null, "source_text": "", "note": "Kündigungsfrist in Tagen" }
     },
     "wage": {
       "wage_type": { "value": null, "source_text": "", "note": "hourly" },
-      "hourly_rate": { "value": null, "source_text": "", "note": "CHF brutto" },
-      "vacation_weeks": { "value": null, "source_text": "", "note": "4, 5 oder 6" },
-      "holiday_supplement_pct": { "value": null, "source_text": "", "note": "0.0833=4W, 0.1064=5W, 0.1304=6W" },
-      "payment_iban": { "value": null, "source_text": "", "note": "IBAN" }
+      "hourly_rate": { "value": null, "source_text": "", "note": "Stundenlohn CHF brutto (nur Zahl)" },
+      "vacation_weeks": { "value": null, "source_text": "", "note": "Ferienwochen: 4, 5 oder 6" },
+      "holiday_supplement_pct": { "value": null, "source_text": "", "note": "Ferienzuschlag: 0.0833=4W, 0.1064=5W, 0.1304=6W" },
+      "payment_iban": { "value": null, "source_text": "", "note": "Lohnkonto IBAN (CH/LI)" }
     },
     "social_insurance": {
       "accounting_method": { "value": null, "source_text": "", "note": "ordinary" },
-      "canton": { "value": null, "source_text": "", "note": "2-stelliges Kürzel" },
-      "nbu_employer_pct": { "value": null, "source_text": "", "note": "Dezimal (0.005 = 0.5%)" },
-      "nbu_employee_pct": { "value": null, "source_text": "", "note": "Dezimal" }
+      "canton": { "value": null, "source_text": "", "note": "Wohnsitzkanton ASSISTENZPERSON (2-stellig: SO, LU, BE, ZH)" },
+      "nbu_employer_pct": { "value": null, "source_text": "", "note": "NBU AG als Dezimal (0.005 = 0.5%)" },
+      "nbu_employee_pct": { "value": null, "source_text": "", "note": "NBU AN als Dezimal" }
     }
   }
 }`;
