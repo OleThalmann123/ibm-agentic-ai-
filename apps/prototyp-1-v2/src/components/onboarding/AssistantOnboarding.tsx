@@ -105,10 +105,10 @@ const FIELD_LABELS: Record<string, string> = {
   'wage.payment_iban': 'Lohnkonto (IBAN)',
   'social_insurance.canton': 'Wohnsitzkanton',
   'social_insurance.accounting_method': 'Abrechnungsverfahren',
-  'social_insurance.nbu_total_rate_pct': 'NBU Gesamtprämiensatz (%) – optional',
-  'social_insurance.nbu_employer_pct': 'NBU Arbeitgeber-Anteil (%) – optional',
-  'social_insurance.nbu_employee_pct': 'NBU Arbeitnehmer-Anteil (%) – optional',
-  'social_insurance.nbu_employer_voluntary': 'NBU freiwillig durch AG – optional',
+  'social_insurance.nbu_total_rate_pct': 'Nichtberufsunfallversicherung Gesamtprämiensatz (%) – optional',
+  'social_insurance.nbu_employer_pct': 'Nichtberufsunfallversicherung Arbeitgeber-Anteil (%) – optional',
+  'social_insurance.nbu_employee_pct': 'Nichtberufsunfallversicherung Arbeitnehmer-Anteil (%) – optional',
+  'social_insurance.nbu_employer_voluntary': 'Nichtberufsunfallversicherung freiwillig durch Arbeitgeber – optional',
   'social_insurance.nbu_insurer_name': 'Unfallversicherer – optional',
   'social_insurance.nbu_policy_number': 'Policennummer – optional',
 };
@@ -1651,7 +1651,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                 }
               }}
               className="rounded border-gray-300" />
-            <span className="text-sm">AG übernimmt NBU freiwillig</span>
+            <span className="text-sm">Arbeitgeber übernimmt Nichtberufsunfallversicherung freiwillig</span>
           </label>
         );
       case 'nbuInsurerName':
@@ -2304,25 +2304,25 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                       ))}
                     </select>
                   </MiniField>
-                  <MiniField title="NBU Gesamtprämiensatz (%) – optional" {...fieldProps('nbuTotal')} hasValue={!!nbuTotal}
+                  <MiniField title="Nichtberufsunfallversicherung Gesamtprämiensatz (%) – optional" {...fieldProps('nbuTotal')} hasValue={!!nbuTotal}
                     hint="Gesamtprämiensatz der Nichtberufsunfallversicherung gemäss Versicherer (typ. 0.5–3%)"
-                    error={nbuTotal && parseFloat(nbuTotal) > 5 ? 'Unrealistisch hoch – NBU-Sätze liegen typischerweise bei 0.5–3%' : undefined}>
+                    error={nbuTotal && parseFloat(nbuTotal) > 5 ? 'Unrealistisch hoch – Prämiensätze liegen typischerweise bei 0.5–3%' : undefined}>
                     <input type="number" min={0} max={10} step="0.01" placeholder="z.B. 1.50"
                       value={nbuTotal} onChange={e => setNbuTotal(e.target.value)} className={inputStyle} />
                   </MiniField>
-                  <MiniField title="NBU Arbeitgeber-Anteil (%) – optional" {...fieldProps('nbuEmployer')} hasValue={!!nbuEmployer}
+                  <MiniField title="Nichtberufsunfallversicherung Arbeitgeber-Anteil (%) – optional" {...fieldProps('nbuEmployer')} hasValue={!!nbuEmployer}
                     error={nbuTotal && nbuEmployer && nbuEmployee && Math.abs(parseFloat(nbuEmployer || '0') + parseFloat(nbuEmployee || '0') - parseFloat(nbuTotal || '0')) > 0.001 ? 'AG + AN muss dem Gesamtsatz entsprechen' : undefined}>
                     <input type="number" min={0} max={10} step="0.01" placeholder="z.B. 0.75"
                       value={nbuEmployer} onChange={e => setNbuEmployer(e.target.value)}
                       disabled={nbuEmployerVoluntary} className={inputStyle} />
                   </MiniField>
-                  <MiniField title="NBU Arbeitnehmer-Anteil (%) – optional" {...fieldProps('nbuEmployee')} hasValue={!!nbuEmployee}
+                  <MiniField title="Nichtberufsunfallversicherung Arbeitnehmer-Anteil (%) – optional" {...fieldProps('nbuEmployee')} hasValue={!!nbuEmployee}
                     error={nbuTotal && nbuEmployer && nbuEmployee && Math.abs(parseFloat(nbuEmployer || '0') + parseFloat(nbuEmployee || '0') - parseFloat(nbuTotal || '0')) > 0.001 ? 'AG + AN muss dem Gesamtsatz entsprechen' : undefined}>
                     <input type="number" min={0} max={10} step="0.01" placeholder="z.B. 0.75"
                       value={nbuEmployee} onChange={e => setNbuEmployee(e.target.value)}
                       disabled={nbuEmployerVoluntary} className={inputStyle} />
                   </MiniField>
-                  <MiniField title="AG übernimmt NBU freiwillig – optional" {...fieldProps('nbuEmployerVoluntary')} hasValue={nbuEmployerVoluntary}>
+                  <MiniField title="Arbeitgeber übernimmt Nichtberufsunfallversicherung freiwillig – optional" {...fieldProps('nbuEmployerVoluntary')} hasValue={nbuEmployerVoluntary}>
                     <label className="flex items-center gap-2 cursor-pointer mt-1">
                       <input type="checkbox" checked={nbuEmployerVoluntary}
                         onChange={e => {
@@ -2334,7 +2334,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                           }
                         }}
                         className="rounded border-gray-300 h-4 w-4" />
-                      <span className="text-sm text-muted-foreground">Auch bei Pensum &lt; 8h/Woche</span>
+                      <span className="text-sm text-muted-foreground">Auch bei Pensum unter 8h/Woche</span>
                     </label>
                   </MiniField>
                   <MiniField title="Unfallversicherer – optional" {...fieldProps('nbuInsurerName')} hasValue={!!nbuInsurerName}>
@@ -2350,17 +2350,17 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                     if (!Number.isFinite(hw) || hw <= 0) return null;
                     if (hw < 7) return (
                       <div className="col-span-2 md:col-span-4 bg-blue-50 rounded-xl border border-blue-100 p-3 text-sm text-blue-700">
-                        Pensum unter 7h/Woche – voraussichtlich kein NBU-Abzug.
+                        Pensum unter 7h/Woche – voraussichtlich kein Abzug für Nichtberufsunfallversicherung.
                       </div>
                     );
                     if (hw < 8) return (
                       <div className="col-span-2 md:col-span-4 bg-amber-50 rounded-xl border border-amber-200 p-3 text-sm text-amber-800">
-                        Grenzfall (7–8h/Woche) – NBU-Pflicht abhängig von tatsächlichen Arbeitsstunden. Bitte mit Versicherer klären.
+                        Grenzfall (7–8h/Woche) – Nichtberufsunfallversicherungs-Pflicht abhängig von tatsächlichen Arbeitsstunden. Bitte mit Versicherer klären.
                       </div>
                     );
                     return (
                       <div className="col-span-2 md:col-span-4 bg-emerald-50 rounded-xl border border-emerald-200 p-3 text-sm text-emerald-700">
-                        Pensum ≥ 8h/Woche – NBU-pflichtig. Der NBU-Abzug wird auf der Lohnabrechnung ausgewiesen.
+                        Pensum ≥ 8h/Woche – Nichtberufsunfallversicherung pflichtig. Der Abzug wird auf der Lohnabrechnung ausgewiesen.
                       </div>
                     );
                   })()}
