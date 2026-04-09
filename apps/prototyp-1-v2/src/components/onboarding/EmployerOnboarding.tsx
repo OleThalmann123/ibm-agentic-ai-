@@ -4,12 +4,20 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import {
   ArrowRight, ArrowLeft, HeartHandshake, User, CheckCircle2,
-  ClipboardList, ShieldCheck, UserX, MapPin
+  ClipboardList, ShieldCheck, UserX, MapPin, AlertCircle
 } from 'lucide-react';
 import { getCantonFromPLZ, getCityFromChPlz, normalizeChPlz } from '@/utils/chPlz';
 
 function getCityFromPLZ(plz: string): string | null {
   return getCityFromChPlz(plz);
+}
+
+const ALLOWED_CANTONS = ['BE', 'LU', 'ZH'] as const;
+const ALLOWED_CANTON_LABELS: Record<string, string> = { BE: 'Bern', LU: 'Luzern', ZH: 'Zürich' };
+
+function isPlzInAllowedCanton(plz: string): boolean {
+  const canton = getCantonFromPLZ(plz);
+  return !!canton && (ALLOWED_CANTONS as readonly string[]).includes(canton.code);
 }
 
 // ─── Stable sub-components ───
@@ -149,7 +157,7 @@ export function EmployerOnboarding({ onComplete }: Props) {
   };
 
   const canNext = () => {
-    if (step === 1) return cFirst.trim() !== '' && cLast.trim() !== '';
+    if (step === 1) return cFirst.trim() !== '' && cLast.trim() !== '' && cZip.length === 4 && isPlzInAllowedCanton(cZip);
     if (step === 2) return aFirst.trim() !== '' && aLast.trim() !== '';
     if (step === 3) return tracker !== '' && (tracker === 'employer' || (approvalNeeded !== '' && activitiesInDayShifts !== ''));
     return false;
@@ -293,14 +301,22 @@ export function EmployerOnboarding({ onComplete }: Props) {
           <Field label="Nachname" value={cLast} onChange={setCLast} />
         </div>
         <Field label="Strasse & Nr." value={cStreet} onChange={setCStreet} />
+        <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-4 py-3 text-sm text-amber-900 flex items-start gap-2.5">
+          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0 text-amber-600" />
+          <span>Asklepios ist derzeit nur in den Kantonen <strong>Bern</strong>, <strong>Luzern</strong> und <strong>Zürich</strong> verfügbar. Bitte geben Sie eine Postleitzahl aus einem dieser Kantone ein.</span>
+        </div>
+
         <div className="grid grid-cols-[120px_1fr] gap-4">
           <div className="space-y-1">
             <label className="text-sm font-medium text-muted-foreground">PLZ</label>
             <div className="relative">
               <input type="text" value={cZip} onChange={e => handleZipChange(e.target.value)}
                 placeholder="z.B. 8000" maxLength={4}
-                className={inputCls} />
+                className={`${inputCls} ${cZip.length === 4 && !isPlzInAllowedCanton(cZip) ? 'border-red-400 focus:ring-red-200 focus:border-red-400' : ''}`} />
             </div>
+            {cZip.length === 4 && !isPlzInAllowedCanton(cZip) && (
+              <p className="text-xs text-red-600 mt-1">PLZ liegt nicht in BE, LU oder ZH.</p>
+            )}
           </div>
           <Field
             label="Ort"
@@ -311,10 +327,10 @@ export function EmployerOnboarding({ onComplete }: Props) {
             }}
           />
         </div>
-        {detectedCanton && (
+        {detectedCanton && isPlzInAllowedCanton(cZip) && (
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/5 border border-primary/10">
             <MapPin className="w-4 h-4 text-primary" />
-            <span className="text-sm"><span className="font-semibold">{detectedCanton.code}</span> - {detectedCanton.name}</span>
+            <span className="text-sm"><span className="font-semibold">{detectedCanton.code}</span> – {detectedCanton.name}</span>
           </div>
         )}
         <div className="grid grid-cols-2 gap-4">

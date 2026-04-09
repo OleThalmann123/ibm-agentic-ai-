@@ -36,39 +36,60 @@ export interface JudgeResult {
   summary: string;
 }
 
-const JUDGE_SYSTEM_PROMPT = `Du bist ein Qualitätsprüfer für Datenextraktionen aus Schweizer Arbeitsverträgen.
+const JUDGE_SYSTEM_PROMPT = `Du bist ein erfahrener Qualitätsprüfer für Datenextraktionen aus Schweizer Arbeitsverträgen. Du erhältst den Originalvertrag und die daraus extrahierten Daten. Deine Aufgabe: Prüfe JEDES extrahierte Feld gegen den Originaltext und vergib einen confidence_score.
 
-Deine Aufgabe: Prüfe jedes extrahierte Feld gegen den Originalvertrag und vergib einen confidence_score (0.0–1.0).
-
-Prüfe pro Feld:
-1. Korrektheit: Stimmt der extrahierte Wert mit dem Originaltext überein?
-2. Vollständigkeit: Wurde der Wert vollständig erfasst?
-3. Quellennachweis: Kannst du die Stelle im Original finden?
-
-Scoring:
-- 0.85–1.0 (high): Wert steht explizit und eindeutig im Vertrag, korrekt extrahiert
-- 0.50–0.84 (medium): Wert interpretiert, abgeleitet oder teilweise korrekt
-- 0.00–0.49 (low): Wert fehlt im Vertrag, falsch extrahiert oder widersprüchlich
-
-Binäre Zuordnung (wird automatisch berechnet):
-- confidence_score >= 0.8 → "ok"
-- confidence_score < 0.8 → "review_required"
+Schritte:
+1. Lies den Originalvertrag vollständig.
+2. Vergleiche JEDES Feld der Extraktion mit dem Originaltext.
+3. Vergib pro Feld einen confidence_score (0.0–1.0) nach diesen Kriterien:
+   - 0.85–1.0 (high): Wert steht explizit und eindeutig im Vertrag.
+   - 0.50–0.84 (medium): Wert interpretiert, abgeleitet oder teilweise korrekt.
+   - 0.00–0.49 (low): Wert fehlt, falsch extrahiert oder widersprüchlich.
+4. Setze status: "ok" wenn score >= 0.8, sonst "review_required".
+5. Zitiere die relevante Stelle aus dem Vertrag in source_quote.
 
 Regeln:
-- Sei streng: lieber einmal zu viel "review_required" als einen Fehler durchlassen
-- Wert null + Feld nicht im Vertrag → korrekt (0.95, high)
-- Wert null + Feld steht im Vertrag → Fehler (0.2, low)
-- Geschlecht: niemals aus Name oder Zivilstand ableiten. Null ist korrekt wenn nicht explizit im Vertrag (0.95)
-- ISO-Übersetzungen erlaubt: "Schweiz"→CH, "Italien"→IT = korrekt (high)
+- Sei streng: lieber einmal zu viel "review_required" als einen Fehler durchlassen.
+- Wert null + Feld nicht im Vertrag = korrekt (0.95).
+- Wert null + Feld steht im Vertrag = Fehler (0.2).
+- Geschlecht: niemals aus Name ableiten. Null ist korrekt (0.95).
+- ISO-Übersetzungen erlaubt: "Schweiz" = CH = korrekt (high).
+- justification ist rein intern (Audit/Trace), nicht für Endbenutzer.
 
-Deine justification wird NICHT dem Endbenutzer angezeigt – sie dient rein der internen Nachvollziehbarkeit (Audit/Trace). Schreibe eine präzise, fachliche Begründung pro Feld. Zitiere die relevante Stelle aus dem Vertrag in source_quote.
+Format: Nur valides JSON. Keine Erklärungen. Kein Text vor oder nach dem JSON.`;
 
-Du gibst ausschliesslich ein JSON-Objekt zurück. Kein erklärender Text davor oder danach.`;
+function buildJudgeSkeleton(extractedData: Record<string, unknown>): string {
+  const sections = extractedData as Record<string, Record<string, unknown>>;
+  const skeleton: Record<string, Record<string, object>> = {};
+
+  for (const [section, fields] of Object.entries(sections)) {
+    if (!fields || typeof fields !== 'object') continue;
+    skeleton[section] = {};
+    for (const fieldName of Object.keys(fields as Record<string, unknown>)) {
+      skeleton[section][fieldName] = {
+        confidence: 'high|medium|low',
+        confidence_score: '0.0-1.0',
+        status: 'ok|review_required',
+        justification: '',
+        source_found: 'true|false',
+        source_quote: '',
+      };
+    }
+  }
+
+  return JSON.stringify({
+    fields: skeleton,
+    overall_confidence: '0.0-1.0',
+    overall_status: 'ok|review_required',
+    review_required_fields: ['section.field_name'],
+    summary: '',
+  }, null, 2);
+}
 
 const JUDGE_USER_PROMPT = (
   originalText: string,
   extractedData: Record<string, unknown>,
-) => `Bewerte die Extraktion. Vergib NUR confidence_scores.
+) => `Hier ist der Originalvertrag und die Extraktion. Bewerte JEDES Feld.
 
 === VERTRAG ===
 ${originalText}
@@ -78,30 +99,9 @@ ${originalText}
 ${JSON.stringify(extractedData, null, 2)}
 === ENDE ===
 
-Bewerte JEDES Feld. Gib ein JSON in diesem Format zurück:
+Format: Nur valides JSON. Bewerte jedes Feld der Extraktion einzeln.
 
-{
-  "fields": {
-    "employer": {
-      "first_name": {
-        "confidence": "high|medium|low",
-        "confidence_score": 0.0-1.0,
-        "status": "ok|review_required",
-        "justification": "Fachliche Begründung (intern, nicht für Endbenutzer)",
-        "source_found": true|false,
-        "source_quote": "Zitat aus dem Vertrag"
-      }
-    },
-    "assistant": { ... },
-    "contract_terms": { ... },
-    "wage": { ... },
-    "social_insurance": { ... }
-  },
-  "overall_confidence": 0.0-1.0,
-  "overall_status": "ok|review_required",
-  "review_required_fields": ["section.field_name", ...],
-  "summary": "Zusammenfassung der Bewertung"
-}`;
+${buildJudgeSkeleton(extractedData)}`;
 
 function getApiKey(): string | null {
   return import.meta.env.VITE_OPENROUTER_API_KEY || null;

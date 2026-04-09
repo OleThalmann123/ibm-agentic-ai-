@@ -141,18 +141,9 @@ export function AssistantsPage() {
         </div>
       </div>
 
-      {/* Prominent CTA Card — dezent animierter Gradient-Rahmen (läuft im Kreis) */}
-      <div className="relative overflow-hidden rounded-2xl p-[2px] shadow-[0_20px_70px_rgba(2,6,23,0.18)]">
-        <div
-          className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl"
-          aria-hidden
-        >
-          <div
-            className="absolute left-1/2 top-1/2 h-[200vmax] w-[200vmax] -translate-x-1/2 -translate-y-1/2 opacity-[0.55] will-change-transform animate-[spin_22s_linear_infinite] motion-reduce:animate-none bg-[conic-gradient(from_0deg_at_50%_50%,hsl(var(--primary))_0deg,hsl(270_65%_58%)_115deg,hsl(160_55%_42%)_235deg,hsl(var(--primary))_360deg)]"
-          />
-        </div>
-
-        <div className="relative z-10 overflow-hidden rounded-[14px] p-8 text-white">
+      {/* Prominent CTA Card */}
+      <div className="relative overflow-hidden rounded-2xl shadow-[0_20px_70px_rgba(2,6,23,0.18)]">
+        <div className="relative overflow-hidden rounded-2xl p-8 text-white">
           <div className="absolute inset-0 rounded-[14px] bg-[radial-gradient(900px_520px_at_15%_0%,rgba(59,130,246,0.25),transparent_60%),radial-gradient(780px_520px_at_85%_10%,rgba(168,85,247,0.25),transparent_55%),radial-gradient(620px_520px_at_45%_120%,rgba(16,185,129,0.18),transparent_55%),linear-gradient(to_bottom,rgba(2,6,23,0.92),rgba(2,6,23,0.78))]" />
           <div className="absolute top-0 right-0 h-64 w-64 -translate-y-1/2 translate-x-1/2 rounded-full bg-white/5" />
           <div className="relative flex flex-wrap items-center justify-between gap-6">

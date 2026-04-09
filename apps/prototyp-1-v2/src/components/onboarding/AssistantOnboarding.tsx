@@ -105,10 +105,10 @@ const FIELD_LABELS: Record<string, string> = {
   'wage.payment_iban': 'Lohnkonto (IBAN)',
   'social_insurance.canton': 'Wohnsitzkanton',
   'social_insurance.accounting_method': 'Abrechnungsverfahren',
-  'social_insurance.nbu_total_rate_pct': 'Nichtberufsunfallversicherung Gesamtprämiensatz (%) – optional',
-  'social_insurance.nbu_employer_pct': 'Nichtberufsunfallversicherung Arbeitgeber-Anteil (%) – optional',
-  'social_insurance.nbu_employee_pct': 'Nichtberufsunfallversicherung Arbeitnehmer-Anteil (%) – optional',
-  'social_insurance.nbu_employer_voluntary': 'Nichtberufsunfallversicherung freiwillig durch Arbeitgeber – optional',
+  'social_insurance.nbu_total_rate_pct': 'NBU Gesamtprämiensatz (%) – manuell eingeben',
+  'social_insurance.nbu_employer_pct': 'NBU Arbeitgeber-Anteil (%) – aus Vertrag/optional',
+  'social_insurance.nbu_employee_pct': 'NBU Arbeitnehmer-Anteil (%) – aus Vertrag/optional',
+  'social_insurance.nbu_employer_voluntary': 'AG übernimmt NBU freiwillig – optional',
   'social_insurance.nbu_insurer_name': 'Unfallversicherer – optional',
   'social_insurance.nbu_policy_number': 'Policennummer – optional',
 };
@@ -181,6 +181,8 @@ const SWISS_CANTON_OPTIONS: [string, string][] = [
   ['ZG', 'Zug'],
   ['ZH', 'Zürich'],
 ];
+
+const SUPPORTED_CANTONS: Record<string, string> = { BE: 'Bern', LU: 'Luzern', ZH: 'Zürich' };
 
 // Grobe Ableitung Wohnsitzkanton aus PLZ-Präfix (MVP: nur LU/BE/ZH relevant).
 // (Entspricht der Logik im Agent-Tool; bewusst simpel gehalten.)
@@ -891,6 +893,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
   const [contractMimeType, setContractMimeType] = useState('');
   const [docxHtml, setDocxHtml] = useState<string | null>(null);
   const contractUrlRef = useRef<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const setContractPreviewFromFile = async (file: File | null) => {
     if (contractUrlRef.current) {
@@ -1127,13 +1130,14 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
         }
       }
       setField('canton', si.canton, setCanton);
-      if (si.nbu_total_rate_pct) cMap.nbuTotal = si.nbu_total_rate_pct;
+      // NBU-Gesamtprämiensatz wird NICHT aus der KI-Extraktion übernommen –
+      // muss zwingend manuell gemäss Versicherungspolice eingegeben werden.
+      // Die AG/AN-Aufteilung KANN hingegen aus dem Arbeitsvertrag extrahiert werden.
       if (si.nbu_employer_pct) cMap.nbuEmployer = si.nbu_employer_pct;
       if (si.nbu_employee_pct) cMap.nbuEmployee = si.nbu_employee_pct;
       if (si.nbu_employer_voluntary) cMap.nbuEmployerVoluntary = si.nbu_employer_voluntary;
       if (si.nbu_insurer_name) cMap.nbuInsurerName = si.nbu_insurer_name;
       if (si.nbu_policy_number) cMap.nbuPolicyNumber = si.nbu_policy_number;
-      setNbuTotal(pctFieldToUiPercentString(si.nbu_total_rate_pct?.value));
       setNbuEmployer(pctFieldToUiPercentString(si.nbu_employer_pct?.value));
       setNbuEmployee(pctFieldToUiPercentString(si.nbu_employee_pct?.value));
       if (si.nbu_employer_voluntary?.value === true) setNbuEmployerVoluntary(true);
@@ -1637,14 +1641,19 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
         );
       case 'canton':
         return (
-          <select value={canton} onChange={(e) => setCanton(e.target.value)} className={`${selectStyle} mt-1`}>
-            <option value="">Bitte wählen…</option>
-            {SWISS_CANTON_OPTIONS.map(([code, name]) => (
-              <option key={code} value={code}>
-                {name}
-              </option>
-            ))}
-          </select>
+          <>
+            <select value={canton} onChange={(e) => setCanton(e.target.value)} className={`${selectStyle} mt-1`}>
+              <option value="">Bitte wählen…</option>
+              {SWISS_CANTON_OPTIONS.map(([code, name]) => (
+                <option key={code} value={code}>
+                  {name}
+                </option>
+              ))}
+            </select>
+            {canton && !SUPPORTED_CANTONS[canton] && (
+              <p className="mt-1 text-xs text-amber-700">Kanton wird aktuell nicht abgedeckt. Abgedeckte Kantone: {Object.values(SUPPORTED_CANTONS).join(', ')}.</p>
+            )}
+          </>
         );
       case 'nbuTotal':
         return (
@@ -1697,8 +1706,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
   return (
     <div className="space-y-6">
       {/* Header */}
-      {step !== 'extracting' ? (
-        <div className="rounded-2xl border bg-card px-5 py-4 sm:px-6 sm:py-5">
+      <div className="rounded-2xl border bg-card px-5 py-4 sm:px-6 sm:py-5">
           <button onClick={onClose} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-2 transition-colors">
             <ArrowLeft className="w-4 h-4" /> Zurück zur Übersicht
           </button>
@@ -1723,15 +1731,25 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
             </div>
             {step === 'upload' ? (
               <div className="hidden sm:block">
-                <span className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-foreground text-background font-bold text-sm shadow-sm">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.doc,.docx,.txt,image/*,application/pdf"
+                  onChange={handleUpload}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-foreground text-background font-bold text-sm shadow-sm hover:bg-foreground/90 transition-colors cursor-pointer"
+                >
                   <UploadCloud className="w-4 h-4" />
                   Vertrag hochladen & scannen
-                </span>
+                </button>
               </div>
             ) : null}
           </div>
         </div>
-      ) : null}
 
       {/* Upload */}
       {step === 'upload' && (
@@ -2330,25 +2348,35 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                       ))}
                     </select>
                   </MiniField>
-                  <MiniField title="Nichtberufsunfallversicherung Gesamtprämiensatz (%) – optional" {...fieldProps('nbuTotal')} hasValue={!!nbuTotal}
-                    hint="Gesamtprämiensatz der Nichtberufsunfallversicherung gemäss Versicherer (typ. 0.5–3%)"
+                  {canton && !SUPPORTED_CANTONS[canton] && (
+                    <div className="col-span-2 md:col-span-4 bg-amber-50 rounded-xl border border-amber-200 p-3 text-sm text-amber-800 flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                      <span>Kanton «{SWISS_CANTON_OPTIONS.find(([c]) => c === canton)?.[1] ?? canton}» wird aktuell nicht abgedeckt. Abgedeckte Kantone: {Object.values(SUPPORTED_CANTONS).join(', ')}.</span>
+                    </div>
+                  )}
+                  <div className="col-span-2 md:col-span-4 flex items-start gap-2.5 rounded-lg border border-blue-200 bg-blue-50/60 px-4 py-3 text-sm text-blue-800">
+                    <HelpCircle className="w-4 h-4 mt-0.5 shrink-0 text-blue-500" />
+                    <span>Der <strong>NBU-Gesamtprämiensatz</strong> muss zwingend manuell eingegeben werden – entnehmen Sie ihn Ihrer Versicherungspolice (typischerweise 0.5–3&nbsp;%). Die Aufteilung in AG-/AN-Anteil kann aus dem Arbeitsvertrag übernommen werden.</span>
+                  </div>
+                  <MiniField title="NBU Gesamtprämiensatz (%) – manuell" {...fieldProps('nbuTotal')} hasValue={!!nbuTotal}
+                    hint="Gesamtprämiensatz gemäss Ihrer Versicherungspolice (typ. 0.5–3%)"
                     error={nbuTotal && parseFloat(nbuTotal) > 5 ? 'Unrealistisch hoch – Prämiensätze liegen typischerweise bei 0.5–3%' : undefined}>
                     <input type="number" min={0} max={10} step="0.01" placeholder="z.B. 1.50"
                       value={nbuTotal} onChange={e => setNbuTotal(e.target.value)} className={inputStyle} />
                   </MiniField>
-                  <MiniField title="Nichtberufsunfallversicherung Arbeitgeber-Anteil (%) – optional" {...fieldProps('nbuEmployer')} hasValue={!!nbuEmployer}
+                  <MiniField title="NBU Arbeitgeber-Anteil (%) – optional" {...fieldProps('nbuEmployer')} hasValue={!!nbuEmployer}
                     error={nbuTotal && nbuEmployer && nbuEmployee && Math.abs(parseFloat(nbuEmployer || '0') + parseFloat(nbuEmployee || '0') - parseFloat(nbuTotal || '0')) > 0.001 ? 'AG + AN muss dem Gesamtsatz entsprechen' : undefined}>
                     <input type="number" min={0} max={10} step="0.01" placeholder="z.B. 0.75"
                       value={nbuEmployer} onChange={e => setNbuEmployer(e.target.value)}
                       disabled={nbuEmployerVoluntary} className={inputStyle} />
                   </MiniField>
-                  <MiniField title="Nichtberufsunfallversicherung Arbeitnehmer-Anteil (%) – optional" {...fieldProps('nbuEmployee')} hasValue={!!nbuEmployee}
+                  <MiniField title="NBU Arbeitnehmer-Anteil (%) – optional" {...fieldProps('nbuEmployee')} hasValue={!!nbuEmployee}
                     error={nbuTotal && nbuEmployer && nbuEmployee && Math.abs(parseFloat(nbuEmployer || '0') + parseFloat(nbuEmployee || '0') - parseFloat(nbuTotal || '0')) > 0.001 ? 'AG + AN muss dem Gesamtsatz entsprechen' : undefined}>
                     <input type="number" min={0} max={10} step="0.01" placeholder="z.B. 0.75"
                       value={nbuEmployee} onChange={e => setNbuEmployee(e.target.value)}
                       disabled={nbuEmployerVoluntary} className={inputStyle} />
                   </MiniField>
-                  <MiniField title="Arbeitgeber übernimmt Nichtberufsunfallversicherung freiwillig – optional" {...fieldProps('nbuEmployerVoluntary')} hasValue={nbuEmployerVoluntary}>
+                  <MiniField title="AG übernimmt NBU freiwillig – optional" {...fieldProps('nbuEmployerVoluntary')} hasValue={nbuEmployerVoluntary}>
                     <label className="flex items-center gap-2 cursor-pointer mt-1">
                       <input type="checkbox" checked={nbuEmployerVoluntary}
                         onChange={e => {

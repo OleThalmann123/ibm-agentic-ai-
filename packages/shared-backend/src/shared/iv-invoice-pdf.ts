@@ -100,17 +100,31 @@ export function generateIvInvoicePdf(data: IvInvoicePdfData): jsPDF {
   const firstLine = data.lines?.[0];
   const rateCHF = Number.isFinite(firstLine?.rateCHF) ? (firstLine!.rateCHF as number) : 35.3;
 
-  // Asklepios Branding (farbig, ohne externes Bild)
-  doc.setFillColor(...PDF_THEME.accentRgb);
-  doc.roundedRect(LM, 12, 8, 8, 2, 2, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.text('A', LM + 2.7, 17.8);
+  // Asklepios Branding
+  if (data.logoDataUrl) {
+    try {
+      doc.addImage(data.logoDataUrl, 'PNG', LM, 10, 10, 10);
+    } catch {
+      // Fallback: farbiges Platzhalter-Icon
+      doc.setFillColor(...PDF_THEME.accentRgb);
+      doc.roundedRect(LM, 12, 8, 8, 2, 2, 'F');
+      doc.setTextColor(255, 255, 255);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.text('A', LM + 2.7, 17.8);
+    }
+  } else {
+    doc.setFillColor(...PDF_THEME.accentRgb);
+    doc.roundedRect(LM, 12, 8, 8, 2, 2, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.text('A', LM + 2.7, 17.8);
+  }
   doc.setTextColor(PDF_THEME.textDark);
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
-  doc.text('Asklepios', LM + 11, 17.5);
+  doc.text('Asklepios', LM + (data.logoDataUrl ? 13 : 11), 17.5);
 
   // Header (briefartig, ohne Doppelungen)
   doc.setFont('helvetica', 'bold');

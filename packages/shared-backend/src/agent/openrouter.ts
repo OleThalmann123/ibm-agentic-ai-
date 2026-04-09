@@ -82,151 +82,87 @@ interface RawExtractionResult {
 
 // ─── Prompts ────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `Du bist ein spezialisierter Datenextraktions-Agent für Schweizer Assistenzbeitrag-Arbeitsverträge.
+const SYSTEM_PROMPT = `Du bist ein erfahrener HR-Sachbearbeiter in der Schweiz, spezialisiert auf IV-Assistenzbeitrags-Arbeitsverträge. Du erhältst einen Arbeitsvertrag als Dokument. Deine Aufgabe: Extrahiere alle Stamm- und Vertragsdaten der ASSISTENZPERSON und gib sie als strukturiertes JSON aus.
 
-ZWEI PARTEIEN IM VERTRAG – NICHT VERWECHSELN:
-- Arbeitgeberin = assistenznehmende Person (Person MIT Behinderung, die Assistenz erhält)
-- Arbeitnehmerin = Assistenzperson (Person, die die Assistenz LEISTET)
-→ Du extrahierst NUR die Daten der ASSISTENZPERSON (Arbeitnehmerin)!
-→ Verwechsle NIEMALS Adressen, PLZ, Namen oder AHV-Nummern der beiden Parteien!
+Kontext: Im Vertrag gibt es ZWEI Parteien – verwechsle sie NICHT:
+- Arbeitgeberin = assistenznehmende Person (Person MIT Behinderung)
+- Arbeitnehmerin = Assistenzperson (Person, die Assistenz LEISTET)
+Du extrahierst ausschliesslich die Daten der Arbeitnehmerin (Assistenzperson).
 
-Du bist NUR für die Extraktion zuständig. Keine Konfidenz-Scores.
-
-Tools:
-1. **document_classification**: Prüft ob das Dokument ein Arbeitsvertrag ist. ZUERST verwenden.
-2. **contract_data_submission**: Validiert/normalisiert die Daten (AHV, IBAN, PLZ→Kanton). NACH Extraktion verwenden.
-
-Workflow:
-1. document_classification aufrufen
-2. Wenn is_relevant=false → leeres JSON (warnings=["KEIN_ARBEITSVERTRAG"])
-3. Daten der ASSISTENZPERSON extrahieren
-4. contract_data_submission aufrufen
-
-EXAKTE FELDER die du extrahieren musst (1:1 unser Formular):
-
-STAMMDATEN (assistant) – alles von der ASSISTENZPERSON:
-- first_name: Vorname
-- last_name: Nachname
-- street: Strasse inkl. Hausnummer (z.B. "Musterstrasse 12")
-- zip: PLZ (4-stellig CH)
-- city: Ort
-- birth_date: Geburtsdatum YYYY-MM-DD
-- ahv_number: AHV-Nummer 756.XXXX.XXXX.XX
-- gender: male|female|diverse – NUR wenn explizit im Vertrag
-- phone: Telefon mit +41
-- email: E-Mail
-- country: Wohnsitzland ISO-Code (CH, DE, IT)
-- civil_status: ledig|verheiratet|geschieden|verwitwet|eingetragene Partnerschaft
-- residence_permit: B, C, G, L, N, F oder CH
-
-VERTRAG (contract_terms):
-- start_date: Vertragsbeginn YYYY-MM-DD
-- end_date: Vertragsende YYYY-MM-DD (null wenn unbefristet)
-- is_indefinite: true/false
-- notice_period_days: Kündigungsfrist in Tagen
-- hours_per_week: Stunden/Woche
-- hours_per_month: Stunden/Monat (null wenn nicht im Vertrag)
-
-LOHN (wage):
-- wage_type: "hourly"
-- hourly_rate: Stundenlohn CHF brutto (nur Zahl)
-- vacation_weeks: Ferienwochen (4, 5 oder 6)
-- holiday_supplement_pct: Ferienzuschlag Dezimal (0.0833=4W, 0.1064=5W, 0.1304=6W)
-- payment_iban: Lohnkonto IBAN (CH/LI)
-
-VERSICHERUNG (social_insurance):
-- accounting_method: "ordinary"
-- canton: Wohnsitzkanton der ASSISTENZPERSON (2-stellig)
-- nbu_total_rate_pct: NBU Gesamtprämiensatz als Dezimal (0.015 = 1.5%). Typische Werte: 0.005–0.03 (0.5%–3%). NIEMALS 1.0 oder höher!
-- nbu_employer_pct: NBU AG-Anteil als Dezimal (z.B. 0.0075 = 0.75%). Muss kleiner als nbu_total_rate_pct sein.
-- nbu_employee_pct: NBU AN-Anteil als Dezimal (z.B. 0.0075 = 0.75%). Muss kleiner als nbu_total_rate_pct sein.
-- nbu_employer_voluntary: true wenn AG die NBU freiwillig übernimmt (auch bei <8h/Woche)
-- nbu_insurer_name: Name des Unfallversicherers (z.B. SUVA, Helvetia)
-- nbu_policy_number: Vertragsnummer beim Versicherer
-
-WICHTIG NBU: Die Aufteilung AG+AN muss dem Gesamtsatz entsprechen.
-Im Vertrag kann die Aufteilung als "je hälftig", "vollständig durch AN",
-"vollständig durch AG" oder als explizite Prozentzahlen formuliert sein.
-Wenn nur ein Gesamtsatz ohne Aufteilung angegeben ist, setze nbu_employee_pct
-= Gesamtsatz und nbu_employer_pct = 0 (Standard: AN zahlt 100% der NBU).
+Schritte:
+1. Rufe document_classification auf – prüfe ob es ein Schweizer Arbeitsvertrag ist.
+2. Wenn kein Arbeitsvertrag: gib ein leeres JSON mit warnings=["KEIN_ARBEITSVERTRAG"] zurück.
+3. Lies den gesamten Vertrag durch und extrahiere alle unten gelisteten Felder.
+4. Rufe contract_data_submission auf – validiert AHV-Nummer, IBAN und leitet Kanton aus PLZ ab.
+5. Markiere fehlende oder nicht auffindbare Felder mit value: null und einer note.
 
 Regeln:
 - NUR extrahieren was im Vertrag steht. Niemals erfinden.
-- Nicht vorhanden → null + note
-- IBAN: nur setzen wenn klar lesbar
-- Geschlecht: niemals aus Name/Zivilstand ableiten
-- Kanton: aus PLZ der ASSISTENZPERSON ableiten
-- Prozentsätze als Dezimal: 5.3% → 0.053
+- Geschlecht: niemals aus Name oder Zivilstand ableiten. Null ist korrekt.
+- IBAN: nur setzen wenn klar lesbar.
+- Kanton: wird aus PLZ der Assistenzperson abgeleitet (via Tool).
+- Prozentsätze immer als Dezimal: 5.3% = 0.053. NBU-Sätze liegen typisch bei 0.005–0.03.
+- NBU-Aufteilung: AG+AN muss Gesamtsatz ergeben. "Je hälftig" = Gesamt/2. Ohne Angabe: AN = Gesamt.
 
-Du gibst ausschliesslich ein JSON-Objekt zurück. Kein erklärender Text.`;
+Format: Nur valides JSON. Keine Erklärungen. Kein Text vor oder nach dem JSON.`;
 
-const USER_PROMPT_TEMPLATE = (contractText: string) => `Extrahiere die Daten der ASSISTENZPERSON (Arbeitnehmerin) aus dem Dokument. Verwende deine Tools.
+const USER_PROMPT_TEMPLATE = (contractText: string) => `Hier ist der Arbeitsvertrag:
 
 ---
 ${contractText}
 ---
 
-WICHTIG: Extrahiere NUR Daten der Assistenzperson/Arbeitnehmerin — NICHT der Arbeitgeberin!
+Extrahiere die Daten der ASSISTENZPERSON (Arbeitnehmerin) – NICHT der Arbeitgeberin.
+Jedes Feld hat drei Attribute: value, source_text (Zitat aus dem Vertrag), note.
+Fehlende Felder: value = null, note = Grund.
 
-Gib ein JSON in exakt diesem Format zurück. Jedes Feld hat: value, source_text, note.
+Format: Nur valides JSON. Sprache der Keys: Englisch.
 
-{
-  "extraction_metadata": {
-    "document_language": "<de|fr|it|en>",
-    "fields_extracted": <Anzahl>,
-    "fields_missing": <Anzahl>,
-    "warnings": []
-  },
+{ "extraction_metadata": { "document_language": "", "fields_extracted": 0, "fields_missing": 0, "warnings": [] },
   "contracts": {
     "employer": {
-      "first_name": { "value": null, "source_text": "", "note": "Vorname Arbeitgeber/in" },
-      "last_name": { "value": null, "source_text": "", "note": "" },
-      "street": { "value": null, "source_text": "", "note": "" },
-      "zip": { "value": null, "source_text": "", "note": "" },
-      "city": { "value": null, "source_text": "", "note": "" }
-    },
+      "first_name": { "value": "", "source_text": "", "note": "" },
+      "last_name": { "value": "", "source_text": "", "note": "" },
+      "street": { "value": "", "source_text": "", "note": "" },
+      "zip": { "value": "", "source_text": "", "note": "" },
+      "city": { "value": "", "source_text": "", "note": "" } },
     "assistant": {
-      "first_name": { "value": null, "source_text": "", "note": "Vorname der Assistenzperson (Arbeitnehmerin)" },
-      "last_name": { "value": null, "source_text": "", "note": "Nachname der Assistenzperson" },
-      "street": { "value": null, "source_text": "", "note": "Strasse inkl. Hausnummer (z.B. Musterstrasse 12)" },
-      "zip": { "value": null, "source_text": "", "note": "PLZ der Assistenzperson (4-stellig CH)" },
-      "city": { "value": null, "source_text": "", "note": "Wohnort der Assistenzperson" },
-      "country": { "value": null, "source_text": "", "note": "Wohnsitzland ISO-Code (CH, DE, IT)" },
-      "phone": { "value": null, "source_text": "", "note": "Telefon mit Vorwahl (+41...)" },
-      "email": { "value": null, "source_text": "", "note": "E-Mail-Adresse" },
-      "birth_date": { "value": null, "source_text": "", "note": "Format: YYYY-MM-DD" },
-      "gender": { "value": null, "source_text": "", "note": "male|female|diverse – nur wenn explizit im Vertrag" },
-      "civil_status": { "value": null, "source_text": "", "note": "ledig|verheiratet|geschieden|verwitwet|eingetragene Partnerschaft" },
-      "residence_permit": { "value": null, "source_text": "", "note": "B, C, G, L, N, F oder CH" },
-      "ahv_number": { "value": null, "source_text": "", "note": "Format: 756.XXXX.XXXX.XX (13 Ziffern)" }
-    },
+      "first_name": { "value": "", "source_text": "", "note": "" },
+      "last_name": { "value": "", "source_text": "", "note": "" },
+      "street": { "value": "", "source_text": "", "note": "Strasse + Hausnummer" },
+      "zip": { "value": "", "source_text": "", "note": "4-stellig CH" },
+      "city": { "value": "", "source_text": "", "note": "" },
+      "country": { "value": "", "source_text": "", "note": "ISO: CH, DE, IT" },
+      "phone": { "value": "", "source_text": "", "note": "+41..." },
+      "email": { "value": "", "source_text": "", "note": "" },
+      "birth_date": { "value": "", "source_text": "", "note": "YYYY-MM-DD" },
+      "gender": { "value": "", "source_text": "", "note": "male|female|diverse, nur wenn explizit" },
+      "civil_status": { "value": "", "source_text": "", "note": "ledig|verheiratet|geschieden|verwitwet" },
+      "residence_permit": { "value": "", "source_text": "", "note": "B|C|G|L|N|F|CH" },
+      "ahv_number": { "value": "", "source_text": "", "note": "756.XXXX.XXXX.XX" } },
     "contract_terms": {
-      "start_date": { "value": null, "source_text": "", "note": "Vertragsbeginn YYYY-MM-DD" },
-      "end_date": { "value": null, "source_text": "", "note": "Vertragsende YYYY-MM-DD, null wenn unbefristet" },
-      "is_indefinite": { "value": null, "source_text": "", "note": "true = unbefristet" },
-      "hours_per_week": { "value": null, "source_text": "", "note": "Stunden pro Woche" },
-      "hours_per_month": { "value": null, "source_text": "", "note": "Stunden pro Monat (null wenn nicht im Vertrag)" },
-      "notice_period_days": { "value": null, "source_text": "", "note": "Kündigungsfrist in Tagen" }
-    },
+      "start_date": { "value": "", "source_text": "", "note": "YYYY-MM-DD" },
+      "end_date": { "value": null, "source_text": "", "note": "null wenn unbefristet" },
+      "is_indefinite": { "value": null, "source_text": "", "note": "true|false" },
+      "hours_per_week": { "value": null, "source_text": "", "note": "" },
+      "hours_per_month": { "value": null, "source_text": "", "note": "null wenn nicht im Vertrag" },
+      "notice_period_days": { "value": null, "source_text": "", "note": "in Tagen" } },
     "wage": {
-      "wage_type": { "value": null, "source_text": "", "note": "hourly" },
-      "hourly_rate": { "value": null, "source_text": "", "note": "Stundenlohn CHF brutto (nur Zahl)" },
-      "vacation_weeks": { "value": null, "source_text": "", "note": "Ferienwochen: 4, 5 oder 6" },
-      "holiday_supplement_pct": { "value": null, "source_text": "", "note": "Ferienzuschlag: 0.0833=4W, 0.1064=5W, 0.1304=6W" },
-      "payment_iban": { "value": null, "source_text": "", "note": "Lohnkonto IBAN (CH/LI)" }
-    },
+      "wage_type": { "value": "hourly", "source_text": "", "note": "" },
+      "hourly_rate": { "value": null, "source_text": "", "note": "CHF brutto, nur Zahl" },
+      "vacation_weeks": { "value": null, "source_text": "", "note": "4, 5 oder 6" },
+      "holiday_supplement_pct": { "value": null, "source_text": "", "note": "0.0833=4W, 0.1064=5W, 0.1304=6W" },
+      "payment_iban": { "value": "", "source_text": "", "note": "CH/LI IBAN" } },
     "social_insurance": {
-      "accounting_method": { "value": null, "source_text": "", "note": "ordinary" },
-      "canton": { "value": null, "source_text": "", "note": "Wohnsitzkanton ASSISTENZPERSON (2-stellig: SO, LU, BE, ZH)" },
-      "nbu_total_rate_pct": { "value": null, "source_text": "", "note": "NBU Gesamt als Dezimal. 0.015=1.5%. Typ. 0.005–0.03. NIEMALS ≥0.1!" },
-      "nbu_employer_pct": { "value": null, "source_text": "", "note": "NBU AG als Dezimal. z.B. 0.0075=0.75%. NIEMALS ≥0.1!" },
-      "nbu_employee_pct": { "value": null, "source_text": "", "note": "NBU AN als Dezimal. Standard: AN = Gesamt. NIEMALS ≥0.1!" },
-      "nbu_employer_voluntary": { "value": null, "source_text": "", "note": "true wenn AG die NBU freiwillig auch bei <8h übernimmt" },
-      "nbu_insurer_name": { "value": null, "source_text": "", "note": "Name Unfallversicherer (SUVA, Helvetia, etc.)" },
-      "nbu_policy_number": { "value": null, "source_text": "", "note": "Policennummer beim Versicherer" }
-    }
-  }
-}`;
+      "accounting_method": { "value": "ordinary", "source_text": "", "note": "" },
+      "canton": { "value": "", "source_text": "", "note": "2-stellig, aus PLZ ableiten" },
+      "nbu_total_rate_pct": { "value": null, "source_text": "", "note": "Dezimal, 0.015=1.5%, typ. 0.005-0.03" },
+      "nbu_employer_pct": { "value": null, "source_text": "", "note": "Dezimal, AG-Anteil" },
+      "nbu_employee_pct": { "value": null, "source_text": "", "note": "Dezimal, AN-Anteil, Standard=Gesamt" },
+      "nbu_employer_voluntary": { "value": null, "source_text": "", "note": "true wenn AG freiwillig zahlt" },
+      "nbu_insurer_name": { "value": "", "source_text": "", "note": "SUVA, Helvetia, etc." },
+      "nbu_policy_number": { "value": "", "source_text": "", "note": "" } }
+  } }`;
 
 // ─── API ────────────────────────────────────────────────
 

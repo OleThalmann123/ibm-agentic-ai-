@@ -25,6 +25,7 @@ import type { Assistant } from '@asklepios/backend';
 import { Badge, badgeVariants } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { sanitizeFilenamePart } from '@/utils/filename';
+import asklepiosLogoUrl from '@/assets/asklepios-logo.png';
 
 // ─── Types ───
 interface MonthlyHours {
@@ -463,7 +464,8 @@ export function PayrollPage() {
       const ivTotalHours = Number(ivLines.reduce((s, l) => s + (l.hours || 0), 0).toFixed(2));
       const ivTotalCHF = Number((ivTotalHours * rate).toFixed(2));
 
-      const logoDataUrl = '';
+      let logoDataUrl = '';
+      try { logoDataUrl = await loadImageAsDataUrl(asklepiosLogoUrl); } catch { /* Fallback: kein Logo */ }
 
       const recipientAuthorityManual = String(cd?.iv_invoice_authority_name ?? '').trim();
       const recipientPlzManual =
