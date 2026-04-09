@@ -688,6 +688,9 @@ function LohnTab({
   const contract = (cd || {}) as Record<string, any>;
   const employerName = employer?.name || '';
 
+  const [payrollConfirmed, setPayrollConfirmed] = useState(false);
+  const [confirmationLoading, setConfirmationLoading] = useState(true);
+
   const monthNames = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
 
   const [viewMonth, setViewMonth] = useState<Date>(() => startOfMonthDate());
