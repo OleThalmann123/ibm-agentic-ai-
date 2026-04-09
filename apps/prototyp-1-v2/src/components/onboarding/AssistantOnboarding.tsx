@@ -361,6 +361,7 @@ function ReviewPopup({
   contractPreviewUrl,
   contractFileName,
   contractMimeType,
+  docxHtml,
   renderFieldEditor,
   onClose,
 }: {
@@ -368,6 +369,7 @@ function ReviewPopup({
   contractPreviewUrl: string | null;
   contractFileName: string;
   contractMimeType: string;
+  docxHtml: string | null;
   renderFieldEditor: (path: string) => ReactNode;
   onClose: () => void;
 }) {
@@ -376,7 +378,8 @@ function ReviewPopup({
     contractFileName.toLowerCase().endsWith('.pdf') ||
     contractPreviewUrl?.toLowerCase().includes('.pdf') === true;
   const isImage = contractMimeType.startsWith('image/');
-  const showOpenLink = !!contractPreviewUrl && !(isPdf || isImage);
+  const isDocx = !!docxHtml;
+  const showOpenLink = !!contractPreviewUrl && !(isPdf || isImage || isDocx);
 
   const reviewRowsAll = attentionFields.filter(r => !r.missing && r.needsReview);
   const missingRowsAll = attentionFields.filter(r => r.missing);
@@ -567,6 +570,13 @@ function ReviewPopup({
                     src={contractPreviewUrl}
                     alt="Hochgeladener Vertrag"
                     className="max-w-full h-auto object-contain"
+                  />
+                </div>
+              ) : isDocx ? (
+                <div className="h-full overflow-auto rounded-lg border border-slate-200 bg-white p-4 sm:p-6">
+                  <div
+                    className="prose prose-sm max-w-none prose-headings:text-slate-800 prose-p:text-slate-700 prose-table:text-sm"
+                    dangerouslySetInnerHTML={{ __html: docxHtml! }}
                   />
                 </div>
               ) : (
@@ -879,19 +889,34 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
   const [contractPreviewUrl, setContractPreviewUrl] = useState<string | null>(null);
   const [contractFileName, setContractFileName] = useState('');
   const [contractMimeType, setContractMimeType] = useState('');
+  const [docxHtml, setDocxHtml] = useState<string | null>(null);
   const contractUrlRef = useRef<string | null>(null);
 
-  const setContractPreviewFromFile = (file: File | null) => {
+  const setContractPreviewFromFile = async (file: File | null) => {
     if (contractUrlRef.current) {
       URL.revokeObjectURL(contractUrlRef.current);
       contractUrlRef.current = null;
     }
+    setDocxHtml(null);
     if (file) {
       const url = URL.createObjectURL(file);
       contractUrlRef.current = url;
       setContractPreviewUrl(url);
       setContractFileName(file.name);
       setContractMimeType(file.type || '');
+
+      const isDocx = file.name.toLowerCase().endsWith('.docx') ||
+        file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+      if (isDocx) {
+        try {
+          const mammoth = await import('mammoth');
+          const arrayBuffer = await file.arrayBuffer();
+          const result = await mammoth.convertToHtml({ arrayBuffer });
+          setDocxHtml(result.value);
+        } catch (e) {
+          console.warn('[Preview] DOCX-Konvertierung fehlgeschlagen:', e);
+        }
+      }
     } else {
       setContractPreviewUrl(null);
       setContractFileName('');
@@ -1972,6 +1997,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
           contractPreviewUrl={contractPreviewUrl}
           contractFileName={contractFileName}
           contractMimeType={contractMimeType}
+          docxHtml={docxHtml}
           renderFieldEditor={renderPopupFieldEditor}
           onClose={() => setShowReviewPopup(false)}
         />
