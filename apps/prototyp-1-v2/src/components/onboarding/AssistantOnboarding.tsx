@@ -13,6 +13,11 @@ import { toast } from 'sonner';
 import { getCityFromChPlz, isValidChPlz } from '@/utils/chPlz';
 import asklepiosMark from '@/assets/asklepios-mark.svg';
 import asklepiosLogoUrl from '@/assets/asklepios-logo.png';
+import { UploadCloud, CheckCircle2, FileText, ArrowRight, AlertCircle, HelpCircle, User, ArrowLeft, Loader2, Share2, Copy, Check, ShieldCheck, AlertTriangle, X } from 'lucide-react';
+import { readFileContent } from '@asklepios/backend';
+import { runDocumentPipeline } from '@asklepios/backend';
+import { ContractExtractionResult, IDPField, ConfidenceLevel, BinaryStatus } from '@asklepios/backend';
+import type { PipelineTrace } from '@asklepios/backend';
 
 const formatAIWarning = (code: string) => {
   const map: Record<string, string> = {
@@ -24,11 +29,6 @@ const formatAIWarning = (code: string) => {
   };
   return map[code] || code.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
 };
-import { UploadCloud, CheckCircle2, FileText, ArrowRight, AlertCircle, HelpCircle, User, ArrowLeft, Loader2, Share2, Copy, Check, ShieldCheck, AlertTriangle, X } from 'lucide-react';
-import { readFileContent } from '@asklepios/backend';
-import { runDocumentPipeline } from '@asklepios/backend';
-import { ContractExtractionResult, IDPField, ConfidenceLevel, BinaryStatus } from '@asklepios/backend';
-import type { PipelineTrace } from '@asklepios/backend';
 const REQUIRED_FIELDS = ['firstName', 'lastName', 'birthDate', 'ahvNumber', 'contractStart', 'hoursPerWeek', 'hourlyRate'];
 
 const PIPELINE_TIMEOUT_MS = 300_000;
@@ -821,6 +821,18 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
   const [savedAssistantId, setSavedAssistantId] = useState<string | null>(null);
   const [copiedLink, setCopiedLink] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
+
+  const confettiPieces = useMemo(() => {
+    const colors = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
+    return Array.from({ length: 50 }, () => ({
+      left: Math.random() * 100,
+      delay: Math.random() * 0.5,
+      duration: 1.2 + Math.random() * 1.5,
+      size: 6 + Math.random() * 8,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      rotate: Math.random() * 360,
+    }));
+  }, []);
 
   // Editable fields - populated from extraction or manually
   const [firstName, setFirstName] = useState('');
@@ -2473,11 +2485,15 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      navigator.clipboard.writeText(`${window.location.origin}/t/${savedAssistantId}`);
-                      setCopiedLink(true);
-                      toast.success('Link kopiert!');
-                      setTimeout(() => setCopiedLink(false), 2000);
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(`${window.location.origin}/t/${savedAssistantId}`);
+                        setCopiedLink(true);
+                        toast.success('Link kopiert!');
+                        setTimeout(() => setCopiedLink(false), 2000);
+                      } catch {
+                        toast.error('Link konnte nicht kopiert werden');
+                      }
                     }}
                     className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl border-2 border-primary/20 hover:border-primary/40 font-bold text-sm transition-colors"
                   >

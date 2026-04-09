@@ -35,10 +35,12 @@ function isoWeekKey(dateStr: string): string {
 }
 
 function parseHoursFromEntry(entry: Pick<TimeEntry, 'start_time' | 'end_time'>): number {
-  const [sh, sm] = entry.start_time.split(':').map(Number);
-  const [eh, em] = entry.end_time.split(':').map(Number);
+  const sp = entry.start_time.split(':').map(Number);
+  const ep = entry.end_time.split(':').map(Number);
+  const sh = sp[0] ?? 0, sm = sp[1] ?? 0;
+  const eh = ep[0] ?? 0, em = ep[1] ?? 0;
   let diff = (eh * 60 + em) - (sh * 60 + sm);
-  if (diff < 0) diff += 24 * 60; // overnight
+  if (diff < 0) diff += 24 * 60;
   return diff / 60;
 }
 

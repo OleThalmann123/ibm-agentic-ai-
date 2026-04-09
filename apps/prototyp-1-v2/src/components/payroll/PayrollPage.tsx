@@ -1082,8 +1082,11 @@ export function PayrollPage() {
                 }}
               >
                 {/* ── Card header (always visible) ── */}
-                <button
+                <div
+                  role="button"
+                  tabIndex={0}
                   onClick={() => toggleExpand(a.id)}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpand(a.id); } }}
                   style={{
                     width: '100%', border: 'none', background: 'transparent',
                     cursor: 'pointer', padding: '18px 22px',
@@ -1173,7 +1176,7 @@ export function PayrollPage() {
                       }} />
                     </div>
                   </div>
-                </button>
+                </div>
 
                 {/* ── Expanded content ── */}
                 {isExpanded && (
@@ -1320,7 +1323,7 @@ export function PayrollPage() {
                                 borderRadius: 12, border: '1px solid #e2e8f0',
                                 overflow: 'hidden', marginBottom: 14,
                               }}>
-                                {hours.entries
+                                {[...hours.entries]
                                   .sort((a, b) => a.date.localeCompare(b.date))
                                   .map((e, idx) => {
                                     const d = new Date(e.date + 'T00:00:00');

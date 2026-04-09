@@ -105,7 +105,7 @@ export function DashboardPage() {
                     {a.email && <p className="text-xs text-muted-foreground">{a.email}</p>}
                   </div>
                 </div>
-                {a.hourly_rate && (
+                {!!a.hourly_rate && (
                   <span className="text-sm text-muted-foreground">{formatCHF(a.hourly_rate)}/h</span>
                 )}
               </div>
