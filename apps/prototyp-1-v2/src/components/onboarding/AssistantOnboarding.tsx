@@ -14,7 +14,6 @@ import { getCityFromChPlz, isValidChPlz } from '@/utils/chPlz';
 import asklepiosMark from '@/assets/asklepios-mark.svg';
 import asklepiosLogoUrl from '@/assets/asklepios-logo.png';
 import { UploadCloud, CheckCircle2, FileText, ArrowRight, AlertCircle, HelpCircle, User, ArrowLeft, Loader2, Share2, Copy, Check, ShieldCheck, AlertTriangle, X } from 'lucide-react';
-import { readFileContent } from '@asklepios/backend';
 import { runDocumentPipeline } from '@asklepios/backend';
 import { ContractExtractionResult, IDPField, ConfidenceLevel, BinaryStatus } from '@asklepios/backend';
 import type { PipelineTrace } from '@asklepios/backend';
@@ -802,7 +801,7 @@ function MiniField({
   );
 }
 
-// readFileContent from pdf-extractor handles PDF, images, and text files
+
 
 export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, editAssistant }: AssistantOnboardingProps) {
   const { employerAccess } = useAuth();
@@ -1200,13 +1199,8 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
       });
 
       try {
-        const { text } = await withTimeout(
-          readFileContent(file),
-          PIPELINE_TIMEOUT_MS,
-          'Dokument lesen dauert ungewöhnlich lange',
-        );
         const pipelineResult = await withTimeout(
-          runDocumentPipeline(file, text),
+          runDocumentPipeline(file),
           PIPELINE_TIMEOUT_MS,
           'KI-Analyse dauert ungewöhnlich lange',
         );
@@ -2424,24 +2418,15 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
           {/* Confetti */}
           {showConfetti && (
             <div className="fixed inset-0 z-50 pointer-events-none overflow-hidden">
-              {Array.from({ length: 50 }).map((_, i) => {
-                const left = Math.random() * 100;
-                const delay = Math.random() * 0.5;
-                const duration = 1.2 + Math.random() * 1.5;
-                const size = 6 + Math.random() * 8;
-                const colors = ['#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
-                const color = colors[Math.floor(Math.random() * colors.length)];
-                const rotate = Math.random() * 360;
-                return (
+              {confettiPieces.map((p, i) => (
                   <div key={i} style={{
-                    position: 'absolute', left: `${left}%`, top: '-10px',
-                    width: `${size}px`, height: `${size * 1.5}px`,
-                    backgroundColor: color, borderRadius: '2px',
-                    transform: `rotate(${rotate}deg)`,
-                    animation: `confetti-fall ${duration}s ease-in ${delay}s forwards`,
+                    position: 'absolute', left: `${p.left}%`, top: '-10px',
+                    width: `${p.size}px`, height: `${p.size * 1.5}px`,
+                    backgroundColor: p.color, borderRadius: '2px',
+                    transform: `rotate(${p.rotate}deg)`,
+                    animation: `confetti-fall ${p.duration}s ease-in ${p.delay}s forwards`,
                   }} />
-                );
-              })}
+              ))}
               <style>{`
                 @keyframes confetti-fall {
                   0% { transform: translateY(0) rotate(0deg); opacity: 1; }

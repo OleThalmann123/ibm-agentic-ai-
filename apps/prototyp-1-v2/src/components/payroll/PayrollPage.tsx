@@ -208,12 +208,15 @@ export function PayrollPage() {
       ? `${year + 1}-01-01`
       : `${year}-${String(month + 1).padStart(2, '0')}-01`;
 
-    const { data: entries } = await supabase
-      .from('time_entry')
-      .select('*')
-      .gte('date', startDate)
-      .lt('date', endDate)
-      .in('assistant_id', (aData || []).map(a => a.id));
+    const assistantIds = (aData || []).map(a => a.id);
+    const { data: entries } = assistantIds.length > 0
+      ? await supabase
+          .from('time_entry')
+          .select('*')
+          .gte('date', startDate)
+          .lt('date', endDate)
+          .in('assistant_id', assistantIds)
+      : { data: [] as any[] };
 
     const grouped: Record<string, MonthlyHours> = {};
     for (const a of (aData || [])) {
@@ -910,6 +913,7 @@ export function PayrollPage() {
           }}>
             <button
               onClick={() => shiftMonth(-1)}
+              aria-label="Vorheriger Monat"
               style={{
                 width: 34, height: 34, borderRadius: 8, border: 'none',
                 background: 'rgba(255,255,255,0.08)', cursor: 'pointer',
@@ -930,6 +934,7 @@ export function PayrollPage() {
             </span>
             <button
               onClick={() => shiftMonth(1)}
+              aria-label="Nächster Monat"
               style={{
                 width: 34, height: 34, borderRadius: 8, border: 'none',
                 background: 'rgba(255,255,255,0.08)', cursor: 'pointer',
