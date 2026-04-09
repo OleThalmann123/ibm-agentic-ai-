@@ -31,7 +31,7 @@ import { ContractExtractionResult, IDPField, ConfidenceLevel, BinaryStatus } fro
 import type { PipelineTrace } from '@asklepios/backend';
 const REQUIRED_FIELDS = ['firstName', 'lastName', 'birthDate', 'ahvNumber', 'contractStart', 'hoursPerWeek', 'hourlyRate'];
 
-const PIPELINE_TIMEOUT_MS = 120_000;
+const PIPELINE_TIMEOUT_MS = 300_000;
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const t = window.setTimeout(() => reject(new Error(`${label} (Timeout nach ${Math.round(ms / 1000)}s)`)), ms);
