@@ -478,7 +478,7 @@ export function PayrollPage() {
 
       const ivDoc = generateIvInvoicePdf({
         invoiceDateLabel: new Date().toLocaleDateString('de-CH'),
-        monthLabel: monthLabel(currentMonth),
+        monthLabel: `${String(new Date(currentMonth + '-01T12:00:00').getMonth() + 1).padStart(2, '0')}/${new Date(currentMonth + '-01T12:00:00').getFullYear()}`,
         logoDataUrl,
         insuredPerson: {
           name: insuredName,

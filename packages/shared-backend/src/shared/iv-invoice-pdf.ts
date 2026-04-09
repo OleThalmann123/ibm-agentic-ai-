@@ -186,12 +186,13 @@ export function generateIvInvoicePdf(data: IvInvoicePdfData): jsPDF {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(12);
   doc.setDrawColor(...PDF_THEME.borderRgb);
-  doc.rect(LM, y, W, 8);
+  doc.rect(LM, y, W, 12);
   doc.text(`Rechnung für ${data.insuredPerson.name || '—'}`, LM + 2, y + 5.5);
-  y += 12;
-
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
+  doc.text(`Rechnungsperiode: ${data.monthLabel}`, LM + 2, y + 10.5);
+  y += 16;
+
   doc.text('Sehr geehrte Damen und Herren', LM, y);
   y += 6;
   doc.text('Ich stelle wie folgt in Rechnung:', LM, y);
