@@ -97,7 +97,8 @@ export function generateIvInvoicePdf(data: IvInvoicePdfData): jsPDF {
   const LM = PDF_THEME.LM;
   let y = 18;
 
-  const rateCHF = Number.isFinite(data.lines?.[0]?.rateCHF) ? data.lines[0].rateCHF : 35.3;
+  const firstLine = data.lines?.[0];
+  const rateCHF = Number.isFinite(firstLine?.rateCHF) ? (firstLine!.rateCHF as number) : 35.3;
 
   // Header (briefartig, ohne Doppelungen)
   doc.setFont('helvetica', 'bold');
