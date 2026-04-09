@@ -20,6 +20,12 @@ export function AssistantsPage() {
 
   const needsOnboarding = !employer || !employerAccess;
 
+  const isDemoAssistant = (a: Assistant) => {
+    const name = String(a.name || '').toLowerCase();
+    const email = String(a.email || '').toLowerCase();
+    return name.includes('(demo)') || email.endsWith('@example.com');
+  };
+
   // --- WhatsApp Magic Link helpers (from Prototype_v1) ---
   const getShareLink = (id: string) => {
     const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5173';
@@ -218,7 +224,14 @@ export function AssistantsPage() {
                         <span className="text-primary font-semibold text-sm">{a.name.charAt(0).toUpperCase()}</span>
                       </div>
                       <div>
-                        <p className="font-medium text-sm">{a.name}</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-medium text-sm">{a.name}</p>
+                          {isDemoAssistant(a) && (
+                            <span className="inline-flex items-center rounded-full border bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800">
+                              Demo · out of scope
+                            </span>
+                          )}
+                        </div>
                         {a.email && <p className="text-xs text-muted-foreground">{a.email}</p>}
                       </div>
                     </div>
