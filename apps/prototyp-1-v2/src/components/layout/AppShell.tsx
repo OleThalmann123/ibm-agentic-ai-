@@ -129,11 +129,13 @@ export function AppShell() {
 
       {/* First-use onboarding overlay */}
       {!employer && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 backdrop-blur-sm">
-          <div className="w-full max-w-xl mx-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <EmployerOnboarding onComplete={async () => {
-              await refreshProfile();
-            }} />
+        <div className="fixed inset-0 z-[100] overflow-y-auto bg-background/80 backdrop-blur-sm">
+          <div className="min-h-full flex items-center justify-center p-4 py-8">
+            <div className="w-full max-w-xl animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <EmployerOnboarding onComplete={async () => {
+                await refreshProfile();
+              }} />
+            </div>
           </div>
         </div>
       )}
