@@ -119,6 +119,10 @@ export function TokenLoginPage() {
   const [entries, setEntries] = useState<TimeEntry[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
 
+  // Payroll confirmation (locks edits once employer confirmed month)
+  const [payrollConfirmed, setPayrollConfirmed] = useState(false);
+  const [confirmationLoading, setConfirmationLoading] = useState(true);
+
   useEffect(() => {
     if (!token) { setError('Kein Token angegeben.'); setLoading(false); return; }
     lookupAssistant(token);
@@ -735,9 +739,6 @@ function LohnTab({
     })();
     return () => { cancelled = true; };
   }, [assistant.id, viewMonth, lohnTabActive, entries.length]);
-
-  const [payrollConfirmed, setPayrollConfirmed] = useState(false);
-  const [confirmationLoading, setConfirmationLoading] = useState(true);
 
   useEffect(() => {
     if (!lohnTabActive) return;
