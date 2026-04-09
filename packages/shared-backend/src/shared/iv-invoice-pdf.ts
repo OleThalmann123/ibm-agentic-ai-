@@ -95,107 +95,61 @@ export function generateIvInvoicePdf(data: IvInvoicePdfData): jsPDF {
   const doc = new jsPDF('p', 'mm', 'a4');
   const W = PDF_THEME.INNER_W;
   const LM = PDF_THEME.LM;
-  let y = 16;
+  let y = 18;
 
-  doc.setFillColor(...PDF_THEME.headerBandRgb);
-  doc.rect(0, 0, 210, 32, 'F');
-  doc.setDrawColor(...PDF_THEME.borderRgb);
-  doc.line(0, 32, 210, 32);
+  const rateCHF = Number.isFinite(data.lines?.[0]?.rateCHF) ? data.lines[0].rateCHF : 35.3;
 
-  if (data.logoDataUrl) {
-    try {
-      doc.addImage(data.logoDataUrl, 'PNG', LM, 8, 18, 18);
-    } catch {
-      // ignore
-    }
-  }
-
+  // Header (briefartig, ohne Doppelungen)
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(17);
-  doc.text(`Rechnung für ${data.insuredPerson.name || '—'}`, LM + (data.logoDataUrl ? 22 : 0), y);
+  doc.setFontSize(15);
+  doc.text(`Rechnung für ${data.insuredPerson.name || '—'}`, LM, y);
+
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
-  doc.text(`${data.invoiceDateLabel}`, LM + W, y, { align: 'right' });
-  doc.text(`Rechnungsperiode: ${data.monthLabel}`, LM + W, y + 6, { align: 'right' });
-  y += 14;
+  doc.text(data.invoiceDateLabel, LM + W, y, { align: 'right' });
+  doc.text(`Rechnungsperiode: ${data.monthLabel}`, LM + W, y + 5.5, { align: 'right' });
+  y += 12;
 
-  // Empfängerblock (oben rechts versetzt) – falls vorhanden
-  if (data.invoiceRecipient?.authorityName || data.invoiceRecipient?.plzCity) {
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-    const rx = LM + W;
-    const lines = [
-      String(data.invoiceRecipient?.authorityName || '').trim(),
-      String(data.invoiceRecipient?.plzCity || '').trim(),
-    ].filter(Boolean);
-    doc.text(lines, rx, 38, { align: 'right' });
+  // Absender (links)
+  const issuerLines = [
+    String(data.invoiceIssuer.name || '').trim(),
+    String(data.invoiceIssuer.street || '').trim(),
+    String(data.invoiceIssuer.plzCity || '').trim(),
+    String(data.invoiceIssuer.emailPhone || '').trim(),
+  ].filter(Boolean);
+  doc.text(issuerLines, LM, y);
+
+  // Empfänger (rechts)
+  const recipientLines = [
+    String(data.invoiceRecipient?.authorityName || '').trim(),
+    String(data.invoiceRecipient?.plzCity || '').trim(),
+  ].filter(Boolean);
+  if (recipientLines.length) {
+    doc.text(recipientLines, LM + W, y, { align: 'right' });
   }
+  y += Math.max(issuerLines.length, recipientLines.length || 0) * 4.6 + 8;
 
-  // Boxes (insured + issuer)
-  autoTable(doc, {
-    startY: y,
-    tableWidth: TABLE_WIDTH_MM,
-    head: [['Versicherte Person', '']],
-    body: [
-      ['Name, Vorname', data.insuredPerson.name || '–'],
-      ['AHV-Nummer', data.insuredPerson.ahvNumber || ''],
-      ['Strasse, Hausnummer', data.insuredPerson.street || ''],
-      ['Postleitzahl, Ort', data.insuredPerson.plzCity || ''],
-    ],
-    ...TABLE_COMMON,
-    columnStyles: { 0: { cellWidth: LABEL_COL_MM }, 1: { cellWidth: VALUE_COL_MM } },
-  });
-  y = (doc as any).lastAutoTable.finalY + 8;
-
-  autoTable(doc, {
-    startY: y,
-    tableWidth: TABLE_WIDTH_MM,
-    head: [['Rechnungssteller', '']],
-    body: [
-      ['Name, Vorname', data.invoiceIssuer.name || '–'],
-      ['E-Mail, Telefon', data.invoiceIssuer.emailPhone || ''],
-      ['Strasse, Hausnummer', data.invoiceIssuer.street || ''],
-      ['Postleitzahl, Ort', data.invoiceIssuer.plzCity || ''],
-    ],
-    ...TABLE_COMMON,
-    columnStyles: { 0: { cellWidth: LABEL_COL_MM }, 1: { cellWidth: VALUE_COL_MM } },
-  });
-  y = (doc as any).lastAutoTable.finalY + 8;
-
-  // Billing section
-  autoTable(doc, {
-    startY: y,
-    tableWidth: TABLE_WIDTH_MM,
-    head: [['Abrechnung', '']],
-    body: [
-      ['GLN (falls vorhanden)', data.billing.gln || ''],
-      ['Mitteilungs-/Verfügungsnummer', data.billing.referenceNumber || ''],
-      ['IBAN', data.billing.iban || ''],
-      ['Kontoinhaber:in', data.billing.accountHolderName || ''],
-      ['Adresse Kontoinhaber:in', data.billing.accountHolderStreet || ''],
-      ['PLZ/Ort Kontoinhaber:in', data.billing.accountHolderPlzCity || ''],
-      ['Bankverbindung', data.billing.bankName || ''],
-      ['Zahlungskondition', data.billing.paymentTermsDays ? `${data.billing.paymentTermsDays} Tage` : ''],
-    ],
-    ...TABLE_COMMON,
-    columnStyles: { 0: { cellWidth: LABEL_COL_MM }, 1: { cellWidth: VALUE_COL_MM } },
-  });
-  y = (doc as any).lastAutoTable.finalY + 8;
-
-  // Betreff + Anrede
+  // Betreffbox
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
+  doc.setFontSize(11);
   doc.setDrawColor(...PDF_THEME.borderRgb);
   doc.rect(LM, y, W, 12);
-  doc.text(`Rechnung für ${data.insuredPerson.name || '—'}`, LM + 2, y + 5.5);
+  doc.text(`Rechnung für ${data.insuredPerson.name || '—'}`, LM + 2, y + 5.2);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
-  doc.text(`Rechnungsperiode: ${data.monthLabel}`, LM + 2, y + 10.5);
-  y += 16;
+  doc.text(`Rechnungsperiode: ${data.monthLabel}`, LM + 2, y + 10.2);
+  y += 18;
 
+  // Betreff + Anrede
   doc.text('Sehr geehrte Damen und Herren', LM, y);
   y += 6;
   doc.text('Ich stelle wie folgt in Rechnung:', LM, y);
+  y += 8;
+
+  // Stundensatz sichtbar machen (gemäss Vorgabe)
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text(`Stundensatz: ${money(rateCHF)} (fix)`, LM, y);
   y += 6;
 
   // Leistungstabelle – nach Assistenzpersonen/Kategorien aufgeschlüsselt
@@ -262,7 +216,7 @@ export function generateIvInvoicePdf(data: IvInvoicePdfData): jsPDF {
     tableWidth: TABLE_WIDTH_MM,
     head: [['Zahlungsinformationen', '']],
     body: [
-      ['Kontoinhaber/in', data.billing.accountHolderName || ''],
+      ['Kontoinhaber/in', data.billing.accountHolderName || data.invoiceIssuer.name || ''],
       ['Adresse, Ort', [data.billing.accountHolderStreet || '', data.billing.accountHolderPlzCity || ''].filter(Boolean).join(', ')],
       ['Bankverbindung', data.billing.bankName || ''],
       ['IBAN- / Konto-Nr.', data.billing.iban || ''],
