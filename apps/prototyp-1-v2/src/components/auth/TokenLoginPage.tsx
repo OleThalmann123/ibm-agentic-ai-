@@ -176,6 +176,10 @@ export function TokenLoginPage() {
   };
 
   const handleSave = async () => {
+    if (payrollConfirmed) {
+      toast.error('Abrechnung ist bereits bestätigt – Stunden können nicht mehr geändert werden.');
+      return;
+    }
     if (!assistant) return;
     setSaving(true);
     setSaveError(null);
@@ -279,11 +283,19 @@ export function TokenLoginPage() {
   };
 
   const handleDelete = async (id: string) => {
+    if (payrollConfirmed) {
+      toast.error('Abrechnung ist bereits bestätigt – Stunden können nicht mehr geändert werden.');
+      return;
+    }
     await supabase.from('time_entry').delete().eq('id', id);
     await loadEntries();
   };
 
   const startEdit = (e: TimeEntry) => {
+    if (payrollConfirmed) {
+      toast.error('Abrechnung ist bereits bestätigt – Stunden können nicht mehr geändert werden.');
+      return;
+    }
     setDate(e.date);
     const parts = e.start_time.split(':');
     const endParts = e.end_time.split(':');
@@ -559,11 +571,16 @@ export function TokenLoginPage() {
             ) : null}
 
             {/* Save button */}
-            <button onClick={handleSave} disabled={saving}
+            <button onClick={handleSave} disabled={saving || payrollConfirmed}
               className="w-full py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-lg transition-all shadow-lg shadow-emerald-200 active:scale-[0.98] flex items-center justify-center gap-2 disabled:opacity-50">
               <CheckCircle2 className="w-6 h-6" />
               {editingId ? 'AKTUALISIEREN' : 'SPEICHERN'}
             </button>
+            {payrollConfirmed ? (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                <span className="font-semibold">Abrechnung bestätigt:</span> Die Stunden für diesen Monat sind gesperrt.
+              </div>
+            ) : null}
             {saveError ? (
               <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
                 <span className="font-semibold">Speichern/Laden fehlgeschlagen:</span> {saveError}
@@ -610,11 +627,11 @@ export function TokenLoginPage() {
                         </div>
                         {!e.confirmed && (
                           <div className="flex items-center gap-1">
-                            <button onClick={() => startEdit(e)}
+                            <button onClick={() => startEdit(e)} disabled={payrollConfirmed}
                               className="p-2 rounded-lg hover:bg-blue-50 text-blue-500 transition">
                               <Pencil className="w-4 h-4" />
                             </button>
-                            <button onClick={() => handleDelete(e.id)}
+                            <button onClick={() => handleDelete(e.id)} disabled={payrollConfirmed}
                               className="p-2 rounded-lg hover:bg-red-50 text-red-400 transition">
                               <Trash2 className="w-4 h-4" />
                             </button>
