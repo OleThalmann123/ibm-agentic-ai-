@@ -240,7 +240,6 @@ export function PayrollPage() {
 
     setTimeEntries(grouped);
 
-    const assistantIds = (aData || []).map((a) => a.id);
     if (assistantIds.length > 0) {
       const monthFirst = `${year}-${String(month).padStart(2, '0')}-01`;
       const { data: confRows } = await supabase
