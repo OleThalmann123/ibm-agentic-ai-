@@ -100,6 +100,7 @@ export function EmployerOnboarding({ onComplete }: Props) {
   const [billingAccountHolderPlz, setBillingAccountHolderPlz] = useState('');
   const [billingAccountHolderCity, setBillingAccountHolderCity] = useState('');
   const [billingReferenceNumber, setBillingReferenceNumber] = useState('');
+  const [accountHolderIsAffected, setAccountHolderIsAffected] = useState(true);
 
   // Setup
   const [tracker, setTracker] = useState('');
@@ -182,10 +183,26 @@ export function EmployerOnboarding({ onComplete }: Props) {
           insured_ahv_number: insuredAhvNumber.trim() || null,
           billing_iban: billingIban.trim() || null,
           billing_reference_number: billingReferenceNumber.trim() || null,
-          billing_account_holder_name: billingAccountHolderName.trim() || null,
-          billing_account_holder_street: billingAccountHolderStreet.trim() || null,
-          billing_account_holder_plz: billingAccountHolderPlz.trim() || null,
-          billing_account_holder_city: billingAccountHolderCity.trim() || null,
+          billing_account_holder_name: (
+            accountHolderIsAffected
+              ? (isSupporter ? `${aFirst} ${aLast}`.trim() : `${cFirst} ${cLast}`.trim())
+              : billingAccountHolderName
+          ).trim() || null,
+          billing_account_holder_street: (
+            accountHolderIsAffected
+              ? (isSupporter ? aStreet : cStreet)
+              : billingAccountHolderStreet
+          ).trim() || null,
+          billing_account_holder_plz: (
+            accountHolderIsAffected
+              ? (isSupporter ? aZip : cZip)
+              : billingAccountHolderPlz
+          ).trim() || null,
+          billing_account_holder_city: (
+            accountHolderIsAffected
+              ? (isSupporter ? aCity : cCity)
+              : billingAccountHolderCity
+          ).trim() || null,
           payment_terms_days: 30,
           ...(isSupporter ? {
             affected_first_name: aFirst,
@@ -306,13 +323,49 @@ export function EmployerOnboarding({ onComplete }: Props) {
           <Field label="IV-Ansatz (CHF/Std)" value="35.30" disabled />
           <Field label="IBAN (Auszahlung)" value={billingIban} onChange={setBillingIban} placeholder="CH.." />
           <Field label="Mitteilungs-/Verfügungsnummer (optional)" value={billingReferenceNumber} onChange={setBillingReferenceNumber} placeholder="…" />
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Kontoinhaber:in" value={billingAccountHolderName} onChange={setBillingAccountHolderName} placeholder="Vorname Name" />
-            <Field label="Adresse Kontoinhaber:in" value={billingAccountHolderStreet} onChange={setBillingAccountHolderStreet} placeholder="Strasse Nr." />
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg border bg-background/70 px-3 py-2">
+            <span className="text-sm font-medium">Kontoinhaber:in</span>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={accountHolderIsAffected}
+                onChange={(e) => setAccountHolderIsAffected(e.target.checked)}
+                className="h-4 w-4"
+              />
+              = betroffene Person
+            </label>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Field label="PLZ" value={billingAccountHolderPlz} onChange={setBillingAccountHolderPlz} placeholder="8000" />
-            <Field label="Ort" value={billingAccountHolderCity} onChange={setBillingAccountHolderCity} placeholder="Zürich" />
+            <Field
+              label="Name Kontoinhaber:in"
+              value={accountHolderIsAffected ? `${cFirst} ${cLast}`.trim() : billingAccountHolderName}
+              onChange={setBillingAccountHolderName}
+              placeholder="Vorname Name"
+              disabled={accountHolderIsAffected}
+            />
+            <Field
+              label="Adresse Kontoinhaber:in"
+              value={accountHolderIsAffected ? cStreet : billingAccountHolderStreet}
+              onChange={setBillingAccountHolderStreet}
+              placeholder="Strasse Nr."
+              disabled={accountHolderIsAffected}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Field
+              label="PLZ"
+              value={accountHolderIsAffected ? cZip : billingAccountHolderPlz}
+              onChange={setBillingAccountHolderPlz}
+              placeholder="8000"
+              disabled={accountHolderIsAffected}
+            />
+            <Field
+              label="Ort"
+              value={accountHolderIsAffected ? cCity : billingAccountHolderCity}
+              onChange={setBillingAccountHolderCity}
+              placeholder="Zürich"
+              disabled={accountHolderIsAffected}
+            />
           </div>
           <p className="text-xs text-muted-foreground">
             Diese Angaben werden für das IV-Deckblatt / die monatliche Rechnung verwendet.

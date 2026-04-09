@@ -48,6 +48,7 @@ export function SettingsPage() {
   const [billingAccountHolderStreet, setBillingAccountHolderStreet] = useState(String((contact as any).billing_account_holder_street ?? ''));
   const [billingAccountHolderPlz, setBillingAccountHolderPlz] = useState(String((contact as any).billing_account_holder_plz ?? ''));
   const [billingAccountHolderCity, setBillingAccountHolderCity] = useState(String((contact as any).billing_account_holder_city ?? ''));
+  const [accountHolderIsInsured, setAccountHolderIsInsured] = useState(false);
 
   // IV-Rechnung: Empfänger (Behörde) + optionale Rückfragen-Zeile (Fusszeile PDF)
   const [ivInvoiceAuthorityName, setIvInvoiceAuthorityName] = useState(
@@ -144,6 +145,12 @@ export function SettingsPage() {
       setBillingAccountHolderStreet(String((c as any).billing_account_holder_street ?? ''));
       setBillingAccountHolderPlz(String((c as any).billing_account_holder_plz ?? ''));
       setBillingAccountHolderCity(String((c as any).billing_account_holder_city ?? ''));
+      const hasExplicitAccountHolder =
+        String((c as any).billing_account_holder_name ?? '').trim() !== '' ||
+        String((c as any).billing_account_holder_street ?? '').trim() !== '' ||
+        String((c as any).billing_account_holder_plz ?? '').trim() !== '' ||
+        String((c as any).billing_account_holder_city ?? '').trim() !== '';
+      setAccountHolderIsInsured(!hasExplicitAccountHolder);
       setIvInvoiceAuthorityName(String((c as any).iv_invoice_authority_name ?? ''));
       setIvInvoiceAuthorityPlz(String((c as any).iv_invoice_authority_plz ?? ''));
       setIvInvoiceAuthorityCity(String((c as any).iv_invoice_authority_city ?? ''));
@@ -152,6 +159,45 @@ export function SettingsPage() {
       setIvInvoiceInquiriesPhone(String((c as any).iv_invoice_inquiries_phone ?? ''));
     }
   }, [employer]);
+
+  const insuredPersonForInvoice = () => {
+    if (representation === 'guardian') {
+      return {
+        name: `${affectedFirstName} ${affectedLastName}`.trim(),
+        street: affectedStreet,
+        plz: affectedPlz,
+        city: affectedCity,
+      };
+    }
+    return {
+      name: insuredName,
+      street: insuredStreet,
+      plz: insuredPlz,
+      city: insuredCity,
+    };
+  };
+
+  useEffect(() => {
+    if (!accountHolderIsInsured) return;
+    const p = insuredPersonForInvoice();
+    setBillingAccountHolderName(p.name);
+    setBillingAccountHolderStreet(p.street);
+    setBillingAccountHolderPlz(p.plz);
+    setBillingAccountHolderCity(p.city);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    accountHolderIsInsured,
+    representation,
+    insuredName,
+    insuredStreet,
+    insuredPlz,
+    insuredCity,
+    affectedFirstName,
+    affectedLastName,
+    affectedStreet,
+    affectedPlz,
+    affectedCity,
+  ]);
 
   const saveEmployer = async () => {
     if (!employer) return;
@@ -199,10 +245,10 @@ export function SettingsPage() {
 
           billing_iban: billingIban,
           billing_reference_number: billingReferenceNumber,
-          billing_account_holder_name: billingAccountHolderName,
-          billing_account_holder_street: billingAccountHolderStreet,
-          billing_account_holder_plz: billingAccountHolderPlz,
-          billing_account_holder_city: billingAccountHolderCity,
+          billing_account_holder_name: accountHolderIsInsured ? insuredPersonForInvoice().name : billingAccountHolderName,
+          billing_account_holder_street: accountHolderIsInsured ? insuredPersonForInvoice().street : billingAccountHolderStreet,
+          billing_account_holder_plz: accountHolderIsInsured ? insuredPersonForInvoice().plz : billingAccountHolderPlz,
+          billing_account_holder_city: accountHolderIsInsured ? insuredPersonForInvoice().city : billingAccountHolderCity,
           payment_terms_days: 30,
           iv_invoice_authority_name: ivInvoiceAuthorityName,
           iv_invoice_authority_plz: ivInvoiceAuthorityPlz,
@@ -365,7 +411,7 @@ export function SettingsPage() {
   const ivStelleRecord = getIvStelleRecordForCanton(ivCantonCode);
 
   return (
-    <div className="space-y-6 w-full max-w-7xl mx-auto pb-10">
+    <div className="space-y-6 w-full max-w-7xl mx-auto pb-24">
       {/* Header */}
       <div className="rounded-3xl border bg-[radial-gradient(900px_520px_at_15%_0%,rgba(59,130,246,0.10),transparent_60%),radial-gradient(780px_520px_at_85%_10%,rgba(168,85,247,0.10),transparent_55%),linear-gradient(to_bottom,rgba(255,255,255,0.92),rgba(255,255,255,0.86))] p-6 shadow-sm">
         <div className="flex items-center justify-between">
@@ -529,12 +575,44 @@ export function SettingsPage() {
                   <EditableField label="Verfügungsnummer (optional)" value={billingReferenceNumber} onChange={setBillingReferenceNumber} placeholder="…" />
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                  <EditableField label="Kontoinhaber:in" value={billingAccountHolderName} onChange={setBillingAccountHolderName} placeholder="Vorname Name" />
-                  <EditableField label="Adresse Kontoinhaber:in" value={billingAccountHolderStreet} onChange={setBillingAccountHolderStreet} placeholder="Strasse Nr." />
+                  <div className="lg:col-span-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-xl border bg-muted/20 px-3.5 py-2.5">
+                    <div className="text-sm font-semibold">Kontoinhaber:in</div>
+                    <label className="flex items-center gap-2 text-sm font-medium">
+                      <input
+                        type="checkbox"
+                        checked={accountHolderIsInsured}
+                        onChange={(e) => setAccountHolderIsInsured(e.target.checked)}
+                        className="h-4 w-4"
+                      />
+                      = betroffene Person
+                    </label>
+                  </div>
+                  <EditableField
+                    label="Name Kontoinhaber:in"
+                    value={accountHolderIsInsured ? insuredPersonForInvoice().name : billingAccountHolderName}
+                    onChange={setBillingAccountHolderName}
+                    placeholder="Vorname Name"
+                  />
+                  <EditableField
+                    label="Adresse Kontoinhaber:in"
+                    value={accountHolderIsInsured ? insuredPersonForInvoice().street : billingAccountHolderStreet}
+                    onChange={setBillingAccountHolderStreet}
+                    placeholder="Strasse Nr."
+                  />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <EditableField label="PLZ" value={billingAccountHolderPlz} onChange={setBillingAccountHolderPlz} placeholder="8000" />
-                  <EditableField label="Ort" value={billingAccountHolderCity} onChange={setBillingAccountHolderCity} placeholder="Zürich" />
+                  <EditableField
+                    label="PLZ"
+                    value={accountHolderIsInsured ? insuredPersonForInvoice().plz : billingAccountHolderPlz}
+                    onChange={setBillingAccountHolderPlz}
+                    placeholder="8000"
+                  />
+                  <EditableField
+                    label="Ort"
+                    value={accountHolderIsInsured ? insuredPersonForInvoice().city : billingAccountHolderCity}
+                    onChange={setBillingAccountHolderCity}
+                    placeholder="Zürich"
+                  />
                 </div>
                 <p className="text-xs text-muted-foreground mt-2">
                   Wird im Download „IV‑Rechnung (Deckblatt)“ verwendet. Die acht Leistungskategorien entsprechen Art. 39c IVG
@@ -613,7 +691,7 @@ export function SettingsPage() {
                 </div>
               </Section>
 
-              <div className="sticky bottom-4 z-10">
+              <div className="sticky bottom-4 z-10 pb-[env(safe-area-inset-bottom)]">
                 <div className="rounded-2xl border bg-background/80 backdrop-blur px-4 py-3 shadow-lg flex items-center justify-between gap-3">
                   <div className="text-xs text-muted-foreground">
                     Änderungen werden erst nach dem Speichern übernommen.
