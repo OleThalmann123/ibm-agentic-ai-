@@ -105,12 +105,12 @@ const FIELD_LABELS: Record<string, string> = {
   'wage.payment_iban': 'Lohnkonto (IBAN)',
   'social_insurance.canton': 'Wohnsitzkanton',
   'social_insurance.accounting_method': 'Abrechnungsverfahren',
-  'social_insurance.nbu_total_rate_pct': 'NBU Gesamtprämiensatz (%)',
-  'social_insurance.nbu_employer_pct': 'NBU Arbeitgeber-Anteil (%)',
-  'social_insurance.nbu_employee_pct': 'NBU Arbeitnehmer-Anteil (%)',
-  'social_insurance.nbu_employer_voluntary': 'NBU freiwillig durch AG',
-  'social_insurance.nbu_insurer_name': 'Unfallversicherer',
-  'social_insurance.nbu_policy_number': 'Policennummer',
+  'social_insurance.nbu_total_rate_pct': 'NBU Gesamtprämiensatz (%) – optional',
+  'social_insurance.nbu_employer_pct': 'NBU Arbeitgeber-Anteil (%) – optional',
+  'social_insurance.nbu_employee_pct': 'NBU Arbeitnehmer-Anteil (%) – optional',
+  'social_insurance.nbu_employer_voluntary': 'NBU freiwillig durch AG – optional',
+  'social_insurance.nbu_insurer_name': 'Unfallversicherer – optional',
+  'social_insurance.nbu_policy_number': 'Policennummer – optional',
 };
 
 /** UI-Feld-Schlüssel → Extraktions-Pfad (für Status, Review, Popup) */
@@ -227,8 +227,10 @@ function pctFieldToUiPercentString(value: unknown): string {
   if (value === null || value === undefined) return '';
   const n = typeof value === 'number' ? value : parseLooseNumber(String(value));
   if (n === null) return String(value).trim();
-  // Für Prozentfelder (z. B. NBU): Extraktion kann Dezimal liefern (0.01) oder Prozent (1.0).
-  const pct = n <= 1 ? n * 100 : n;
+  // NBU-Raten sind typischerweise 0.5–3%. Agent liefert Dezimal (0.012 = 1.2%).
+  // Heuristik: ≤ 0.5 → Dezimal (×100), > 0.5 → bereits Prozent.
+  const pct = n <= 0.5 ? n * 100 : n;
+  if (pct > 10) return '';
   return String(Number(pct.toFixed(2)));
 }
 
@@ -258,8 +260,13 @@ function buildPopupAttentionFields(
   const paths = collectAttentionPaths(reviewPaths);
   const out: PopupAttentionField[] = [];
   const OPTIONAL_MISSING_PATHS = new Set<string>([
-    // Telefon ist optional – wenn nicht im Vertrag vorhanden, soll es nicht als "fehlend" erscheinen.
     'assistant.phone',
+    'social_insurance.nbu_total_rate_pct',
+    'social_insurance.nbu_employer_pct',
+    'social_insurance.nbu_employee_pct',
+    'social_insurance.nbu_employer_voluntary',
+    'social_insurance.nbu_insurer_name',
+    'social_insurance.nbu_policy_number',
   ]);
 
   for (const path of paths) {
@@ -2297,24 +2304,25 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                       ))}
                     </select>
                   </MiniField>
-                  <MiniField title="NBU Gesamtprämiensatz (%)" {...fieldProps('nbuTotal')} hasValue={!!nbuTotal}
-                    hint="Gesamtprämiensatz der Nichtberufsunfallversicherung gemäss Versicherer">
-                    <input type="number" min={0} max={100} step="0.01" placeholder="z.B. 1.50"
+                  <MiniField title="NBU Gesamtprämiensatz (%) – optional" {...fieldProps('nbuTotal')} hasValue={!!nbuTotal}
+                    hint="Gesamtprämiensatz der Nichtberufsunfallversicherung gemäss Versicherer (typ. 0.5–3%)"
+                    error={nbuTotal && parseFloat(nbuTotal) > 5 ? 'Unrealistisch hoch – NBU-Sätze liegen typischerweise bei 0.5–3%' : undefined}>
+                    <input type="number" min={0} max={10} step="0.01" placeholder="z.B. 1.50"
                       value={nbuTotal} onChange={e => setNbuTotal(e.target.value)} className={inputStyle} />
                   </MiniField>
-                  <MiniField title="NBU Arbeitgeber-Anteil (%)" {...fieldProps('nbuEmployer')} hasValue={!!nbuEmployer}
+                  <MiniField title="NBU Arbeitgeber-Anteil (%) – optional" {...fieldProps('nbuEmployer')} hasValue={!!nbuEmployer}
                     error={nbuTotal && nbuEmployer && nbuEmployee && Math.abs(parseFloat(nbuEmployer || '0') + parseFloat(nbuEmployee || '0') - parseFloat(nbuTotal || '0')) > 0.001 ? 'AG + AN muss dem Gesamtsatz entsprechen' : undefined}>
-                    <input type="number" min={0} max={100} step="0.01" placeholder="z.B. 0.75"
+                    <input type="number" min={0} max={10} step="0.01" placeholder="z.B. 0.75"
                       value={nbuEmployer} onChange={e => setNbuEmployer(e.target.value)}
                       disabled={nbuEmployerVoluntary} className={inputStyle} />
                   </MiniField>
-                  <MiniField title="NBU Arbeitnehmer-Anteil (%)" {...fieldProps('nbuEmployee')} hasValue={!!nbuEmployee}
+                  <MiniField title="NBU Arbeitnehmer-Anteil (%) – optional" {...fieldProps('nbuEmployee')} hasValue={!!nbuEmployee}
                     error={nbuTotal && nbuEmployer && nbuEmployee && Math.abs(parseFloat(nbuEmployer || '0') + parseFloat(nbuEmployee || '0') - parseFloat(nbuTotal || '0')) > 0.001 ? 'AG + AN muss dem Gesamtsatz entsprechen' : undefined}>
-                    <input type="number" min={0} max={100} step="0.01" placeholder="z.B. 0.75"
+                    <input type="number" min={0} max={10} step="0.01" placeholder="z.B. 0.75"
                       value={nbuEmployee} onChange={e => setNbuEmployee(e.target.value)}
                       disabled={nbuEmployerVoluntary} className={inputStyle} />
                   </MiniField>
-                  <MiniField title="AG übernimmt NBU freiwillig" {...fieldProps('nbuEmployerVoluntary')} hasValue={nbuEmployerVoluntary}>
+                  <MiniField title="AG übernimmt NBU freiwillig – optional" {...fieldProps('nbuEmployerVoluntary')} hasValue={nbuEmployerVoluntary}>
                     <label className="flex items-center gap-2 cursor-pointer mt-1">
                       <input type="checkbox" checked={nbuEmployerVoluntary}
                         onChange={e => {
@@ -2329,11 +2337,11 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                       <span className="text-sm text-muted-foreground">Auch bei Pensum &lt; 8h/Woche</span>
                     </label>
                   </MiniField>
-                  <MiniField title="Unfallversicherer" {...fieldProps('nbuInsurerName')} hasValue={!!nbuInsurerName}>
+                  <MiniField title="Unfallversicherer – optional" {...fieldProps('nbuInsurerName')} hasValue={!!nbuInsurerName}>
                     <input type="text" placeholder="z.B. SUVA, Helvetia" value={nbuInsurerName}
                       onChange={e => setNbuInsurerName(e.target.value)} className={inputStyle} />
                   </MiniField>
-                  <MiniField title="Policennummer" {...fieldProps('nbuPolicyNumber')} hasValue={!!nbuPolicyNumber}>
+                  <MiniField title="Policennummer – optional" {...fieldProps('nbuPolicyNumber')} hasValue={!!nbuPolicyNumber}>
                     <input type="text" placeholder="Vertragsnummer" value={nbuPolicyNumber}
                       onChange={e => setNbuPolicyNumber(e.target.value)} className={inputStyle} />
                   </MiniField>

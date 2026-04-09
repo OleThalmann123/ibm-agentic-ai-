@@ -137,9 +137,9 @@ LOHN (wage):
 VERSICHERUNG (social_insurance):
 - accounting_method: "ordinary"
 - canton: Wohnsitzkanton der ASSISTENZPERSON (2-stellig)
-- nbu_total_rate_pct: NBU Gesamtprämiensatz als Dezimal (z.B. 0.015 = 1.5%)
-- nbu_employer_pct: NBU AG-Anteil als Dezimal
-- nbu_employee_pct: NBU AN-Anteil als Dezimal
+- nbu_total_rate_pct: NBU Gesamtprämiensatz als Dezimal (0.015 = 1.5%). Typische Werte: 0.005–0.03 (0.5%–3%). NIEMALS 1.0 oder höher!
+- nbu_employer_pct: NBU AG-Anteil als Dezimal (z.B. 0.0075 = 0.75%). Muss kleiner als nbu_total_rate_pct sein.
+- nbu_employee_pct: NBU AN-Anteil als Dezimal (z.B. 0.0075 = 0.75%). Muss kleiner als nbu_total_rate_pct sein.
 - nbu_employer_voluntary: true wenn AG die NBU freiwillig übernimmt (auch bei <8h/Woche)
 - nbu_insurer_name: Name des Unfallversicherers (z.B. SUVA, Helvetia)
 - nbu_policy_number: Vertragsnummer beim Versicherer
@@ -218,9 +218,9 @@ Gib ein JSON in exakt diesem Format zurück. Jedes Feld hat: value, source_text,
     "social_insurance": {
       "accounting_method": { "value": null, "source_text": "", "note": "ordinary" },
       "canton": { "value": null, "source_text": "", "note": "Wohnsitzkanton ASSISTENZPERSON (2-stellig: SO, LU, BE, ZH)" },
-      "nbu_total_rate_pct": { "value": null, "source_text": "", "note": "NBU Gesamtprämiensatz als Dezimal (0.015 = 1.5%)" },
-      "nbu_employer_pct": { "value": null, "source_text": "", "note": "NBU AG-Anteil als Dezimal" },
-      "nbu_employee_pct": { "value": null, "source_text": "", "note": "NBU AN-Anteil als Dezimal. Standard: AN = Gesamt" },
+      "nbu_total_rate_pct": { "value": null, "source_text": "", "note": "NBU Gesamt als Dezimal. 0.015=1.5%. Typ. 0.005–0.03. NIEMALS ≥0.1!" },
+      "nbu_employer_pct": { "value": null, "source_text": "", "note": "NBU AG als Dezimal. z.B. 0.0075=0.75%. NIEMALS ≥0.1!" },
+      "nbu_employee_pct": { "value": null, "source_text": "", "note": "NBU AN als Dezimal. Standard: AN = Gesamt. NIEMALS ≥0.1!" },
       "nbu_employer_voluntary": { "value": null, "source_text": "", "note": "true wenn AG die NBU freiwillig auch bei <8h übernimmt" },
       "nbu_insurer_name": { "value": null, "source_text": "", "note": "Name Unfallversicherer (SUVA, Helvetia, etc.)" },
       "nbu_policy_number": { "value": null, "source_text": "", "note": "Policennummer beim Versicherer" }
