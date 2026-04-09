@@ -82,7 +82,6 @@ const FIELD_LABELS: Record<string, string> = {
   'assistant.first_name': 'Vorname',
   'assistant.last_name': 'Nachname',
   'assistant.street': 'Strasse',
-  'assistant.house_number': 'Hausnummer',
   'assistant.zip': 'PLZ',
   'assistant.city': 'Ort',
   'assistant.country': 'Land',
@@ -92,12 +91,12 @@ const FIELD_LABELS: Record<string, string> = {
   'assistant.ahv_number': 'AHV-Nummer',
   'assistant.gender': 'Geschlecht',
   'assistant.civil_status': 'Zivilstand',
-  'assistant.nationality': 'Nationalität',
   'assistant.residence_permit': 'Aufenthaltsstatus',
   'contract_terms.start_date': 'Vertragsbeginn',
   'contract_terms.end_date': 'Vertragsende',
   'contract_terms.is_indefinite': 'Unbefristet',
   'contract_terms.hours_per_week': 'Stunden/Woche',
+  'contract_terms.hours_per_month': 'Stunden/Monat',
   'contract_terms.notice_period_days': 'Kündigungsfrist (Tage)',
   'wage.wage_type': 'Lohnart',
   'wage.hourly_rate': 'Stundenlohn (CHF)',
@@ -106,8 +105,12 @@ const FIELD_LABELS: Record<string, string> = {
   'wage.payment_iban': 'Lohnkonto (IBAN)',
   'social_insurance.canton': 'Wohnsitzkanton',
   'social_insurance.accounting_method': 'Abrechnungsverfahren',
-  'social_insurance.nbu_employer_pct': 'Nichtberufsunfallversicherung (NBU) Arbeitgeber (%)',
-  'social_insurance.nbu_employee_pct': 'Nichtberufsunfallversicherung (NBU) Arbeitnehmer (%)',
+  'social_insurance.nbu_total_rate_pct': 'NBU Gesamtprämiensatz (%)',
+  'social_insurance.nbu_employer_pct': 'NBU Arbeitgeber-Anteil (%)',
+  'social_insurance.nbu_employee_pct': 'NBU Arbeitnehmer-Anteil (%)',
+  'social_insurance.nbu_employer_voluntary': 'NBU freiwillig durch AG',
+  'social_insurance.nbu_insurer_name': 'Unfallversicherer',
+  'social_insurance.nbu_policy_number': 'Policennummer',
 };
 
 /** UI-Feld-Schlüssel → Extraktions-Pfad (für Status, Review, Popup) */
@@ -115,7 +118,6 @@ const FIELD_KEY_TO_PATH: Record<string, string> = {
   firstName: 'assistant.first_name',
   lastName: 'assistant.last_name',
   street: 'assistant.street',
-  houseNumber: 'assistant.house_number',
   plz: 'assistant.zip',
   city: 'assistant.city',
   country: 'assistant.country',
@@ -131,6 +133,7 @@ const FIELD_KEY_TO_PATH: Record<string, string> = {
   contractUnbefristet: 'contract_terms.is_indefinite',
   noticePeriodDays: 'contract_terms.notice_period_days',
   hoursPerWeek: 'contract_terms.hours_per_week',
+  hoursPerMonth: 'contract_terms.hours_per_month',
   wageType: 'wage.wage_type',
   hourlyRate: 'wage.hourly_rate',
   vacationWeeks: 'wage.vacation_weeks',
@@ -138,8 +141,12 @@ const FIELD_KEY_TO_PATH: Record<string, string> = {
   iban: 'wage.payment_iban',
   billingMethod: 'social_insurance.accounting_method',
   canton: 'social_insurance.canton',
+  nbuTotal: 'social_insurance.nbu_total_rate_pct',
   nbuEmployer: 'social_insurance.nbu_employer_pct',
   nbuEmployee: 'social_insurance.nbu_employee_pct',
+  nbuEmployerVoluntary: 'social_insurance.nbu_employer_voluntary',
+  nbuInsurerName: 'social_insurance.nbu_insurer_name',
+  nbuPolicyNumber: 'social_insurance.nbu_policy_number',
 };
 
 const PATH_TO_FIELD_KEY: Record<string, string> = Object.fromEntries(
@@ -819,7 +826,6 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [street, setStreet] = useState('');
-  const [houseNumber, setHouseNumber] = useState('');
   const [plz, setPlz] = useState('');
   const [city, setCity] = useState('');
   const [country, setCountry] = useState('CH');
@@ -845,8 +851,12 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
   /** Leer bis Extraktion oder Bearbeitung – kein stiller «Vereinfacht»-Default bei fehlendem Vertragswert */
   const [billingMethod, setBillingMethod] = useState('');
   const [canton, setCanton] = useState('');
+  const [nbuTotal, setNbuTotal] = useState('');
   const [nbuEmployer, setNbuEmployer] = useState('');
   const [nbuEmployee, setNbuEmployee] = useState('');
+  const [nbuEmployerVoluntary, setNbuEmployerVoluntary] = useState(false);
+  const [nbuInsurerName, setNbuInsurerName] = useState('');
+  const [nbuPolicyNumber, setNbuPolicyNumber] = useState('');
   
   const [saving, setSaving] = useState(false);
   // Binary review state
@@ -972,7 +982,6 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
       setFirstName(data.first_name || editAssistant.name?.split(' ')[0] || '');
       setLastName(data.last_name || editAssistant.name?.split(' ').slice(1).join(' ') || '');
       setStreet(data.street || '');
-      setHouseNumber(data.house_number?.toString?.() || data.houseNumber?.toString?.() || '');
       setPlz(data.plz || '');
       setCity(data.city || '');
       setCountry(data.country || 'CH');
@@ -1005,8 +1014,12 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
           : '',
       );
       setCanton(data.canton || '');
+      setNbuTotal(pctFieldToUiPercentString(data.nbu_total || data.nbu_total_rate_pct));
       setNbuEmployer(pctFieldToUiPercentString(data.nbu_employer || data.nbu_employer_pct));
       setNbuEmployee(pctFieldToUiPercentString(data.nbu_employee || data.nbu_employee_pct));
+      setNbuEmployerVoluntary(data.nbu_employer_voluntary === true);
+      setNbuInsurerName(data.nbu_insurer_name || '');
+      setNbuPolicyNumber(data.nbu_policy_number || '');
     }
   }, [editAssistant]);
 
@@ -1032,7 +1045,6 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
     setField('firstName', a.first_name, setFirstName);
     setField('lastName', a.last_name, setLastName);
     setField('street', a.street, setStreet);
-    setField('houseNumber', (a as any).house_number, setHouseNumber);
     setField('plz', a.zip, setPlz);
     setField('city', a.city, setCity);
     setField('country', (a as any).country, setCountry);
@@ -1080,10 +1092,18 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
         }
       }
       setField('canton', si.canton, setCanton);
+      if (si.nbu_total_rate_pct) cMap.nbuTotal = si.nbu_total_rate_pct;
       if (si.nbu_employer_pct) cMap.nbuEmployer = si.nbu_employer_pct;
       if (si.nbu_employee_pct) cMap.nbuEmployee = si.nbu_employee_pct;
+      if (si.nbu_employer_voluntary) cMap.nbuEmployerVoluntary = si.nbu_employer_voluntary;
+      if (si.nbu_insurer_name) cMap.nbuInsurerName = si.nbu_insurer_name;
+      if (si.nbu_policy_number) cMap.nbuPolicyNumber = si.nbu_policy_number;
+      setNbuTotal(pctFieldToUiPercentString(si.nbu_total_rate_pct?.value));
       setNbuEmployer(pctFieldToUiPercentString(si.nbu_employer_pct?.value));
       setNbuEmployee(pctFieldToUiPercentString(si.nbu_employee_pct?.value));
+      if (si.nbu_employer_voluntary?.value === true) setNbuEmployerVoluntary(true);
+      if (si.nbu_insurer_name?.value) setNbuInsurerName(String(si.nbu_insurer_name.value));
+      if (si.nbu_policy_number?.value) setNbuPolicyNumber(String(si.nbu_policy_number.value));
     }
 
     // UX: Wenn der Judge bereits ein konkretes ISO-Land vorschlägt, vorbefüllen,
@@ -1094,15 +1114,6 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
       setCountry(suggestedIso2);
     } else if (cMap.country?.value != null) {
       setCountry(normalizeCountryToIso2(String(cMap.country.value)));
-    }
-
-    // UI normalization: prevent redundant house number in "street" + separate field
-    const rawStreet = a.street?.value != null ? String(a.street.value) : '';
-    const rawHn = (a as any).house_number?.value != null ? String((a as any).house_number.value) : '';
-    if (rawStreet) {
-      const next = normalizeStreetAndHouseNumber(rawStreet, rawHn);
-      if (next.street !== rawStreet) setStreet(next.street);
-      if (!rawHn && next.houseNumber) setHouseNumber(next.houseNumber);
     }
 
     // Vertragswerte können "pro Monat" angegeben sein – UI arbeitet mit Stunden/Woche.
@@ -1119,38 +1130,6 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
     setConfidenceMap(cMap);
   };
 
-  const normalizeStreetAndHouseNumber = (streetValue: string, houseNumberValue: string) => {
-    const streetTrim = streetValue.trim();
-    const m = streetTrim.match(/^(.*\D)\s+(\d+)$/);
-    if (!m) return { street: streetValue, houseNumber: houseNumberValue };
-    const streetName = (m[1] ?? '').trim();
-    const hnFromStreet = (m[2] ?? '').trim();
-    if (!streetName || !hnFromStreet) return { street: streetValue, houseNumber: houseNumberValue };
-    const hnExisting = houseNumberValue.trim();
-
-    if (!hnExisting) {
-      return { street: streetName, houseNumber: hnFromStreet };
-    }
-    if (hnExisting === hnFromStreet) {
-      return { street: streetName, houseNumber: hnExisting };
-    }
-    return { street: streetValue, houseNumber: houseNumberValue };
-  };
-
-  // Keep UI consistent while editing: if house number is filled, strip duplicate trailing number from street
-  useEffect(() => {
-    const hn = houseNumber.trim();
-    const st = street.trim();
-    if (!hn || !st) return;
-    const m = st.match(/^(.*\D)\s+(\d+)$/);
-    if (!m) return;
-    const streetName = (m[1] ?? '').trim();
-    const hnFromStreet = (m[2] ?? '').trim();
-    if (!streetName || !hnFromStreet) return;
-    if (hnFromStreet === hn && streetName !== st) {
-      setStreet(streetName);
-    }
-  }, [street, houseNumber]);
 
   // Auto-derive Wohnsitzkanton aus PLZ (wenn noch nicht gesetzt)
   useEffect(() => {
@@ -1335,7 +1314,6 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
       contract_data: {
         first_name: firstName, last_name: lastName,
         street,
-        house_number: houseNumber.trim() || null,
         plz, city,
         country: country.trim() || null,
         phone: phone.trim() || null,
@@ -1352,7 +1330,13 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
         iban,
         billing_method:
           billingMethod === 'ordinary' ? billingMethod : null,
-        canton, nbu_employer: nbuEmployer, nbu_employee: nbuEmployee,
+        canton,
+        nbu_total: nbuTotal,
+        nbu_employer: nbuEmployer,
+        nbu_employee: nbuEmployee,
+        nbu_employer_voluntary: nbuEmployerVoluntary,
+        nbu_insurer_name: nbuInsurerName || null,
+        nbu_policy_number: nbuPolicyNumber || null,
         extraction_metadata: extraction?.extraction_metadata ?? null,
       }
     };
@@ -1438,14 +1422,9 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
           <input
             type="text"
             className={pIn}
-            placeholder="Ergänzen…"
+            placeholder="z.B. Musterstrasse 12"
             value={street}
             onChange={(e) => setStreet(e.target.value)}
-            onBlur={() => {
-              const next = normalizeStreetAndHouseNumber(street, houseNumber);
-              setStreet(next.street);
-              setHouseNumber(next.houseNumber);
-            }}
           />
         );
       case 'plz':
@@ -1501,8 +1480,6 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
             ))}
           </select>
         );
-      case 'houseNumber':
-        return <input type="text" inputMode="numeric" className={pIn} placeholder="z. B. 45" value={houseNumber} onChange={(e) => setHouseNumber(e.target.value)} />;
       case 'civilStatus':
         return (
           <select value={civilStatus} onChange={(e) => setCivilStatus(e.target.value)} className={`${selectStyle} mt-1`}>
@@ -1639,31 +1616,48 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
             ))}
           </select>
         );
+      case 'nbuTotal':
+        return (
+          <input type="number" min={0} max={100} step={0.01} className={pIn} placeholder="z. B. 1.50"
+            value={nbuTotal} onChange={(e) => setNbuTotal(e.target.value)} />
+        );
       case 'nbuEmployer':
         return (
-          <input
-            type="number"
-            min={0}
-            max={100}
-            step={0.01}
-            className={pIn}
-            placeholder="z. B. 1.50"
-            value={nbuEmployer}
-            onChange={(e) => setNbuEmployer(e.target.value)}
-          />
+          <input type="number" min={0} max={100} step={0.01} className={pIn} placeholder="z. B. 0.75"
+            value={nbuEmployer} onChange={(e) => setNbuEmployer(e.target.value)}
+            disabled={nbuEmployerVoluntary} />
         );
       case 'nbuEmployee':
         return (
-          <input
-            type="number"
-            min={0}
-            max={100}
-            step={0.01}
-            className={pIn}
-            placeholder="z. B. 1.50"
-            value={nbuEmployee}
-            onChange={(e) => setNbuEmployee(e.target.value)}
-          />
+          <input type="number" min={0} max={100} step={0.01} className={pIn} placeholder="z. B. 0.75"
+            value={nbuEmployee} onChange={(e) => setNbuEmployee(e.target.value)}
+            disabled={nbuEmployerVoluntary} />
+        );
+      case 'nbuEmployerVoluntary':
+        return (
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={nbuEmployerVoluntary}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                setNbuEmployerVoluntary(checked);
+                if (checked && nbuTotal) {
+                  setNbuEmployer(nbuTotal);
+                  setNbuEmployee('0');
+                }
+              }}
+              className="rounded border-gray-300" />
+            <span className="text-sm">AG übernimmt NBU freiwillig</span>
+          </label>
+        );
+      case 'nbuInsurerName':
+        return (
+          <input type="text" className={pIn} placeholder="z. B. SUVA, Helvetia"
+            value={nbuInsurerName} onChange={(e) => setNbuInsurerName(e.target.value)} />
+        );
+      case 'nbuPolicyNumber':
+        return (
+          <input type="text" className={pIn} placeholder="Policennummer"
+            value={nbuPolicyNumber} onChange={(e) => setNbuPolicyNumber(e.target.value)} />
         );
       default:
         return null;
@@ -2088,19 +2082,11 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                   <MiniField title="Strasse" {...fieldProps('street')} hasValue={!!street}>
                     <input
                       type="text"
-                      placeholder="Bitte ergänzen..."
+                      placeholder="z.B. Musterstrasse 12"
                       value={street}
                       onChange={e => setStreet(e.target.value)}
-                      onBlur={() => {
-                        const next = normalizeStreetAndHouseNumber(street, houseNumber);
-                        setStreet(next.street);
-                        setHouseNumber(next.houseNumber);
-                      }}
                       className={inputStyle}
                     />
-                  </MiniField>
-                  <MiniField title="Hausnummer" {...fieldProps('houseNumber')} hasValue={!!houseNumber}>
-                    <input type="text" inputMode="numeric" placeholder="z.B. 45" value={houseNumber} onChange={e => setHouseNumber(e.target.value)} className={inputStyle} />
                   </MiniField>
                 </div>
 
@@ -2174,6 +2160,27 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                     </select>
                   </MiniField>
                 </div>
+                {/* Scope-Warnungen basierend auf Stammdaten */}
+                {residencePermit && residencePermit !== 'CH' && residencePermit !== 'C' && (
+                  <div className="bg-amber-50 rounded-xl border border-amber-200 p-3 text-sm text-amber-800 flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <span>Aufenthaltsstatus «{residencePermit}» – Quellensteuer wäre nötig, ist aber aktuell <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase bg-gray-200 text-gray-500 mx-0.5">Out of Scope</span>. Lohnabrechnung nur für Schweizer/innen und C-Bewilligung möglich.</span>
+                  </div>
+                )}
+                {birthDate && (() => {
+                  const bd = new Date(birthDate);
+                  if (isNaN(bd.getTime())) return null;
+                  const today = new Date();
+                  let age = today.getFullYear() - bd.getFullYear();
+                  if (today.getMonth() < bd.getMonth() || (today.getMonth() === bd.getMonth() && today.getDate() < bd.getDate())) age--;
+                  if (age < 18 || age > 65) return (
+                    <div className="bg-red-50 rounded-xl border border-red-200 p-3 text-sm text-red-800 flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                      <span>Alter {age} Jahre – Lohnabrechnung nur für Personen im Alter von 18–65 Jahren möglich.</span>
+                    </div>
+                  );
+                  return null;
+                })()}
               </div>
             )}
 
@@ -2221,6 +2228,20 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                   </MiniField>
                 </div>
 
+                {(() => {
+                  const hw = parseFloat(hoursPerWeek);
+                  const hr = parseFloat(hourlyRate);
+                  if (Number.isFinite(hw) && Number.isFinite(hr) && hw > 0 && hr > 0) {
+                    const monthly = hw * 4 * hr;
+                    if (monthly > 1890) return (
+                      <div className="bg-amber-50 rounded-xl border border-amber-200 p-3 text-sm text-amber-800">
+                        Monatliches Einkommen ca. CHF {monthly.toFixed(0)} – liegt über CHF 1'890 (BVG-Schwelle von CHF 22'680/Jahr).
+                        <span className="inline-flex items-center ml-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase bg-gray-200 text-gray-500">BVG Out of Scope</span>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
                 <h4 className="text-sm font-bold">Lohn</h4>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <MiniField title="Lohnart" {...fieldProps('wageType')} hasValue={!!wageType}>
@@ -2243,6 +2264,13 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                 <div className="mt-2">
                   <div className="flex items-baseline justify-between gap-3 mb-2">
                     <h4 className="text-sm font-bold">Versicherung & Konto</h4>
+                    <div className="flex gap-1.5">
+                      {['BVG', 'Quellensteuer', 'Nachtdienst'].map(label => (
+                        <span key={label} className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-gray-100 text-gray-400 border border-gray-200/60">
+                          {label} – n/a
+                        </span>
+                      ))}
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -2281,30 +2309,65 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                       ))}
                     </select>
                   </MiniField>
-                  <MiniField title="Nichtberufsunfallversicherung (NBU) Arbeitgeber (%)" {...fieldProps('nbuEmployer')} hasValue={!!nbuEmployer}>
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      step="0.01"
-                      placeholder="z.B. 1.50"
-                      value={nbuEmployer}
-                      onChange={e => setNbuEmployer(e.target.value)}
-                      className={inputStyle}
-                    />
+                  <MiniField title="NBU Gesamtprämiensatz (%)" {...fieldProps('nbuTotal')} hasValue={!!nbuTotal}
+                    hint="Gesamtprämiensatz der Nichtberufsunfallversicherung gemäss Versicherer">
+                    <input type="number" min={0} max={100} step="0.01" placeholder="z.B. 1.50"
+                      value={nbuTotal} onChange={e => setNbuTotal(e.target.value)} className={inputStyle} />
                   </MiniField>
-                  <MiniField title="Nichtberufsunfallversicherung (NBU) Arbeitnehmer (%)" {...fieldProps('nbuEmployee')} hasValue={!!nbuEmployee}>
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      step="0.01"
-                      placeholder="z.B. 1.50"
-                      value={nbuEmployee}
-                      onChange={e => setNbuEmployee(e.target.value)}
-                      className={inputStyle}
-                    />
+                  <MiniField title="NBU Arbeitgeber-Anteil (%)" {...fieldProps('nbuEmployer')} hasValue={!!nbuEmployer}
+                    error={nbuTotal && nbuEmployer && nbuEmployee && Math.abs(parseFloat(nbuEmployer || '0') + parseFloat(nbuEmployee || '0') - parseFloat(nbuTotal || '0')) > 0.001 ? 'AG + AN muss dem Gesamtsatz entsprechen' : undefined}>
+                    <input type="number" min={0} max={100} step="0.01" placeholder="z.B. 0.75"
+                      value={nbuEmployer} onChange={e => setNbuEmployer(e.target.value)}
+                      disabled={nbuEmployerVoluntary} className={inputStyle} />
                   </MiniField>
+                  <MiniField title="NBU Arbeitnehmer-Anteil (%)" {...fieldProps('nbuEmployee')} hasValue={!!nbuEmployee}
+                    error={nbuTotal && nbuEmployer && nbuEmployee && Math.abs(parseFloat(nbuEmployer || '0') + parseFloat(nbuEmployee || '0') - parseFloat(nbuTotal || '0')) > 0.001 ? 'AG + AN muss dem Gesamtsatz entsprechen' : undefined}>
+                    <input type="number" min={0} max={100} step="0.01" placeholder="z.B. 0.75"
+                      value={nbuEmployee} onChange={e => setNbuEmployee(e.target.value)}
+                      disabled={nbuEmployerVoluntary} className={inputStyle} />
+                  </MiniField>
+                  <MiniField title="AG übernimmt NBU freiwillig" {...fieldProps('nbuEmployerVoluntary')} hasValue={nbuEmployerVoluntary}>
+                    <label className="flex items-center gap-2 cursor-pointer mt-1">
+                      <input type="checkbox" checked={nbuEmployerVoluntary}
+                        onChange={e => {
+                          const checked = e.target.checked;
+                          setNbuEmployerVoluntary(checked);
+                          if (checked && nbuTotal) {
+                            setNbuEmployer(nbuTotal);
+                            setNbuEmployee('0');
+                          }
+                        }}
+                        className="rounded border-gray-300 h-4 w-4" />
+                      <span className="text-sm text-muted-foreground">Auch bei Pensum &lt; 8h/Woche</span>
+                    </label>
+                  </MiniField>
+                  <MiniField title="Unfallversicherer" {...fieldProps('nbuInsurerName')} hasValue={!!nbuInsurerName}>
+                    <input type="text" placeholder="z.B. SUVA, Helvetia" value={nbuInsurerName}
+                      onChange={e => setNbuInsurerName(e.target.value)} className={inputStyle} />
+                  </MiniField>
+                  <MiniField title="Policennummer" {...fieldProps('nbuPolicyNumber')} hasValue={!!nbuPolicyNumber}>
+                    <input type="text" placeholder="Vertragsnummer" value={nbuPolicyNumber}
+                      onChange={e => setNbuPolicyNumber(e.target.value)} className={inputStyle} />
+                  </MiniField>
+                  {(() => {
+                    const hw = parseFloat(hoursPerWeek);
+                    if (!Number.isFinite(hw) || hw <= 0) return null;
+                    if (hw < 7) return (
+                      <div className="col-span-2 md:col-span-4 bg-blue-50 rounded-xl border border-blue-100 p-3 text-sm text-blue-700">
+                        Pensum unter 7h/Woche – voraussichtlich kein NBU-Abzug.
+                      </div>
+                    );
+                    if (hw < 8) return (
+                      <div className="col-span-2 md:col-span-4 bg-amber-50 rounded-xl border border-amber-200 p-3 text-sm text-amber-800">
+                        Grenzfall (7–8h/Woche) – NBU-Pflicht abhängig von tatsächlichen Arbeitsstunden. Bitte mit Versicherer klären.
+                      </div>
+                    );
+                    return (
+                      <div className="col-span-2 md:col-span-4 bg-emerald-50 rounded-xl border border-emerald-200 p-3 text-sm text-emerald-700">
+                        Pensum ≥ 8h/Woche – NBU-pflichtig. Der NBU-Abzug wird auf der Lohnabrechnung ausgewiesen.
+                      </div>
+                    );
+                  })()}
                   </div>
                 </div>
               </div>

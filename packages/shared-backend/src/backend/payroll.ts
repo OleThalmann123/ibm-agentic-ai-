@@ -80,10 +80,15 @@ export interface PayrollInput {
   // Optional employer contributions
   ktvAG?: number;  // KTV rate (decimal)
   buAG?: number;   // BU rate (decimal)
+  nbuAG?: number;  // NBU AG rate (decimal) – when employer pays voluntarily
 
   // Optional employee deductions
   ktvAN?: number;  // KTV rate (decimal)
   nbuAN?: number;  // NBU rate (decimal)
+
+  // NBU status
+  nbuEligible?: boolean;
+  nbuEmployerVoluntary?: boolean;
 
   // Metadata (for payslip document)
   jahr?: string;
@@ -176,6 +181,14 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   if (input.buAG != null && input.buAG > 0) {
     agLines.push({ label: 'BU (AG)', rate: input.buAG, perHour: bruttoH * input.buAG, perYear: round5(bruttoY * input.buAG) });
   }
+  if (input.nbuEmployerVoluntary && input.nbuAG != null && input.nbuAG > 0) {
+    agLines.push({
+      label: 'NBU (AG freiwillig)',
+      rate: input.nbuAG,
+      perHour: anzahlStunden > 0 ? round5(uvgBaseY * input.nbuAG) / anzahlStunden : 0,
+      perYear: round5(uvgBaseY * input.nbuAG),
+    });
+  }
 
   const totalAGH = agLines.reduce((s, l) => s + l.perHour, 0);
   const totalAGY = agLines.reduce((s, l) => s + l.perYear, 0);
@@ -198,7 +211,7 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   if (input.ktvAN != null && input.ktvAN > 0) {
     anLines.push({ label: 'KTV (AN)', rate: input.ktvAN, perHour: bruttoH * input.ktvAN, perYear: round5(bruttoY * input.ktvAN) });
   }
-  if (input.nbuAN != null && input.nbuAN > 0) {
+  if (input.nbuAN != null && input.nbuAN > 0 && !input.nbuEmployerVoluntary && input.nbuEligible !== false) {
     anLines.push({
       label: 'NBU (AN)',
       rate: input.nbuAN,

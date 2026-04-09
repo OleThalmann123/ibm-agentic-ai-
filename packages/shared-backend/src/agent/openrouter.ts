@@ -107,8 +107,7 @@ EXAKTE FELDER die du extrahieren musst (1:1 unser Formular):
 STAMMDATEN (assistant) – alles von der ASSISTENZPERSON:
 - first_name: Vorname
 - last_name: Nachname
-- street: Strasse NUR Strassenname OHNE Hausnummer
-- house_number: Hausnummer als Zahl
+- street: Strasse inkl. Hausnummer (z.B. "Musterstrasse 12")
 - zip: PLZ (4-stellig CH)
 - city: Ort
 - birth_date: Geburtsdatum YYYY-MM-DD
@@ -117,8 +116,7 @@ STAMMDATEN (assistant) – alles von der ASSISTENZPERSON:
 - phone: Telefon mit +41
 - email: E-Mail
 - country: Wohnsitzland ISO-Code (CH, DE, IT)
-- civil_status: ledig|verheiratet|geschieden|verwitwet
-- nationality: ISO Alpha-2 (CH, IT, DE)
+- civil_status: ledig|verheiratet|geschieden|verwitwet|eingetragene Partnerschaft
 - residence_permit: B, C, G, L, N, F oder CH
 
 VERTRAG (contract_terms):
@@ -139,8 +137,18 @@ LOHN (wage):
 VERSICHERUNG (social_insurance):
 - accounting_method: "ordinary"
 - canton: Wohnsitzkanton der ASSISTENZPERSON (2-stellig)
-- nbu_employer_pct: NBU AG Dezimal
-- nbu_employee_pct: NBU AN Dezimal
+- nbu_total_rate_pct: NBU Gesamtprämiensatz als Dezimal (z.B. 0.015 = 1.5%)
+- nbu_employer_pct: NBU AG-Anteil als Dezimal
+- nbu_employee_pct: NBU AN-Anteil als Dezimal
+- nbu_employer_voluntary: true wenn AG die NBU freiwillig übernimmt (auch bei <8h/Woche)
+- nbu_insurer_name: Name des Unfallversicherers (z.B. SUVA, Helvetia)
+- nbu_policy_number: Vertragsnummer beim Versicherer
+
+WICHTIG NBU: Die Aufteilung AG+AN muss dem Gesamtsatz entsprechen.
+Im Vertrag kann die Aufteilung als "je hälftig", "vollständig durch AN",
+"vollständig durch AG" oder als explizite Prozentzahlen formuliert sein.
+Wenn nur ein Gesamtsatz ohne Aufteilung angegeben ist, setze nbu_employee_pct
+= Gesamtsatz und nbu_employer_pct = 0 (Standard: AN zahlt 100% der NBU).
 
 Regeln:
 - NUR extrahieren was im Vertrag steht. Niemals erfinden.
@@ -180,8 +188,7 @@ Gib ein JSON in exakt diesem Format zurück. Jedes Feld hat: value, source_text,
     "assistant": {
       "first_name": { "value": null, "source_text": "", "note": "Vorname der Assistenzperson (Arbeitnehmerin)" },
       "last_name": { "value": null, "source_text": "", "note": "Nachname der Assistenzperson" },
-      "street": { "value": null, "source_text": "", "note": "NUR Strassenname, OHNE Hausnummer" },
-      "house_number": { "value": null, "source_text": "", "note": "Hausnummer als Zahl" },
+      "street": { "value": null, "source_text": "", "note": "Strasse inkl. Hausnummer (z.B. Musterstrasse 12)" },
       "zip": { "value": null, "source_text": "", "note": "PLZ der Assistenzperson (4-stellig CH)" },
       "city": { "value": null, "source_text": "", "note": "Wohnort der Assistenzperson" },
       "country": { "value": null, "source_text": "", "note": "Wohnsitzland ISO-Code (CH, DE, IT)" },
@@ -189,8 +196,7 @@ Gib ein JSON in exakt diesem Format zurück. Jedes Feld hat: value, source_text,
       "email": { "value": null, "source_text": "", "note": "E-Mail-Adresse" },
       "birth_date": { "value": null, "source_text": "", "note": "Format: YYYY-MM-DD" },
       "gender": { "value": null, "source_text": "", "note": "male|female|diverse – nur wenn explizit im Vertrag" },
-      "civil_status": { "value": null, "source_text": "", "note": "ledig|verheiratet|geschieden|verwitwet" },
-      "nationality": { "value": null, "source_text": "", "note": "Staatsangehörigkeit ISO Alpha-2 (CH, IT, DE)" },
+      "civil_status": { "value": null, "source_text": "", "note": "ledig|verheiratet|geschieden|verwitwet|eingetragene Partnerschaft" },
       "residence_permit": { "value": null, "source_text": "", "note": "B, C, G, L, N, F oder CH" },
       "ahv_number": { "value": null, "source_text": "", "note": "Format: 756.XXXX.XXXX.XX (13 Ziffern)" }
     },
@@ -212,8 +218,12 @@ Gib ein JSON in exakt diesem Format zurück. Jedes Feld hat: value, source_text,
     "social_insurance": {
       "accounting_method": { "value": null, "source_text": "", "note": "ordinary" },
       "canton": { "value": null, "source_text": "", "note": "Wohnsitzkanton ASSISTENZPERSON (2-stellig: SO, LU, BE, ZH)" },
-      "nbu_employer_pct": { "value": null, "source_text": "", "note": "NBU AG als Dezimal (0.005 = 0.5%)" },
-      "nbu_employee_pct": { "value": null, "source_text": "", "note": "NBU AN als Dezimal" }
+      "nbu_total_rate_pct": { "value": null, "source_text": "", "note": "NBU Gesamtprämiensatz als Dezimal (0.015 = 1.5%)" },
+      "nbu_employer_pct": { "value": null, "source_text": "", "note": "NBU AG-Anteil als Dezimal" },
+      "nbu_employee_pct": { "value": null, "source_text": "", "note": "NBU AN-Anteil als Dezimal. Standard: AN = Gesamt" },
+      "nbu_employer_voluntary": { "value": null, "source_text": "", "note": "true wenn AG die NBU freiwillig auch bei <8h übernimmt" },
+      "nbu_insurer_name": { "value": null, "source_text": "", "note": "Name Unfallversicherer (SUVA, Helvetia, etc.)" },
+      "nbu_policy_number": { "value": null, "source_text": "", "note": "Policennummer beim Versicherer" }
     }
   }
 }`;

@@ -299,6 +299,9 @@ export function PayrollPage() {
       abrechnungsverfahren: 'ordentlich',
       ferienzuschlag,
       nbuAN: cd?.nbu_employee ? parseFloat(cd.nbu_employee) / 100 : undefined,
+      nbuAG: cd?.nbu_employer_voluntary && cd?.nbu_total ? parseFloat(cd.nbu_total) / 100 : undefined,
+      nbuEligible: cd?.nbu_eligible !== undefined ? cd.nbu_eligible : undefined,
+      nbuEmployerVoluntary: cd?.nbu_employer_voluntary === true,
       agName: employer?.name,
       anName: assistant.name,
     });
@@ -578,6 +581,8 @@ export function PayrollPage() {
                 : 'Ordentliches';
 
           const nbuRateEmployee = cd2?.nbu_employee ? (parseFloat(cd2.nbu_employee) / 100) : undefined;
+          const nbuEligible = cd2?.nbu_eligible !== undefined ? cd2.nbu_eligible : undefined;
+          const nbuEmployerVoluntary = cd2?.nbu_employer_voluntary === true;
           const payslip = calculatePayslip({
             canton: kanton,
             accountingMethod,
@@ -585,6 +590,8 @@ export function PayrollPage() {
             hours: hours.totalHours,
             vacationSurchargeRate: ferienzuschlagRate,
             nbuRateEmployee,
+            nbuEligible,
+            nbuEmployerVoluntary,
           });
 
           const payslipDoc = generatePayslipPdf({
@@ -677,6 +684,8 @@ export function PayrollPage() {
               : 'Ordentliches';
 
         const nbuRateEmployee = cd2?.nbu_employee ? (parseFloat(cd2.nbu_employee) / 100) : undefined;
+        const nbuEligible = cd2?.nbu_eligible !== undefined ? cd2.nbu_eligible : undefined;
+        const nbuEmployerVoluntary = cd2?.nbu_employer_voluntary === true;
         const payslip = calculatePayslip({
           canton: kanton,
           accountingMethod,
@@ -684,6 +693,8 @@ export function PayrollPage() {
           hours: hours.totalHours,
           vacationSurchargeRate: ferienzuschlagRate,
           nbuRateEmployee,
+          nbuEligible,
+          nbuEmployerVoluntary,
         });
 
         const payslipDoc = generatePayslipPdf({
@@ -751,6 +762,8 @@ export function PayrollPage() {
           : 'Ordentliches';
 
     const nbuRateEmployee = cd?.nbu_employee ? (parseFloat(cd.nbu_employee) / 100) : undefined;
+    const nbuEligible = cd?.nbu_eligible !== undefined ? cd.nbu_eligible : undefined;
+    const nbuEmployerVoluntary = cd?.nbu_employer_voluntary === true;
     const payslip = calculatePayslip({
       canton: kanton,
       accountingMethod,
@@ -758,6 +771,8 @@ export function PayrollPage() {
       hours: hours.totalHours,
       vacationSurchargeRate: ferienzuschlagRate,
       nbuRateEmployee,
+      nbuEligible,
+      nbuEmployerVoluntary,
     });
 
     const doc = generatePayslipPdf({
@@ -1096,7 +1111,7 @@ export function PayrollPage() {
                       <p style={{ fontSize: 15, fontWeight: 600, color: '#0f172a', margin: 0 }}>{a.name}</p>
                       <p style={{ fontSize: 12, color: '#94a3b8', margin: '2px 0 0' }}>
                         {hours.entryCount} Einträge · {fmt(hours.totalHours)} Std
-                        {hours.nightHours > 0 && ` · ${fmt(hours.nightHours)} Nacht`}
+                        {hours.nightHours > 0 && <> · {fmt(hours.nightHours)} Nacht <span style={{ fontSize: 9, background: '#f1f5f9', padding: '1px 5px', borderRadius: 9999, color: '#94a3b8', fontWeight: 600, letterSpacing: '0.03em' }}>ohne Zuschlag</span></>}
                       </p>
                     </div>
                   </div>
@@ -1480,6 +1495,8 @@ export function PayrollPage() {
 
                                 const ktvRateEmployee = cd?.ktv_employee ? (parseFloat(cd.ktv_employee) / 100) : undefined;
                                 const nbuRateEmployee = cd?.nbu_employee ? (parseFloat(cd.nbu_employee) / 100) : undefined;
+                                const nbuEligible = cd?.nbu_eligible !== undefined ? cd.nbu_eligible : undefined;
+                                const nbuEmployerVoluntary = cd?.nbu_employer_voluntary === true;
                                 const withholdingTaxRate = cd?.withholding_tax_rate ? (parseFloat(cd.withholding_tax_rate) / 100) : undefined;
 
                                 const payslip = calculatePayslip({
@@ -1490,6 +1507,8 @@ export function PayrollPage() {
                                   vacationSurchargeRate: ferienzuschlagRate,
                                   ktvRateEmployee,
                                   nbuRateEmployee,
+                                  nbuEligible,
+                                  nbuEmployerVoluntary,
                                   withholdingTaxRate,
                                 });
 
@@ -1534,10 +1553,25 @@ export function PayrollPage() {
                                       <PayRow label="ALV" rate={dAlv?.rate ?? null} perH={dAlv?.perHour} perM={dAlv?.perMonth ?? 0} />
                                       <PayRow label="KTV" rate={dKtv?.rate ?? null} perH={dKtv?.perHour} perM={dKtv?.perMonth ?? 0} />
                                       <PayRow label="NBU" rate={dNbu?.rate ?? null} perH={dNbu?.perHour} perM={dNbu?.perMonth ?? 0} />
-                                      <PayRow label="Quellensteuer" rate={dQst?.rate ?? null} perH={dQst?.perHour} perM={dQst?.perMonth ?? 0} />
+                                      {dQst && dQst.enabled !== false && (dQst.perMonth ?? 0) > 0 ? (
+                                        <PayRow label="Quellensteuer" rate={dQst.rate ?? null} perH={dQst.perHour} perM={dQst.perMonth ?? 0} />
+                                      ) : (
+                                        <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                          <td style={{ padding: '6px 14px', color: '#94a3b8' }}>
+                                            Quellensteuer <span style={{ fontSize: 9, background: '#f1f5f9', padding: '1px 6px', borderRadius: 9999, marginLeft: 4, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Out of Scope</span>
+                                          </td>
+                                          <td colSpan={3} style={{ padding: '6px 14px', textAlign: 'right', color: '#cbd5e1', fontSize: 11 }}>–</td>
+                                        </tr>
+                                      )}
                                       {dFak && (
                                         <PayRow label="FAK (nur Wallis)" rate={dFak.rate ?? null} perH={dFak.perHour} perM={dFak.perMonth ?? 0} />
                                       )}
+                                      <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                        <td style={{ padding: '6px 14px', color: '#94a3b8' }}>
+                                          BVG <span style={{ fontSize: 9, background: '#f1f5f9', padding: '1px 6px', borderRadius: 9999, marginLeft: 4, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Out of Scope</span>
+                                        </td>
+                                        <td colSpan={3} style={{ padding: '6px 14px', textAlign: 'right', color: '#cbd5e1', fontSize: 11 }}>–</td>
+                                      </tr>
                                       <PayRow label="Total Abzüge" perH={payslip.totalDeductions.perHour} perM={payslip.totalDeductions.perMonth} bold />
                                       <PayRow label="Nettolohn" perH={payslip.netWage.perHour} perM={payslip.netWage.perMonth} bold highlight />
                                     </PaySection>

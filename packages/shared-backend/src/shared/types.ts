@@ -66,6 +66,18 @@ export interface EmployerAccess {
 }
 
 
+export interface NbuStatus {
+  nbu_eligible: boolean;
+  nbu_calculated_date: string;
+  nbu_avg_hours_3m: number | null;
+  nbu_avg_hours_12m: number | null;
+  nbu_weeks_above_8h_ratio: number | null;
+  nbu_borderline_warning: boolean;
+  nbu_method1_fulfilled: boolean;
+  nbu_method2_fulfilled: boolean;
+  nbu_manually_confirmed?: boolean;
+}
+
 export interface Assistant {
   id: string;
   employer_id: string;

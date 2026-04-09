@@ -400,13 +400,25 @@ export function LohnbudgetRechner() {
             </div>
           )}
 
-          {/* Info */}
-          <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-500/5 border border-blue-500/10">
-            <Info className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
-              Rechner basiert auf Schweizer Sozialversicherungssätzen (AHV/IV/EO, ALV, FAK).
-              VK-Satz = 5% × 10.55%. FAK-Sätze und kantonale Bestimmungen gemäss aktuellem Stand.
-            </p>
+          {/* Scope Info */}
+          <div className="space-y-2">
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-500/5 border border-blue-500/10">
+              <Info className="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" />
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Rechner basiert auf Schweizer Sozialversicherungssätzen (AHV/IV/EO, ALV, FAK).
+                VK-Satz = 5% × 10.55%. FAK-Sätze und kantonale Bestimmungen gemäss aktuellem Stand.
+              </p>
+            </div>
+            <div className="p-3 rounded-lg bg-gray-50 border border-gray-200/60">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1.5">Aktuell nicht berücksichtigt</p>
+              <div className="flex flex-wrap gap-1.5">
+                {['BVG (Berufliche Vorsorge)', 'Quellensteuer', 'Nachtdienst-Zuschläge'].map(label => (
+                  <span key={label} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-200/80 text-gray-500">
+                    {label}
+                  </span>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       )}

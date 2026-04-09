@@ -272,47 +272,6 @@ export const contractDataSubmissionTool = tool(
       return c === 'CH' || c === 'CHE' || c === 'SCHWEIZ' || c === 'SWITZERLAND';
     };
 
-    // Validate/standardize assistant house number
-    if (assistantData.house_number?.value !== null && assistantData.house_number?.value !== undefined) {
-      const n = Number(String(assistantData.house_number.value).trim());
-      if (!Number.isFinite(n)) {
-        validationErrors.push('Assistant house_number invalid (expected a number)');
-      } else if (assistantData.house_number.value !== n) {
-        corrections.push(`House number standardized: ${assistantData.house_number.value} → ${n}`);
-        assistantData.house_number.value = n;
-      }
-    }
-
-    // De-duplicate street vs house number (common: "Musterstrasse 12" + house_number=12)
-    if (assistantData.street?.value) {
-      const streetRaw = String(assistantData.street.value).trim();
-      const m = streetRaw.match(/^(.*\D)\s+(\d+)$/); // only handle purely numeric house numbers
-      if (m) {
-        const streetName = (m[1] ?? '').trim();
-        const hnFromStreetRaw = (m[2] ?? '').trim();
-        const hnFromStreet = Number(hnFromStreetRaw);
-        if (!streetName || !hnFromStreetRaw) {
-          // ignore
-        } else {
-        const hnExisting = assistantData.house_number?.value;
-
-        if ((hnExisting === null || hnExisting === undefined || hnExisting === '') && Number.isFinite(hnFromStreet)) {
-          if (!assistantData.house_number) assistantData.house_number = {};
-          assistantData.house_number.value = hnFromStreet;
-          corrections.push(`House number derived from street: "${streetRaw}" → street="${streetName}", house_number=${hnFromStreet}`);
-          assistantData.street.value = streetName;
-        } else if (Number(hnExisting) === hnFromStreet) {
-          // Same number is present in both places → remove from street to avoid redundancy
-          corrections.push(`Street normalized (removed duplicate house number): "${streetRaw}" → "${streetName}"`);
-          assistantData.street.value = streetName;
-        } else {
-          // Conflicting numbers → keep but flag
-          validationErrors.push('Assistant street appears to include a house number that differs from house_number');
-        }
-        }
-      }
-    }
-
     // Validate assistant phone (soft)
     if (assistantData.phone?.value) {
       const phone = String(assistantData.phone.value).trim();
@@ -432,6 +391,36 @@ export const contractDataSubmissionTool = tool(
       }
     }
 
+    // Validate NBU split: employer_pct + employee_pct must equal total_rate_pct
+    if (insuranceData.nbu_total_rate_pct?.value != null) {
+      const total = Number(insuranceData.nbu_total_rate_pct.value);
+      const empPct = Number(insuranceData.nbu_employee_pct?.value ?? 0);
+      const agPct = Number(insuranceData.nbu_employer_pct?.value ?? 0);
+
+      // Auto-derive: if total is set but split is missing, default AN = total, AG = 0
+      if (total > 0 && empPct === 0 && agPct === 0) {
+        if (!insuranceData.nbu_employee_pct) insuranceData.nbu_employee_pct = {};
+        insuranceData.nbu_employee_pct.value = total;
+        insuranceData.nbu_employee_pct.note = insuranceData.nbu_employee_pct.note || 'Standard: AN zahlt 100% der NBU-Prämie';
+        if (!insuranceData.nbu_employer_pct) insuranceData.nbu_employer_pct = {};
+        insuranceData.nbu_employer_pct.value = 0;
+        corrections.push(`NBU split defaulted: AN = ${total}, AG = 0 (Standard: AN zahlt 100%)`);
+      } else if (total > 0 && Math.abs(empPct + agPct - total) > 0.0001) {
+        validationErrors.push(
+          `NBU-Aufteilung stimmt nicht: AN (${empPct}) + AG (${agPct}) = ${empPct + agPct} ≠ Gesamt (${total})`,
+        );
+      }
+
+      // If employer_voluntary is true, set AG = total, AN = 0
+      if (insuranceData.nbu_employer_voluntary?.value === true && total > 0) {
+        if (!insuranceData.nbu_employer_pct) insuranceData.nbu_employer_pct = {};
+        if (!insuranceData.nbu_employee_pct) insuranceData.nbu_employee_pct = {};
+        insuranceData.nbu_employer_pct.value = total;
+        insuranceData.nbu_employee_pct.value = 0;
+        corrections.push('NBU: AG übernimmt freiwillig → AG = Gesamtsatz, AN = 0');
+      }
+    }
+
     // Validate PLZ
     for (const [label, data] of [['Employer', employerData], ['Assistant', assistantData]] as const) {
       if (data.zip?.value) {
@@ -473,10 +462,10 @@ export const contractDataSubmissionTool = tool(
       'Transfers all extracted contract data in a structured and standardized format to the backend for storage and further processing. Validates Swiss-specific formats (AHV numbers, IBANs, canton codes, PLZ), derives missing fields (canton from ZIP, holiday supplement from vacation weeks), and returns the validated payload. Pass each section as a JSON string.',
     schema: z.object({
       employer: z.string().describe('JSON string with employer fields: {first_name, last_name, street, zip, city}'),
-      assistant: z.string().describe('JSON string with assistant fields: {first_name, last_name, street, house_number, zip, city, country, phone, email, birth_date, gender, ahv_number, civil_status, nationality, residence_permit}'),
+      assistant: z.string().describe('JSON string with assistant fields: {first_name, last_name, street, zip, city, country, phone, email, birth_date, gender, ahv_number, civil_status, residence_permit}'),
       contract_terms: z.string().describe('JSON string with contract fields: {start_date, end_date, is_indefinite, hours_per_week, hours_per_month, notice_period_days}'),
       wage: z.string().describe('JSON string with wage fields: {wage_type, hourly_rate, vacation_weeks, holiday_supplement_pct, payment_iban}'),
-      social_insurance: z.string().describe('JSON string with insurance fields: {accounting_method, canton, nbu_employer_pct, nbu_employee_pct}'),
+      social_insurance: z.string().describe('JSON string with insurance fields: {accounting_method, canton, nbu_total_rate_pct, nbu_employer_pct, nbu_employee_pct, nbu_employer_voluntary, nbu_insurer_name, nbu_policy_number}'),
     }),
   },
 );

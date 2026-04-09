@@ -12,6 +12,7 @@ export * from './agent/langsmith';
 export * from './backend/supabase';
 export * from './backend/payroll';
 export * from './backend/payslip';
+export * from './backend/nbu-calculator';
 
 // Export shared types and utilities
 export * from './shared/types';

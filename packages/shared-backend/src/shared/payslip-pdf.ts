@@ -189,6 +189,14 @@ export function generatePayslipPdf(data: PayslipPdfData): jsPDF {
     styles: gridStyles,
   });
 
+  // NBU-Vermerk (wenn vorhanden)
+  if (data.result.nbuDisplayNote) {
+    y = (doc as any).lastAutoTable.finalY + 4;
+    doc.setFontSize(8);
+    doc.setTextColor(PDF_THEME.textMuted);
+    doc.text(data.result.nbuDisplayNote, LM, y);
+  }
+
   // Footer
   doc.setFontSize(7);
   doc.setTextColor(PDF_THEME.textMuted);

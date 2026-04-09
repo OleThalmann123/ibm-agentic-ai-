@@ -45,7 +45,6 @@ export interface ContractSchema {
     first_name: IDPField<string>;
     last_name: IDPField<string>;
     street: IDPField<string>;
-    house_number: IDPField<number>;
     zip: IDPField<string>;
     city: IDPField<string>;
     country: IDPField<string>;
@@ -54,7 +53,6 @@ export interface ContractSchema {
     birth_date: IDPField<string>;
     gender: IDPField<string>;
     civil_status: IDPField<string>;
-    nationality: IDPField<string>;
     residence_permit: IDPField<string>;
     ahv_number: IDPField<string>;
   };
@@ -76,8 +74,12 @@ export interface ContractSchema {
   social_insurance: {
     accounting_method: IDPField<string>;
     canton: IDPField<string>;
+    nbu_total_rate_pct: IDPField<number>;
     nbu_employer_pct: IDPField<number>;
     nbu_employee_pct: IDPField<number>;
+    nbu_employer_voluntary: IDPField<boolean>;
+    nbu_insurer_name: IDPField<string>;
+    nbu_policy_number: IDPField<string>;
   };
 }
 

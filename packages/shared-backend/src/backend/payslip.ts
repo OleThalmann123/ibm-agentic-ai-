@@ -11,6 +11,9 @@ export interface PayslipInput {
   vacationSurchargeRate: number; // decimal (e.g. 0.0833)
   ktvRateEmployee?: number; // decimal (e.g. 0.01 for 1%)
   nbuRateEmployee?: number; // decimal
+  nbuEligible?: boolean;
+  nbuEmployerVoluntary?: boolean;
+  nbuRateEmployer?: number; // decimal (AG-Anteil, for internal tracking)
   withholdingTaxRate?: number; // decimal (only for ordinary_with_withholding)
 }
 
@@ -31,6 +34,7 @@ export interface PayslipResult {
   deductionLines: PayslipLine[];
   totalDeductions: PayslipLine;
   netWage: PayslipLine;
+  nbuDisplayNote?: string;
 }
 
 const RATES = {
@@ -39,6 +43,8 @@ const RATES = {
   WITHHOLDING_SIMPLIFIED: 0.05,
   FAK_WALLIS_EMPLOYEE: 0.0017,
 } as const;
+
+const PAYSLIP_UVG_CAP = 12_350; // CHF 148'200 / 12
 
 function round5(value: number): number {
   return Math.round(value * 20) / 20;
@@ -94,14 +100,39 @@ export function calculatePayslip(input: PayslipInput): PayslipResult {
   }
 
   const nbu = input.nbuRateEmployee;
-  if (nbu != null && nbu > 0) {
+  const nbuEligible = input.nbuEligible;
+  const nbuEmployerVoluntary = input.nbuEmployerVoluntary;
+  let nbuDisplayNote: string | undefined;
+
+  if (nbuEligible === false) {
+    deductions.push({
+      label: 'NBU',
+      rate: null,
+      perHour: 0,
+      perMonth: 0,
+      enabled: true,
+    });
+    nbuDisplayNote = 'NBU: Kein Abzug (Beschäftigung < 8h/Woche)';
+  } else if (nbuEmployerVoluntary && nbu != null) {
+    deductions.push({
+      label: 'NBU',
+      rate: null,
+      perHour: 0,
+      perMonth: 0,
+      enabled: true,
+    });
+    nbuDisplayNote = 'NBU vom Arbeitgeber freiwillig übernommen';
+  } else if (nbu != null && nbu > 0) {
+    const uvgBase = Math.min(grossPerMonth, PAYSLIP_UVG_CAP);
+    const uvgBasePerHour = hours > 0 ? uvgBase / hours : grossPerHour;
     deductions.push({
       label: 'NBU',
       rate: nbu,
-      perHour: grossPerHour * nbu,
-      perMonth: round5(grossPerMonth * nbu),
+      perHour: uvgBasePerHour * nbu,
+      perMonth: round5(uvgBase * nbu),
       enabled: true,
     });
+    nbuDisplayNote = `Nichtberufsunfallversicherung (NBU) ${(nbu * 100).toFixed(2)}%`;
   }
 
   if (input.accountingMethod === 'simplified') {
@@ -161,6 +192,7 @@ export function calculatePayslip(input: PayslipInput): PayslipResult {
     deductionLines: deductions,
     totalDeductions,
     netWage,
+    nbuDisplayNote,
   };
 }
 
