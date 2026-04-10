@@ -136,7 +136,7 @@ Format: Nur valides JSON. Sprache der Keys: Englisch.
       "street": { "value": "", "source_text": "", "note": "Strasse + Hausnummer" },
       "zip": { "value": "", "source_text": "", "note": "4-stellig CH" },
       "city": { "value": "", "source_text": "", "note": "" },
-      "country": { "value": "", "source_text": "", "note": "ISO: CH, DE, IT" },
+      "country": { "value": "", "source_text": "", "note": "Nationalität/Staatsangehörigkeit als ISO-2, z.B. CH, DE, IT" },
       "phone": { "value": "", "source_text": "", "note": "+41..." },
       "email": { "value": "", "source_text": "", "note": "" },
       "birth_date": { "value": "", "source_text": "", "note": "YYYY-MM-DD" },

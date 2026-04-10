@@ -5,13 +5,6 @@ import { Badge } from '@/components/ui/badge';
 /** Anzeige-Dauer: länger als typische Extraktion, damit der Ring nicht auf 0 springt bevor fertig. */
 const TOTAL_SECONDS = 300;
 
-const PHASES = [
-  { label: 'Stammdaten & Personalien', threshold: 0.18 },
-  { label: 'Lohn, Arbeitszeit & Ferien', threshold: 0.38 },
-  { label: 'Vertragslaufzeit & Kündigung', threshold: 0.58 },
-  { label: 'Sozialversicherung & IV', threshold: 0.78 },
-] as const;
-
 interface Props {
   asklepiosLogoUrl: string;
   onCancel: () => void;
@@ -20,14 +13,12 @@ interface Props {
 export function ExtractingScreen({ asklepiosLogoUrl, onCancel }: Props) {
   const ringGradId = useId().replace(/:/g, '');
   const [remaining, setRemaining] = useState(TOTAL_SECONDS);
-  const [elapsedRatio, setElapsedRatio] = useState(0);
   const startRef = useRef(Date.now());
 
   useEffect(() => {
     const tick = () => {
       const elapsed = (Date.now() - startRef.current) / 1000;
       setRemaining(Math.max(0, TOTAL_SECONDS - Math.floor(elapsed)));
-      setElapsedRatio(Math.min(1, elapsed / TOTAL_SECONDS));
     };
     tick();
     const iv = setInterval(tick, 500);
@@ -41,8 +32,6 @@ export function ExtractingScreen({ asklepiosLogoUrl, onCancel }: Props) {
 
   const circumference = 2 * Math.PI * 88;
   const dashOffset = circumference - (progressPct / 100) * circumference;
-
-  const fieldsRead = Math.min(32, Math.floor(elapsedRatio * 34));
 
   return (
     <div className="bg-card rounded-2xl border overflow-hidden relative">
@@ -161,90 +150,41 @@ export function ExtractingScreen({ asklepiosLogoUrl, onCancel }: Props) {
           </p>
         </div>
 
-        <div className="space-y-6">
-          <div className="space-y-0">
-            <div className="relative flex gap-3">
-              <div className="flex flex-col items-center">
-                <div className="w-9 h-9 rounded-xl bg-blue-500/15 border border-blue-300/30 flex items-center justify-center shadow-[0_10px_26px_rgba(59,130,246,0.22)] animate-pulse">
-                  <FileText className="w-4 h-4 text-blue-200" />
-                </div>
-                <div className="w-0.5 h-5 bg-gradient-to-b from-blue-300/70 to-white/10 my-0.5" />
+        <div className="space-y-0">
+          <div className="relative flex gap-3">
+            <div className="flex flex-col items-center">
+              <div className="w-9 h-9 rounded-xl bg-blue-500/15 border border-blue-300/30 flex items-center justify-center shadow-[0_10px_26px_rgba(59,130,246,0.22)] animate-pulse">
+                <FileText className="w-4 h-4 text-blue-200" />
               </div>
-              <div className="pt-1 pb-3">
-                <p className="text-[13px] font-bold text-white">Agent 1 – Datenextraktion</p>
-                <p className="text-[11px] text-white/55 mt-0.5 leading-snug">Strukturierte Stammdaten und Vertragswerte werden erkannt.</p>
-              </div>
+              <div className="w-0.5 h-5 bg-gradient-to-b from-blue-300/70 to-white/10 my-0.5" />
             </div>
-            <div className="relative flex gap-3">
-              <div className="flex flex-col items-center">
-                <div className="w-9 h-9 rounded-xl bg-purple-500/15 border border-purple-300/30 flex items-center justify-center shadow-[0_10px_26px_rgba(168,85,247,0.20)]">
-                  <ShieldCheck className="w-4 h-4 text-purple-200" />
-                </div>
-                <div className="w-0.5 h-5 bg-gradient-to-b from-purple-200/70 to-white/10 my-0.5" />
-              </div>
-              <div className="pt-1 pb-3">
-                <p className="text-[13px] font-bold text-white/90">Agent 2 – Qualitätscheck</p>
-                <p className="text-[11px] text-white/55 mt-0.5 leading-snug">Unsichere Felder werden markiert und begründet.</p>
-              </div>
-            </div>
-            <div className="relative flex gap-3">
-              <div className="flex flex-col items-center">
-                <div className="w-9 h-9 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center">
-                  <CheckCircle2 className="w-4 h-4 text-white/55" />
-                </div>
-              </div>
-              <div className="pt-1">
-                <p className="text-[13px] font-bold text-white/90">Schritt 3 – Manuelle Überprüfung</p>
-                <p className="text-[11px] text-white/55 mt-0.5 leading-snug">Markierte Felder prüfen und bei Bedarf anpassen.</p>
-              </div>
+            <div className="pt-1 pb-3">
+              <p className="text-[13px] font-bold text-white">Agent 1 – Datenextraktion</p>
+              <p className="text-[11px] text-white/55 mt-0.5 leading-snug">Strukturierte Stammdaten und Vertragswerte werden erkannt.</p>
             </div>
           </div>
-
-          <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3">
-            <div className="flex items-baseline justify-between gap-3 mb-2">
-              <span className="text-[11px] font-medium text-white/45">Auswertung</span>
-              <span className="text-xs text-white/60 tabular-nums">
-                <span className="text-emerald-300/90 font-semibold">{fieldsRead}</span>
-                <span className="text-white/35 mx-1">/</span>
-                <span>30+</span>
-                <span className="text-white/35 ml-1.5 font-normal">Felder</span>
-              </span>
+          <div className="relative flex gap-3">
+            <div className="flex flex-col items-center">
+              <div className="w-9 h-9 rounded-xl bg-purple-500/15 border border-purple-300/30 flex items-center justify-center shadow-[0_10px_26px_rgba(168,85,247,0.20)]">
+                <ShieldCheck className="w-4 h-4 text-purple-200" />
+              </div>
+              <div className="w-0.5 h-5 bg-gradient-to-b from-purple-200/70 to-white/10 my-0.5" />
             </div>
-            <div
-              className="h-1.5 rounded-full bg-white/[0.08] overflow-hidden"
-              role="progressbar"
-              aria-valuenow={Math.round(elapsedRatio * 100)}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-label="Fortschritt der Datenfelder"
-            >
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-blue-500/80 via-purple-500/75 to-emerald-500/70 transition-[width] duration-500 ease-out"
-                style={{ width: `${Math.min(100, elapsedRatio * 100)}%` }}
-              />
+            <div className="pt-1 pb-3">
+              <p className="text-[13px] font-bold text-white/90">Agent 2 – Qualitätscheck</p>
+              <p className="text-[11px] text-white/55 mt-0.5 leading-snug">Unsichere Felder werden markiert und begründet.</p>
             </div>
-            <ul className="mt-3 space-y-2">
-              {PHASES.map(({ label, threshold }) => {
-                const done = elapsedRatio >= threshold;
-                return (
-                  <li key={label} className="flex items-center gap-2.5 text-[11px]">
-                    <span
-                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors duration-300 ${
-                        done ? 'border-emerald-500/60 bg-emerald-500/20 text-emerald-200' : 'border-white/15 text-transparent'
-                      }`}
-                      aria-hidden
-                    >
-                      {done ? (
-                        <svg viewBox="0 0 12 12" className="h-2.5 w-2.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="2 6 5 9 10 3" />
-                        </svg>
-                      ) : null}
-                    </span>
-                    <span className={done ? 'text-white/65' : 'text-white/38'}>{label}</span>
-                  </li>
-                );
-              })}
-            </ul>
+          </div>
+          <div className="relative flex gap-3">
+            <div className="flex flex-col items-center">
+              <div className="w-9 h-9 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center">
+                <CheckCircle2 className="w-4 h-4 text-white/55" />
+              </div>
+            </div>
+            <div className="pt-1">
+              <p className="text-[13px] font-bold text-white/90">Schritt 3 – Manuelle Überprüfung</p>
+              <p className="text-[11px] text-white/55 mt-0.5 leading-snug">Markierte Felder prüfen und bei Bedarf anpassen.</p>
+            </div>
           </div>
         </div>
       </div>

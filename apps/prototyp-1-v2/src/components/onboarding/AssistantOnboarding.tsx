@@ -85,7 +85,7 @@ const FIELD_LABELS: Record<string, string> = {
   'assistant.street': 'Strasse',
   'assistant.zip': 'PLZ',
   'assistant.city': 'Ort',
-  'assistant.country': 'Land',
+  'assistant.country': 'Nationalität',
   'assistant.phone': 'Telefon',
   'assistant.email': 'E-Mail',
   'assistant.birth_date': 'Geburtsdatum',
@@ -2006,7 +2006,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                   <MiniField title="E-Mail" {...fieldProps('email')} hasValue={!!email}>
                     <input type="email" placeholder="name@domain.ch" value={email} onChange={e => setEmail(e.target.value)} className={inputStyle} />
                   </MiniField>
-                  <MiniField title="Land" {...fieldProps('country')} hasValue={!!country}>
+                  <MiniField title="Nationalität" {...fieldProps('country')} hasValue={!!country}>
                     <select
                       value={country && COUNTRY_OPTIONS.some(o => o.value === country) ? country : 'OTHER'}
                       onChange={(e) => {
