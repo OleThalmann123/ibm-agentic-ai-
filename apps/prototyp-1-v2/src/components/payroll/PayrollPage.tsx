@@ -301,7 +301,7 @@ export function PayrollPage() {
       kanton,
       abrechnungsverfahren: 'ordentlich',
       ferienzuschlag,
-      nbuAN: cd?.nbu_employee ? parseFloat(cd.nbu_employee) / 100 : undefined,
+      nbuAN: cd?.nbu_employee && cd?.nbu_total ? (parseFloat(cd.nbu_total) / 100) * (parseFloat(cd.nbu_employee) / 100) : undefined,
       nbuAG: cd?.nbu_employer_voluntary && cd?.nbu_total ? parseFloat(cd.nbu_total) / 100 : undefined,
       nbuEligible: cd?.nbu_eligible !== undefined ? cd.nbu_eligible : undefined,
       nbuEmployerVoluntary: cd?.nbu_employer_voluntary === true,
@@ -611,7 +611,7 @@ export function PayrollPage() {
                 ? 'Ordentliches mit Quellensteuer'
                 : 'Ordentliches';
 
-          const nbuRateEmployee = cd2?.nbu_employee ? (parseFloat(cd2.nbu_employee) / 100) : undefined;
+          const nbuRateEmployee = cd2?.nbu_employee && cd2?.nbu_total ? (parseFloat(cd2.nbu_total) / 100) * (parseFloat(cd2.nbu_employee) / 100) : undefined;
           const nbuEligible = cd2?.nbu_eligible !== undefined ? cd2.nbu_eligible : undefined;
           const nbuEmployerVoluntary = cd2?.nbu_employer_voluntary === true;
           const payslip = calculatePayslip({
@@ -714,7 +714,7 @@ export function PayrollPage() {
               ? 'Ordentliches mit Quellensteuer'
               : 'Ordentliches';
 
-        const nbuRateEmployee = cd2?.nbu_employee ? (parseFloat(cd2.nbu_employee) / 100) : undefined;
+        const nbuRateEmployee = cd2?.nbu_employee && cd2?.nbu_total ? (parseFloat(cd2.nbu_total) / 100) * (parseFloat(cd2.nbu_employee) / 100) : undefined;
         const nbuEligible = cd2?.nbu_eligible !== undefined ? cd2.nbu_eligible : undefined;
         const nbuEmployerVoluntary = cd2?.nbu_employer_voluntary === true;
         const payslip = calculatePayslip({
@@ -792,7 +792,7 @@ export function PayrollPage() {
           ? 'Ordentliches mit Quellensteuer'
           : 'Ordentliches';
 
-    const nbuRateEmployee = cd?.nbu_employee ? (parseFloat(cd.nbu_employee) / 100) : undefined;
+    const nbuRateEmployee = cd?.nbu_employee && cd?.nbu_total ? (parseFloat(cd.nbu_total) / 100) * (parseFloat(cd.nbu_employee) / 100) : undefined;
     const nbuEligible = cd?.nbu_eligible !== undefined ? cd.nbu_eligible : undefined;
     const nbuEmployerVoluntary = cd?.nbu_employer_voluntary === true;
     const payslip = calculatePayslip({
@@ -1530,7 +1530,7 @@ export function PayrollPage() {
                                       : 'Ordentliches';
 
                                 const ktvRateEmployee = cd?.ktv_employee ? (parseFloat(cd.ktv_employee) / 100) : undefined;
-                                const nbuRateEmployee = cd?.nbu_employee ? (parseFloat(cd.nbu_employee) / 100) : undefined;
+                                const nbuRateEmployee = cd?.nbu_employee && cd?.nbu_total ? (parseFloat(cd.nbu_total) / 100) * (parseFloat(cd.nbu_employee) / 100) : undefined;
                                 const nbuEligible = cd?.nbu_eligible !== undefined ? cd.nbu_eligible : undefined;
                                 const nbuEmployerVoluntary = cd?.nbu_employer_voluntary === true;
                                 const withholdingTaxRate = cd?.withholding_tax_rate ? (parseFloat(cd.withholding_tax_rate) / 100) : undefined;
@@ -1552,7 +1552,7 @@ export function PayrollPage() {
                                 const dAhv = findDeduction('AHV/IV/EO');
                                 const dAlv = findDeduction('ALV');
                                 const dKtv = findDeduction('KTV');
-                                const dNbu = findDeduction('NBU');
+                                const dNbu = findDeduction('NBU') || findDeduction('Nichtberufsunfallversicherung');
                                 const dQst = findDeduction('Quellensteuer');
                                 const dFak = findDeduction('FAK');
 
@@ -1588,7 +1588,7 @@ export function PayrollPage() {
                                       <PayRow label="AHV/IV/EO" rate={dAhv?.rate ?? null} perH={dAhv?.perHour} perM={dAhv?.perMonth ?? 0} />
                                       <PayRow label="ALV" rate={dAlv?.rate ?? null} perH={dAlv?.perHour} perM={dAlv?.perMonth ?? 0} />
                                       <PayRow label="KTV" rate={dKtv?.rate ?? null} perH={dKtv?.perHour} perM={dKtv?.perMonth ?? 0} />
-                                      <PayRow label="NBU" rate={dNbu?.rate ?? null} perH={dNbu?.perHour} perM={dNbu?.perMonth ?? 0} />
+                                      <PayRow label="Nichtberufsunfallvers. (NBU)" rate={dNbu?.rate ?? null} perH={dNbu?.perHour} perM={dNbu?.perMonth ?? 0} />
                                       {dQst && dQst.enabled !== false && (dQst.perMonth ?? 0) > 0 ? (
                                         <PayRow label="Quellensteuer" rate={dQst.rate ?? null} perH={dQst.perHour} perM={dQst.perMonth ?? 0} />
                                       ) : (

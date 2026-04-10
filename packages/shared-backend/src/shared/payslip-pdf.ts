@@ -154,7 +154,7 @@ export function generatePayslipPdf(data: PayslipPdfData): jsPDF {
     row('AHV/IV/EO'),
     row('ALV'),
     row('KTV'),
-    row('NBU'),
+    row('Nichtberufsunfallversicherung'),
     row('Quellensteuer'),
     row('FAK'),
     [
@@ -189,7 +189,7 @@ export function generatePayslipPdf(data: PayslipPdfData): jsPDF {
     styles: gridStyles,
   });
 
-  // NBU-Vermerk (wenn vorhanden)
+  // Nichtberufsunfallversicherung-Vermerk (wenn vorhanden)
   if (data.result.nbuDisplayNote) {
     y = (doc as any).lastAutoTable.finalY + 4;
     doc.setFontSize(8);

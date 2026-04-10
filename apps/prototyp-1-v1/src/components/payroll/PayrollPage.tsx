@@ -214,7 +214,7 @@ export function PayrollPage() {
       kanton,
       abrechnungsverfahren: 'ordentlich',
       ferienzuschlag,
-      nbuAN: cd?.nbu_employee ? parseFloat(cd.nbu_employee) / 100 : undefined,
+      nbuAN: cd?.nbu_employee && cd?.nbu_total ? (parseFloat(cd.nbu_total) / 100) * (parseFloat(cd.nbu_employee) / 100) : undefined,
       agName: employer?.name,
       anName: assistant.name,
     });
@@ -365,7 +365,7 @@ export function PayrollPage() {
           ? 'Ordentliches mit Quellensteuer'
           : 'Ordentliches';
 
-    const nbuRateEmployee = cd?.nbu_employee ? (parseFloat(cd.nbu_employee) / 100) : undefined;
+    const nbuRateEmployee = cd?.nbu_employee && cd?.nbu_total ? (parseFloat(cd.nbu_total) / 100) * (parseFloat(cd.nbu_employee) / 100) : undefined;
     const payslip = calculatePayslip({
       canton: kanton,
       accountingMethod,
@@ -658,7 +658,7 @@ export function PayrollPage() {
                               : 'ordinary';
 
                         const ktvRateEmployee = cd?.ktv_employee ? (parseFloat(cd.ktv_employee) / 100) : undefined;
-                        const nbuRateEmployee = cd?.nbu_employee ? (parseFloat(cd.nbu_employee) / 100) : undefined;
+                        const nbuRateEmployee = cd?.nbu_employee && cd?.nbu_total ? (parseFloat(cd.nbu_total) / 100) * (parseFloat(cd.nbu_employee) / 100) : undefined;
                         const withholdingTaxRate = cd?.withholding_tax_rate ? (parseFloat(cd.withholding_tax_rate) / 100) : undefined;
 
                         const payslip = calculatePayslip({
@@ -676,7 +676,7 @@ export function PayrollPage() {
                         const dAhv = findDeduction('AHV/IV/EO');
                         const dAlv = findDeduction('ALV');
                         const dKtv = findDeduction('KTV');
-                        const dNbu = findDeduction('NBU');
+                        const dNbu = findDeduction('NBU') || findDeduction('Nichtberufsunfallversicherung');
                         const dQst = findDeduction('Quellensteuer');
                         const dFak = findDeduction('FAK');
 
@@ -713,7 +713,7 @@ export function PayrollPage() {
                                 <PayTr label="AHV/IV/EO" rate={dAhv?.rate ?? null} perH={dAhv?.perHour || 0} perM={dAhv?.perMonth || 0} />
                                 <PayTr label="ALV" rate={dAlv?.rate ?? null} perH={dAlv?.perHour || 0} perM={dAlv?.perMonth || 0} />
                                 <PayTr label="KTV" rate={dKtv?.rate ?? null} perH={dKtv?.perHour || 0} perM={dKtv?.perMonth || 0} />
-                                <PayTr label="NBU" rate={dNbu?.rate ?? null} perH={dNbu?.perHour || 0} perM={dNbu?.perMonth || 0} />
+                                <PayTr label="Nichtberufsunfallvers. (NBU)" rate={dNbu?.rate ?? null} perH={dNbu?.perHour || 0} perM={dNbu?.perMonth || 0} />
                                 <PayTr label="Quellensteuer" rate={dQst?.rate ?? null} perH={dQst?.perHour || 0} perM={dQst?.perMonth || 0} />
                                 {dFak && (
                                   <PayTr label="FAK (nur Wallis)" rate={dFak.rate ?? null} perH={dFak.perHour || 0} perM={dFak.perMonth || 0} />

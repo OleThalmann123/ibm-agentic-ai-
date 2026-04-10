@@ -5,7 +5,7 @@
  * Calculates:
  * - Gross pay (Bruttolohn) with optional vacation surcharge
  * - Employer contributions (AG-Beiträge): AHV/IV/EO, ALV, FAK, VK, KTV, BU
- * - Employee deductions (AN-Beiträge): AHV/IV/EO, ALV, KTV, NBU, QSt, FAK (Wallis)
+ * - Employee deductions (AN-Beiträge): AHV/IV/EO, ALV, KTV, Nichtberufsunfallversicherung, QSt, FAK (Wallis)
  * - Total employer cost (Totalaufwand AG)
  * - Net pay (Nettolohn AN)
  * - Payment recipients breakdown (Adressaten)
@@ -22,7 +22,7 @@ export const RATES = {
 // In dieser Engine sind Beträge "perYear" faktisch pro Abrechnungsmonat (Monatssumme).
 // Für ALV/UVG plafonds verwenden wir deshalb den Monatscap.
 const MONTHLY_ALV_CAP = 12350; // CHF 148'200 / 12
-const MONTHLY_UVG_CAP = 12350; // CHF 148'200 / 12 (UVG/NBU)
+const MONTHLY_UVG_CAP = 12350; // CHF 148'200 / 12 (UVG/Nichtberufsunfallversicherung)
 
 // ─── FAK rates by canton ───
 export const FAK_RATES: Record<string, { name: string; rate: number }> = {
@@ -81,13 +81,13 @@ export interface PayrollInput {
   // Optional employer contributions
   ktvAG?: number;  // KTV rate (decimal)
   buAG?: number;   // BU rate (decimal)
-  nbuAG?: number;  // NBU AG rate (decimal) – when employer pays voluntarily
+  nbuAG?: number;  // Nichtberufsunfallversicherung AG rate (decimal) – when employer pays voluntarily
 
   // Optional employee deductions
   ktvAN?: number;  // KTV rate (decimal)
-  nbuAN?: number;  // NBU rate (decimal)
+  nbuAN?: number;  // Nichtberufsunfallversicherung rate (decimal)
 
-  // NBU status
+  // Nichtberufsunfallversicherung status
   nbuEligible?: boolean;
   nbuEmployerVoluntary?: boolean;
 
@@ -184,7 +184,7 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   }
   if (input.nbuEmployerVoluntary && input.nbuAG != null && input.nbuAG > 0) {
     agLines.push({
-      label: 'NBU (AG freiwillig)',
+      label: 'Nichtberufsunfallversicherung (AG freiwillig)',
       rate: input.nbuAG,
       perHour: anzahlStunden > 0 ? round5(uvgBaseY * input.nbuAG) / anzahlStunden : 0,
       perYear: round5(uvgBaseY * input.nbuAG),
@@ -214,7 +214,7 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   }
   if (input.nbuAN != null && input.nbuAN > 0 && !input.nbuEmployerVoluntary && input.nbuEligible !== false) {
     anLines.push({
-      label: 'NBU (AN)',
+      label: 'Nichtberufsunfallversicherung (AN)',
       rate: input.nbuAN,
       perHour: anzahlStunden > 0 ? round5(uvgBaseY * input.nbuAN) / anzahlStunden : 0,
       perYear: round5(uvgBaseY * input.nbuAN),
@@ -271,13 +271,13 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
     });
   }
 
-  // 4. Unfallversicherer (if any BU/NBU)
-  const uvTotal = round5(findPerYear(agLines, ['BU']) + findPerYear(anLines, ['NBU']));
+  // 4. Unfallversicherer (if any BU/Nichtberufsunfallversicherung)
+  const uvTotal = round5(findPerYear(agLines, ['BU']) + findPerYear(anLines, ['Nichtberufsunfallversicherung']));
   if (uvTotal > 0) {
     adressaten.push({
       label: 'Unfallversicherer',
       perYear: uvTotal,
-      details: 'BU (AG) + NBU (AN)',
+      details: 'BU (AG) + Nichtberufsunfallversicherung (AN)',
     });
   }
 

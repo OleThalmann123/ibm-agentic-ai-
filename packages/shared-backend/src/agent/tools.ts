@@ -260,8 +260,6 @@ export const contractDataSubmissionTool = tool(
       });
     }
 
-    const SUPPORTED_CANTONS = new Set(['LU', 'BE', 'ZH']);
-
     const normalizeCountry = (v: unknown): string => {
       if (v === null || v === undefined) return '';
       return String(v).trim().toUpperCase();
@@ -340,10 +338,6 @@ export const contractDataSubmissionTool = tool(
         corrections.push(`Canton standardized: ${insuranceData.canton.value} → ${upper}`);
         insuranceData.canton.value = upper;
       }
-      if (upper in SWISS_CANTONS && !SUPPORTED_CANTONS.has(upper)) {
-        validationErrors.push(`Canton not supported (only LU/BE/ZH): ${upper}`);
-        insuranceData.canton.note = insuranceData.canton.note || 'Aktuell nur LU/BE/ZH unterstützt';
-      }
     }
 
     // Derive canton from ZIP if not provided
@@ -353,14 +347,10 @@ export const contractDataSubmissionTool = tool(
       const prefix1 = zip.substring(0, 1);
       const derivedCanton = ZIP_TO_CANTON[prefix2] || ZIP_TO_CANTON[prefix1];
       if (derivedCanton) {
-        if (SUPPORTED_CANTONS.has(derivedCanton)) {
-          corrections.push(`Canton derived from ZIP ${zip}: ${derivedCanton} (${SWISS_CANTONS[derivedCanton]})`);
-          if (!insuranceData.canton) insuranceData.canton = {};
-          insuranceData.canton.value = derivedCanton;
-          insuranceData.canton.note = `Abgeleitet aus PLZ ${zip}`;
-        } else {
-          validationErrors.push(`Canton derived from ZIP ${zip} is not supported (only LU/BE/ZH): ${derivedCanton}`);
-        }
+        corrections.push(`Canton derived from ZIP ${zip}: ${derivedCanton} (${SWISS_CANTONS[derivedCanton]})`);
+        if (!insuranceData.canton) insuranceData.canton = {};
+        insuranceData.canton.value = derivedCanton;
+        insuranceData.canton.note = `Abgeleitet aus PLZ ${zip}`;
       }
     }
 
@@ -403,23 +393,23 @@ export const contractDataSubmissionTool = tool(
       }
     }
 
-    // Validate NBU split: employer_pct + employee_pct must equal total_rate_pct
+    // Validate Nichtberufsunfallversicherung split: employer_pct + employee_pct must equal 100%
     if (insuranceData.nbu_total_rate_pct?.value != null) {
       const total = Number(insuranceData.nbu_total_rate_pct.value);
       const empPct = Number(insuranceData.nbu_employee_pct?.value ?? 0);
       const agPct = Number(insuranceData.nbu_employer_pct?.value ?? 0);
 
-      // Auto-derive: if total is set but split is missing, default AN = total, AG = 0
+      // Auto-derive: if total is set but split is missing, default AN = 100% share, AG = 0%
       if (total > 0 && empPct === 0 && agPct === 0) {
         if (!insuranceData.nbu_employee_pct) insuranceData.nbu_employee_pct = {};
-        insuranceData.nbu_employee_pct.value = total;
-        insuranceData.nbu_employee_pct.note = insuranceData.nbu_employee_pct.note || 'Standard: AN zahlt 100% der NBU-Prämie';
+        insuranceData.nbu_employee_pct.value = 100;
+        insuranceData.nbu_employee_pct.note = insuranceData.nbu_employee_pct.note || 'Standard: AN zahlt 100% der Nichtberufsunfallversicherungs-Prämie';
         if (!insuranceData.nbu_employer_pct) insuranceData.nbu_employer_pct = {};
         insuranceData.nbu_employer_pct.value = 0;
-        corrections.push(`NBU split defaulted: AN = ${total}, AG = 0 (Standard: AN zahlt 100%)`);
-      } else if (total > 0 && Math.abs(empPct + agPct - total) > 0.0001) {
+        corrections.push('Nichtberufsunfallversicherung: AN = 100%, AG = 0% (Standard: AN zahlt 100%)');
+      } else if (total > 0 && empPct + agPct > 0 && Math.abs(empPct + agPct - 100) > 0.1) {
         validationErrors.push(
-          `NBU-Aufteilung stimmt nicht: AN (${empPct}) + AG (${agPct}) = ${empPct + agPct} ≠ Gesamt (${total})`,
+          `Nichtberufsunfallversicherungs-Aufteilung stimmt nicht: AN (${empPct}%) + AG (${agPct}%) = ${empPct + agPct}% ≠ 100%`,
         );
       }
 
@@ -427,9 +417,9 @@ export const contractDataSubmissionTool = tool(
       if (insuranceData.nbu_employer_voluntary?.value === true && total > 0) {
         if (!insuranceData.nbu_employer_pct) insuranceData.nbu_employer_pct = {};
         if (!insuranceData.nbu_employee_pct) insuranceData.nbu_employee_pct = {};
-        insuranceData.nbu_employer_pct.value = total;
+        insuranceData.nbu_employer_pct.value = 100;
         insuranceData.nbu_employee_pct.value = 0;
-        corrections.push('NBU: AG übernimmt freiwillig → AG = Gesamtsatz, AN = 0');
+        corrections.push('Nichtberufsunfallversicherung: AG übernimmt freiwillig → AG = 100%, AN = 0%');
       }
     }
 

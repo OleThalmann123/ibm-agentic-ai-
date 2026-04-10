@@ -190,9 +190,9 @@ export function calculateNbuDeduction(input: NbuDeductionInput): NbuDeductionRes
       employeeDeduction: 0,
       employerCost: 0,
       displayCase: 'D',
-      displayLabel: `NBU-Status unklar (Grenzfall). Bitte mit Versicherer klären und manuell bestätigen.`,
+      displayLabel: `Nichtberufsunfallversicherung-Status unklar (Grenzfall). Bitte mit Versicherer klären und manuell bestätigen.`,
       blocked: true,
-      blockReason: 'NBU-Grenzfall: Durchschnittliche Wochenstunden zwischen 7 und 8. Manuelle Freigabe erforderlich.',
+      blockReason: 'Nichtberufsunfallversicherung-Grenzfall: Durchschnittliche Wochenstunden zwischen 7 und 8. Manuelle Freigabe erforderlich.',
     };
   }
 
@@ -202,7 +202,7 @@ export function calculateNbuDeduction(input: NbuDeductionInput): NbuDeductionRes
       employeeDeduction: 0,
       employerCost: 0,
       displayCase: 'C',
-      displayLabel: 'NBU: Kein Abzug (Beschäftigung < 8h/Woche)',
+      displayLabel: 'Nichtberufsunfallversicherung: Kein Abzug (Beschäftigung < 8h/Woche)',
       blocked: false,
     };
   }
@@ -215,7 +215,7 @@ export function calculateNbuDeduction(input: NbuDeductionInput): NbuDeductionRes
       employeeDeduction: 0,
       employerCost: totalPremium,
       displayCase: 'B',
-      displayLabel: 'NBU vom Arbeitgeber freiwillig übernommen',
+      displayLabel: 'Nichtberufsunfallversicherung vom Arbeitgeber freiwillig übernommen',
       blocked: false,
     };
   }
@@ -260,15 +260,15 @@ export function validateNbuForPayroll(opts: {
   if (opts.nbuCalculatedDate) {
     const calcMonth = opts.nbuCalculatedDate.slice(0, 7);
     if (calcMonth < opts.currentMonth) {
-      errors.push('NBU-Status wurde im laufenden Monat nicht neu berechnet. Bitte zuerst NBU-Berechnung durchführen.');
+      errors.push('Nichtberufsunfallversicherung-Status wurde im laufenden Monat nicht neu berechnet. Bitte zuerst Neuberechnung durchführen.');
     }
   } else {
-    errors.push('NBU-Status wurde noch nie berechnet. Bitte zuerst NBU-Berechnung durchführen.');
+    errors.push('Nichtberufsunfallversicherung-Status wurde noch nie berechnet. Bitte zuerst Berechnung durchführen.');
   }
 
   // CHECK 2: Rate present when eligible
   if (opts.nbuEligible && (!opts.nbuTotalRatePct || opts.nbuTotalRatePct <= 0)) {
-    errors.push('NBU-Prämiensatz fehlt oder ist 0, obwohl NBU-Pflicht besteht. Lohnlauf nicht möglich.');
+    errors.push('Nichtberufsunfallversicherungs-Prämiensatz fehlt oder ist 0, obwohl Versicherungspflicht besteht. Lohnlauf nicht möglich.');
   }
 
   // CHECK 3: Split sums to total
@@ -287,7 +287,7 @@ export function validateNbuForPayroll(opts: {
 
   // CHECK 5: Borderline without confirmation
   if (opts.nbuBorderlineWarning && !opts.nbuManuallyConfirmed) {
-    errors.push('NBU-Grenzfall: Ø-Wochenstunden zwischen 7 und 8. Manuelle Freigabe erforderlich, bevor der Lohnlauf fortgesetzt werden kann.');
+    errors.push('Nichtberufsunfallversicherung-Grenzfall: Ø-Wochenstunden zwischen 7 und 8. Manuelle Freigabe erforderlich, bevor der Lohnlauf fortgesetzt werden kann.');
   }
 
   return {

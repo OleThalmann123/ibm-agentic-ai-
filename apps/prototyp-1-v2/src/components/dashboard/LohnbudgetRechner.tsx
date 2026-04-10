@@ -336,7 +336,7 @@ export function LohnbudgetRechner() {
           <InputField label="KTV-Satz AG" value={inputs.ktvAg} onChange={v => set('ktvAg', v)} placeholder="z.B. 0.007" type="number" />
           <InputField label="BU-Satz AG" value={inputs.buAg} onChange={v => set('buAg', v)} placeholder="z.B. 0.005" type="number" />
           <InputField label="KTV-Satz AN" value={inputs.ktvAn} onChange={v => set('ktvAn', v)} placeholder="z.B. 0.007" type="number" />
-          <InputField label="NBU-Satz AN" value={inputs.nbuAn} onChange={v => set('nbuAn', v)} placeholder="z.B. 0.01" type="number" />
+          <InputField label="Nichtberufsunfallversicherung (NBU) Satz AN" value={inputs.nbuAn} onChange={v => set('nbuAn', v)} placeholder="z.B. 0.01" type="number" />
         </div>
       </div>
 
@@ -375,7 +375,7 @@ export function LohnbudgetRechner() {
             <ResultRow label={`AHV/IV/EO (${fmtPct(AHV_IV_EO_SATZ)})`} std={result.ahvAn} jahr={result.ahvAnJahr} />
             <ResultRow label={`ALV (${fmtPct(ALV_SATZ)})`} std={result.alvAn} jahr={result.alvAnJahr} />
             {result.ktvAnStd !== null && <ResultRow label={`KTV AN (${fmtPct(result.ktvAnSatz!)})`} std={result.ktvAnStd} jahr={result.ktvAnJahr!} muted />}
-            {result.nbuAnStd !== null && <ResultRow label={`NBU AN (${fmtPct(result.nbuAnSatz!)})`} std={result.nbuAnStd} jahr={result.nbuAnJahr!} muted />}
+            {result.nbuAnStd !== null && <ResultRow label={`Nichtberufsunfallvers. AN (${fmtPct(result.nbuAnSatz!)})`} std={result.nbuAnStd} jahr={result.nbuAnJahr!} muted />}
             <ResultRow label="Total AN-Abzüge" std={result.totalAnStd} jahr={result.totalAnJahr} bold />
           </ResultSection>
 

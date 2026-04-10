@@ -105,10 +105,10 @@ const FIELD_LABELS: Record<string, string> = {
   'wage.payment_iban': 'Lohnkonto (IBAN)',
   'social_insurance.canton': 'Wohnsitzkanton',
   'social_insurance.accounting_method': 'Abrechnungsverfahren',
-  'social_insurance.nbu_total_rate_pct': 'NBU Gesamtprämiensatz (%) – manuell eingeben',
-  'social_insurance.nbu_employer_pct': 'NBU Arbeitgeber-Anteil (%) – aus Vertrag/optional',
-  'social_insurance.nbu_employee_pct': 'NBU Arbeitnehmer-Anteil (%) – aus Vertrag/optional',
-  'social_insurance.nbu_employer_voluntary': 'AG übernimmt NBU freiwillig – optional',
+  'social_insurance.nbu_total_rate_pct': 'Nichtberufsunfallversicherung (NBU) Gesamtprämiensatz (%) – manuell eingeben',
+  'social_insurance.nbu_employer_pct': 'Nichtberufsunfallversicherung (NBU) AG-Prämienanteil (%) – aus Vertrag/optional',
+  'social_insurance.nbu_employee_pct': 'Nichtberufsunfallversicherung (NBU) AN-Prämienanteil (%) – aus Vertrag/optional',
+  'social_insurance.nbu_employer_voluntary': 'AG übernimmt Nichtberufsunfallversicherung (NBU) freiwillig – optional',
   'social_insurance.nbu_insurer_name': 'Unfallversicherer – optional',
   'social_insurance.nbu_policy_number': 'Policennummer – optional',
 };
@@ -182,10 +182,7 @@ const SWISS_CANTON_OPTIONS: [string, string][] = [
   ['ZH', 'Zürich'],
 ];
 
-const SUPPORTED_CANTONS: Record<string, string> = { BE: 'Bern', LU: 'Luzern', ZH: 'Zürich' };
-
-// Grobe Ableitung Wohnsitzkanton aus PLZ-Präfix (MVP: nur LU/BE/ZH relevant).
-// (Entspricht der Logik im Agent-Tool; bewusst simpel gehalten.)
+// Grobe Ableitung Wohnsitzkanton aus PLZ-Präfix.
 const ZIP_PREFIX_TO_CANTON: Record<string, string> = {
   '28': 'BE', '29': 'BE', '30': 'BE', '31': 'BE', '33': 'BE', '34': 'BE', '35': 'BE', '36': 'BE', '37': 'BE', '38': 'BE', '39': 'BE',
   '54': 'LU', '55': 'LU', '60': 'LU', '61': 'LU',
@@ -229,11 +226,19 @@ function pctFieldToUiPercentString(value: unknown): string {
   if (value === null || value === undefined) return '';
   const n = typeof value === 'number' ? value : parseLooseNumber(String(value));
   if (n === null) return String(value).trim();
-  // NBU-Raten sind typischerweise 0.5–3%. Agent liefert Dezimal (0.012 = 1.2%).
+  // Nichtberufsunfallversicherungs-Raten sind typischerweise 0.5–3%. Agent liefert Dezimal (0.012 = 1.2%).
   // Heuristik: ≤ 0.5 → Dezimal (×100), > 0.5 → bereits Prozent.
   const pct = n <= 0.5 ? n * 100 : n;
   if (pct > 10) return '';
   return String(Number(pct.toFixed(2)));
+}
+
+function shareFieldToUiString(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  const n = typeof value === 'number' ? value : parseLooseNumber(String(value));
+  if (n === null) return String(value).trim();
+  if (n >= 0 && n <= 100) return String(Number(n.toFixed(0)));
+  return '';
 }
 
 export type PopupAttentionField = {
@@ -1053,8 +1058,8 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
       );
       setCanton(data.canton || '');
       setNbuTotal(pctFieldToUiPercentString(data.nbu_total || data.nbu_total_rate_pct));
-      setNbuEmployer(pctFieldToUiPercentString(data.nbu_employer || data.nbu_employer_pct));
-      setNbuEmployee(pctFieldToUiPercentString(data.nbu_employee || data.nbu_employee_pct));
+      setNbuEmployer(shareFieldToUiString(data.nbu_employer || data.nbu_employer_pct));
+      setNbuEmployee(shareFieldToUiString(data.nbu_employee || data.nbu_employee_pct));
       setNbuEmployerVoluntary(data.nbu_employer_voluntary === true);
       setNbuInsurerName(data.nbu_insurer_name || '');
       setNbuPolicyNumber(data.nbu_policy_number || '');
@@ -1130,7 +1135,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
         }
       }
       setField('canton', si.canton, setCanton);
-      // NBU-Gesamtprämiensatz wird NICHT aus der KI-Extraktion übernommen –
+      // Nichtberufsunfallversicherungs-Gesamtprämiensatz wird NICHT aus der KI-Extraktion übernommen –
       // muss zwingend manuell gemäss Versicherungspolice eingegeben werden.
       // Die AG/AN-Aufteilung KANN hingegen aus dem Arbeitsvertrag extrahiert werden.
       if (si.nbu_employer_pct) cMap.nbuEmployer = si.nbu_employer_pct;
@@ -1138,8 +1143,8 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
       if (si.nbu_employer_voluntary) cMap.nbuEmployerVoluntary = si.nbu_employer_voluntary;
       if (si.nbu_insurer_name) cMap.nbuInsurerName = si.nbu_insurer_name;
       if (si.nbu_policy_number) cMap.nbuPolicyNumber = si.nbu_policy_number;
-      setNbuEmployer(pctFieldToUiPercentString(si.nbu_employer_pct?.value));
-      setNbuEmployee(pctFieldToUiPercentString(si.nbu_employee_pct?.value));
+      setNbuEmployer(shareFieldToUiString(si.nbu_employer_pct?.value));
+      setNbuEmployee(shareFieldToUiString(si.nbu_employee_pct?.value));
       if (si.nbu_employer_voluntary?.value === true) setNbuEmployerVoluntary(true);
       if (si.nbu_insurer_name?.value) setNbuInsurerName(String(si.nbu_insurer_name.value));
       if (si.nbu_policy_number?.value) setNbuPolicyNumber(String(si.nbu_policy_number.value));
@@ -1646,9 +1651,6 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                 </option>
               ))}
             </select>
-            {canton && !SUPPORTED_CANTONS[canton] && (
-              <p className="mt-1 text-xs text-amber-700">Kanton wird aktuell nicht abgedeckt. Abgedeckte Kantone: {Object.values(SUPPORTED_CANTONS).join(', ')}.</p>
-            )}
           </>
         );
       case 'nbuTotal':
@@ -1658,13 +1660,13 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
         );
       case 'nbuEmployer':
         return (
-          <input type="number" min={0} max={100} step={0.01} className={pIn} placeholder="z. B. 0.75"
+          <input type="number" min={0} max={100} step={1} className={pIn} placeholder="z. B. 0.75"
             value={nbuEmployer} onChange={(e) => setNbuEmployer(e.target.value)}
             disabled={nbuEmployerVoluntary} />
         );
       case 'nbuEmployee':
         return (
-          <input type="number" min={0} max={100} step={0.01} className={pIn} placeholder="z. B. 0.75"
+          <input type="number" min={0} max={100} step={1} className={pIn} placeholder="z. B. 0.75"
             value={nbuEmployee} onChange={(e) => setNbuEmployee(e.target.value)}
             disabled={nbuEmployerVoluntary} />
         );
@@ -2340,35 +2342,29 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                       ))}
                     </select>
                   </MiniField>
-                  {canton && !SUPPORTED_CANTONS[canton] && (
-                    <div className="col-span-2 md:col-span-4 bg-amber-50 rounded-xl border border-amber-200 p-3 text-sm text-amber-800 flex items-start gap-2">
-                      <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                      <span>Kanton «{SWISS_CANTON_OPTIONS.find(([c]) => c === canton)?.[1] ?? canton}» wird aktuell nicht abgedeckt. Abgedeckte Kantone: {Object.values(SUPPORTED_CANTONS).join(', ')}.</span>
-                    </div>
-                  )}
                   <div className="col-span-2 md:col-span-4 flex items-start gap-2.5 rounded-lg border border-blue-200 bg-blue-50/60 px-4 py-3 text-sm text-blue-800">
                     <HelpCircle className="w-4 h-4 mt-0.5 shrink-0 text-blue-500" />
-                    <span>Der <strong>NBU-Gesamtprämiensatz</strong> muss zwingend manuell eingegeben werden – entnehmen Sie ihn Ihrer Versicherungspolice (typischerweise 0.5–3&nbsp;%). Die Aufteilung in AG-/AN-Anteil kann aus dem Arbeitsvertrag übernommen werden.</span>
+                    <span>Der <strong>Nichtberufsunfallversicherungs-Gesamtprämiensatz (NBU)</strong> muss zwingend manuell eingegeben werden – entnehmen Sie ihn Ihrer Versicherungspolice (typischerweise 0.5–3&nbsp;%). Die Aufteilung in AG-/AN-Anteil kann aus dem Arbeitsvertrag übernommen werden.</span>
                   </div>
-                  <MiniField title="NBU Gesamtprämiensatz (%) – manuell" {...fieldProps('nbuTotal')} hasValue={!!nbuTotal}
+                  <MiniField title="Nichtberufsunfallvers. (NBU) Gesamtprämiensatz (%) – manuell" {...fieldProps('nbuTotal')} hasValue={!!nbuTotal}
                     hint="Gesamtprämiensatz gemäss Ihrer Versicherungspolice (typ. 0.5–3%)"
                     error={nbuTotal && parseFloat(nbuTotal) > 5 ? 'Unrealistisch hoch – Prämiensätze liegen typischerweise bei 0.5–3%' : undefined}>
                     <input type="number" min={0} max={10} step="0.01" placeholder="z.B. 1.50"
                       value={nbuTotal} onChange={e => setNbuTotal(e.target.value)} className={inputStyle} />
                   </MiniField>
-                  <MiniField title="NBU Arbeitgeber-Anteil (%) – optional" {...fieldProps('nbuEmployer')} hasValue={!!nbuEmployer}
-                    error={nbuTotal && nbuEmployer && nbuEmployee && Math.abs(parseFloat(nbuEmployer || '0') + parseFloat(nbuEmployee || '0') - parseFloat(nbuTotal || '0')) > 0.001 ? 'AG + AN muss dem Gesamtsatz entsprechen' : undefined}>
-                    <input type="number" min={0} max={10} step="0.01" placeholder="z.B. 0.75"
+                  <MiniField title="Nichtberufsunfallvers. (NBU) AG-Prämienanteil (%) – optional" {...fieldProps('nbuEmployer')} hasValue={!!nbuEmployer}
+                    error={nbuTotal && nbuEmployer && nbuEmployee && Math.abs(parseFloat(nbuEmployer || '0') + parseFloat(nbuEmployee || '0') - 100) > 0.1 ? 'AG-Anteil + AN-Anteil muss 100% ergeben' : undefined}>
+                    <input type="number" min={0} max={100} step="1" placeholder="z.B. 0"
                       value={nbuEmployer} onChange={e => setNbuEmployer(e.target.value)}
                       disabled={nbuEmployerVoluntary} className={inputStyle} />
                   </MiniField>
-                  <MiniField title="NBU Arbeitnehmer-Anteil (%) – optional" {...fieldProps('nbuEmployee')} hasValue={!!nbuEmployee}
-                    error={nbuTotal && nbuEmployer && nbuEmployee && Math.abs(parseFloat(nbuEmployer || '0') + parseFloat(nbuEmployee || '0') - parseFloat(nbuTotal || '0')) > 0.001 ? 'AG + AN muss dem Gesamtsatz entsprechen' : undefined}>
-                    <input type="number" min={0} max={10} step="0.01" placeholder="z.B. 0.75"
+                  <MiniField title="Nichtberufsunfallvers. (NBU) AN-Prämienanteil (%) – optional" {...fieldProps('nbuEmployee')} hasValue={!!nbuEmployee}
+                    error={nbuTotal && nbuEmployer && nbuEmployee && Math.abs(parseFloat(nbuEmployer || '0') + parseFloat(nbuEmployee || '0') - 100) > 0.1 ? 'AG-Anteil + AN-Anteil muss 100% ergeben' : undefined}>
+                    <input type="number" min={0} max={100} step="1" placeholder="z.B. 100"
                       value={nbuEmployee} onChange={e => setNbuEmployee(e.target.value)}
                       disabled={nbuEmployerVoluntary} className={inputStyle} />
                   </MiniField>
-                  <MiniField title="AG übernimmt NBU freiwillig – optional" {...fieldProps('nbuEmployerVoluntary')} hasValue={nbuEmployerVoluntary}>
+                  <MiniField title="AG übernimmt Nichtberufsunfallvers. (NBU) freiwillig – optional" {...fieldProps('nbuEmployerVoluntary')} hasValue={nbuEmployerVoluntary}>
                     <label className="flex items-center gap-2 cursor-pointer mt-1">
                       <input type="checkbox" checked={nbuEmployerVoluntary}
                         onChange={e => {

@@ -106,27 +106,27 @@ export function calculatePayslip(input: PayslipInput): PayslipResult {
 
   if (nbuEligible === false) {
     deductions.push({
-      label: 'NBU',
+      label: 'Nichtberufsunfallversicherung',
       rate: null,
       perHour: 0,
       perMonth: 0,
       enabled: true,
     });
-    nbuDisplayNote = 'NBU: Kein Abzug (Beschäftigung < 8h/Woche)';
+    nbuDisplayNote = 'Nichtberufsunfallversicherung: Kein Abzug (Beschäftigung < 8h/Woche)';
   } else if (nbuEmployerVoluntary && nbu != null) {
     deductions.push({
-      label: 'NBU',
+      label: 'Nichtberufsunfallversicherung',
       rate: null,
       perHour: 0,
       perMonth: 0,
       enabled: true,
     });
-    nbuDisplayNote = 'NBU vom Arbeitgeber freiwillig übernommen';
+    nbuDisplayNote = 'Nichtberufsunfallversicherung vom Arbeitgeber freiwillig übernommen';
   } else if (nbu != null && nbu > 0) {
     const uvgBase = Math.min(grossPerMonth, PAYSLIP_UVG_CAP);
     const uvgBasePerHour = hours > 0 ? uvgBase / hours : grossPerHour;
     deductions.push({
-      label: 'NBU',
+      label: 'Nichtberufsunfallversicherung',
       rate: nbu,
       perHour: uvgBasePerHour * nbu,
       perMonth: round5(uvgBase * nbu),

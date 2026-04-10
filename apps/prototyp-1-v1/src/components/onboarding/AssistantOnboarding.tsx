@@ -627,10 +627,10 @@ export function AssistantOnboarding({ onComplete, onClose }: AssistantOnboarding
                       <option value="ZH">Zürich</option>
                     </select>
                   </MiniField>
-                  <MiniField status={getStatus('nbuEmployer', nbuEmployer)} title="NBU AG %" message={getMessage('nbuEmployer', nbuEmployer)}>
+                  <MiniField status={getStatus('nbuEmployer', nbuEmployer)} title="Nichtberufsunfallvers. AG-Anteil (%)" message={getMessage('nbuEmployer', nbuEmployer)}>
                     <input type="text" value={nbuEmployer} onChange={e => setNbuEmployer(e.target.value)} className={inputStyle} />
                   </MiniField>
-                  <MiniField status={getStatus('nbuEmployee', nbuEmployee)} title="NBU AN %" message={getMessage('nbuEmployee', nbuEmployee)}>
+                  <MiniField status={getStatus('nbuEmployee', nbuEmployee)} title="Nichtberufsunfallvers. AN-Anteil (%)" message={getMessage('nbuEmployee', nbuEmployee)}>
                     <input type="text" value={nbuEmployee} onChange={e => setNbuEmployee(e.target.value)} className={inputStyle} />
                   </MiniField>
                 </div>
