@@ -30,7 +30,19 @@ const formatAIWarning = (code: string) => {
   };
   return map[code] || code.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
 };
-const REQUIRED_FIELDS = ['firstName', 'lastName', 'birthDate', 'ahvNumber', 'contractStart', 'hoursPerWeek', 'hourlyRate'];
+const REQUIRED_FIELDS = [
+  'firstName',
+  'lastName',
+  'birthDate',
+  'ahvNumber',
+  'contractStart',
+  'hoursPerWeek',
+  'hourlyRate',
+  'nbuTotal',
+  'nbuEmployer',
+  'nbuEmployee',
+  'nbuEmployerVoluntary',
+];
 
 const PIPELINE_TIMEOUT_MS = 300_000;
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
@@ -107,9 +119,9 @@ const FIELD_LABELS: Record<string, string> = {
   'social_insurance.canton': 'Wohnsitzkanton',
   'social_insurance.accounting_method': 'Abrechnungsverfahren',
   'social_insurance.nbu_total_rate_pct': 'Nichtberufsunfallversicherung (NBU) Gesamtprämiensatz (%) – manuell eingeben',
-  'social_insurance.nbu_employer_pct': 'Nichtberufsunfallversicherung (NBU) AG-Prämienanteil (%) – aus Vertrag/optional',
-  'social_insurance.nbu_employee_pct': 'Nichtberufsunfallversicherung (NBU) AN-Prämienanteil (%) – aus Vertrag/optional',
-  'social_insurance.nbu_employer_voluntary': 'AG übernimmt Nichtberufsunfallversicherung (NBU) freiwillig – optional',
+  'social_insurance.nbu_employer_pct': 'Nichtberufsunfallversicherung (NBU) AG-Prämienanteil (%) – aus Vertrag',
+  'social_insurance.nbu_employee_pct': 'Nichtberufsunfallversicherung (NBU) AN-Prämienanteil (%) – aus Vertrag',
+  'social_insurance.nbu_employer_voluntary': 'AG übernimmt Nichtberufsunfallversicherung (NBU) freiwillig',
   'social_insurance.nbu_insurer_name': 'Unfallversicherer – optional',
   'social_insurance.nbu_policy_number': 'Policennummer – optional',
 };
@@ -269,10 +281,6 @@ function buildPopupAttentionFields(
   const out: PopupAttentionField[] = [];
   const OPTIONAL_MISSING_PATHS = new Set<string>([
     'assistant.phone',
-    'social_insurance.nbu_total_rate_pct',
-    'social_insurance.nbu_employer_pct',
-    'social_insurance.nbu_employee_pct',
-    'social_insurance.nbu_employer_voluntary',
     'social_insurance.nbu_insurer_name',
     'social_insurance.nbu_policy_number',
   ]);
@@ -1000,6 +1008,10 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
     // UI-Regel: Leere Werte dürfen nie als OK erscheinen.
     if (key === 'canton' && !canton.trim()) return 'review_required';
 
+    if (key === 'nbuTotal' && !nbuTotal.trim()) return 'review_required';
+    if (key === 'nbuEmployer' && !nbuEmployerVoluntary && !nbuEmployer.trim()) return 'review_required';
+    if (key === 'nbuEmployee' && !nbuEmployerVoluntary && !nbuEmployee.trim()) return 'review_required';
+
     const field = confidenceMap[key];
     if (!field) return undefined;
 
@@ -1337,6 +1349,42 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
       return;
     }
 
+    const nbuTotalN = parseLooseNumber(nbuTotal);
+    if (nbuTotalN === null || nbuTotalN <= 0) {
+      toast.error('NBU unvollständig', {
+        description: 'Bitte den Nichtberufsunfall-Gesamtprämiensatz (%) eingeben.',
+      });
+      return;
+    }
+
+    let nbuEmployerOut = nbuEmployer.trim();
+    let nbuEmployeeOut = nbuEmployee.trim();
+    if (nbuEmployerVoluntary) {
+      nbuEmployerOut = nbuTotal.trim();
+      nbuEmployeeOut = '0';
+    } else {
+      if (!nbuEmployerOut || !nbuEmployeeOut) {
+        toast.error('NBU unvollständig', {
+          description: 'Bitte AG- und AN-Prämienanteil (%) eingeben.',
+        });
+        return;
+      }
+      const ag = parseFloat(nbuEmployerOut);
+      const an = parseFloat(nbuEmployeeOut);
+      if (!Number.isFinite(ag) || !Number.isFinite(an)) {
+        toast.error('NBU ungültig', {
+          description: 'AG- und AN-Prämienanteil müssen Zahlen sein.',
+        });
+        return;
+      }
+      if (Math.abs(ag + an - 100) > 0.1) {
+        toast.error('NBU ungültig', {
+          description: 'AG-Anteil + AN-Anteil muss 100% ergeben.',
+        });
+        return;
+      }
+    }
+
     setSaving(true);
     const fullName = `${firstName} ${lastName}`.trim();
     
@@ -1371,9 +1419,9 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
         billing_method:
           billingMethod === 'ordinary' ? billingMethod : null,
         canton,
-        nbu_total: nbuTotal,
-        nbu_employer: nbuEmployer,
-        nbu_employee: nbuEmployee,
+        nbu_total: nbuTotal.trim(),
+        nbu_employer: nbuEmployerOut,
+        nbu_employee: nbuEmployeeOut,
         nbu_employer_voluntary: nbuEmployerVoluntary,
         nbu_insurer_name: nbuInsurerName || null,
         nbu_policy_number: nbuPolicyNumber || null,
@@ -2201,19 +2249,19 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                     <input type="number" min={0} max={10} step="0.01" placeholder="z.B. 1.50"
                       value={nbuTotal} onChange={e => setNbuTotal(e.target.value)} className={inputStyle} />
                   </MiniField>
-                  <MiniField title="Nichtberufsunfallvers. (NBU) AG-Prämienanteil (%) – optional" {...fieldProps('nbuEmployer')} hasValue={!!nbuEmployer}
+                  <MiniField title="Nichtberufsunfallvers. (NBU) AG-Prämienanteil (%)" {...fieldProps('nbuEmployer')} hasValue={nbuEmployerVoluntary || !!nbuEmployer}
                     error={nbuTotal && nbuEmployer && nbuEmployee && Math.abs(parseFloat(nbuEmployer || '0') + parseFloat(nbuEmployee || '0') - 100) > 0.1 ? 'AG-Anteil + AN-Anteil muss 100% ergeben' : undefined}>
                     <input type="number" min={0} max={100} step="1" placeholder="z.B. 0"
                       value={nbuEmployer} onChange={e => setNbuEmployer(e.target.value)}
                       disabled={nbuEmployerVoluntary} className={inputStyle} />
                   </MiniField>
-                  <MiniField title="Nichtberufsunfallvers. (NBU) AN-Prämienanteil (%) – optional" {...fieldProps('nbuEmployee')} hasValue={!!nbuEmployee}
+                  <MiniField title="Nichtberufsunfallvers. (NBU) AN-Prämienanteil (%)" {...fieldProps('nbuEmployee')} hasValue={nbuEmployerVoluntary || !!nbuEmployee}
                     error={nbuTotal && nbuEmployer && nbuEmployee && Math.abs(parseFloat(nbuEmployer || '0') + parseFloat(nbuEmployee || '0') - 100) > 0.1 ? 'AG-Anteil + AN-Anteil muss 100% ergeben' : undefined}>
                     <input type="number" min={0} max={100} step="1" placeholder="z.B. 100"
                       value={nbuEmployee} onChange={e => setNbuEmployee(e.target.value)}
                       disabled={nbuEmployerVoluntary} className={inputStyle} />
                   </MiniField>
-                  <MiniField title="AG übernimmt Nichtberufsunfallvers. (NBU) freiwillig – optional" {...fieldProps('nbuEmployerVoluntary')} hasValue={nbuEmployerVoluntary}>
+                  <MiniField title="AG übernimmt Nichtberufsunfallvers. (NBU) freiwillig" {...fieldProps('nbuEmployerVoluntary')} hasValue>
                     <label className="flex items-center gap-2 cursor-pointer mt-1">
                       <input type="checkbox" checked={nbuEmployerVoluntary}
                         onChange={e => {
