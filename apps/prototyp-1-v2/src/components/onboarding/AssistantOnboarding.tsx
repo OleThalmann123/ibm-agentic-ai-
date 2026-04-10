@@ -109,7 +109,6 @@ const FIELD_LABELS: Record<string, string> = {
   'contract_terms.end_date': 'Vertragsende',
   'contract_terms.is_indefinite': 'Unbefristet',
   'contract_terms.hours_per_week': 'Stunden/Woche',
-  'contract_terms.hours_per_month': 'Stunden/Monat',
   'contract_terms.notice_period_days': 'Kündigungsfrist (Tage)',
   'wage.wage_type': 'Lohnart',
   'wage.hourly_rate': 'Stundenlohn (CHF)',
@@ -146,7 +145,6 @@ const FIELD_KEY_TO_PATH: Record<string, string> = {
   contractUnbefristet: 'contract_terms.is_indefinite',
   noticePeriodDays: 'contract_terms.notice_period_days',
   hoursPerWeek: 'contract_terms.hours_per_week',
-  hoursPerMonth: 'contract_terms.hours_per_month',
   wageType: 'wage.wage_type',
   hourlyRate: 'wage.hourly_rate',
   vacationWeeks: 'wage.vacation_weeks',
@@ -165,6 +163,46 @@ const FIELD_KEY_TO_PATH: Record<string, string> = {
 const PATH_TO_FIELD_KEY: Record<string, string> = Object.fromEntries(
   Object.entries(FIELD_KEY_TO_PATH).map(([k, v]) => [v, k]),
 );
+
+/** Reihenfolge „Prüfen“/„Ergänzen“-Popup: wie Hauptformular (Stammdaten → Vertrag → Lohn → NBU). */
+const REVIEW_POPUP_PATH_ORDER: readonly string[] = [
+  'assistant.first_name',
+  'assistant.last_name',
+  'assistant.street',
+  'assistant.zip',
+  'assistant.city',
+  'assistant.birth_date',
+  'assistant.ahv_number',
+  'assistant.gender',
+  'assistant.phone',
+  'assistant.email',
+  'assistant.country',
+  'assistant.civil_status',
+  'assistant.residence_permit',
+  'contract_terms.start_date',
+  'contract_terms.is_indefinite',
+  'contract_terms.end_date',
+  'contract_terms.notice_period_days',
+  'contract_terms.hours_per_week',
+  'wage.wage_type',
+  'wage.hourly_rate',
+  'wage.vacation_weeks',
+  'wage.holiday_supplement_pct',
+  'wage.payment_iban',
+  'social_insurance.accounting_method',
+  'social_insurance.canton',
+  'social_insurance.nbu_total_rate_pct',
+  'social_insurance.nbu_employer_pct',
+  'social_insurance.nbu_employee_pct',
+  'social_insurance.nbu_employer_voluntary',
+  'social_insurance.nbu_insurer_name',
+  'social_insurance.nbu_policy_number',
+];
+
+function popupAttentionPathOrderIndex(path: string): number {
+  const i = REVIEW_POPUP_PATH_ORDER.indexOf(path);
+  return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+}
 
 const SWISS_CANTON_OPTIONS: [string, string][] = [
   ['AG', 'Aargau'],
@@ -366,6 +404,9 @@ function buildPopupAttentionFields(
   out.sort((a, b) => {
     if (a.missing !== b.missing) return a.missing ? -1 : 1;
     if (a.needsReview !== b.needsReview) return a.needsReview ? -1 : 1;
+    const oa = popupAttentionPathOrderIndex(a.path);
+    const ob = popupAttentionPathOrderIndex(b.path);
+    if (oa !== ob) return oa - ob;
     return a.label.localeCompare(b.label, 'de');
   });
 
@@ -1124,7 +1165,6 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
       if (ct.end_date) cMap.contractEnd = ct.end_date;
       if (ct.is_indefinite) cMap.contractUnbefristet = ct.is_indefinite;
       setField('hoursPerWeek', ct.hours_per_week, setHoursPerWeek);
-      setField('hoursPerMonth', ct.hours_per_month, setHoursPerMonth);
       setField('noticePeriodDays', ct.notice_period_days, setNoticePeriodDays);
     }
 
@@ -1171,17 +1211,6 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
       setCountry(suggestedIso2);
     } else if (cMap.country?.value != null) {
       setCountry(normalizeCountryToIso2(String(cMap.country.value)));
-    }
-
-    // Vertragswerte können "pro Monat" angegeben sein – UI arbeitet mit Stunden/Woche.
-    // Regel: Falls keine Wochenstunden vorhanden sind, Monatsstunden auf 4 Wochen umrechnen.
-    const weekRaw = ct?.hours_per_week?.value;
-    const monthRaw = ct?.hours_per_month?.value;
-    if ((weekRaw == null || String(weekRaw).trim() === '') && monthRaw != null && String(monthRaw).trim() !== '') {
-      const n = Number(monthRaw);
-      if (Number.isFinite(n) && n > 0) {
-        setHoursPerWeek(String(Number((n / 4).toFixed(2))));
-      }
     }
 
     setConfidenceMap(cMap);
@@ -1634,19 +1663,6 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
             onChange={(e) => setHoursPerWeek(e.target.value)}
           />
         );
-      case 'hoursPerMonth':
-        return (
-          <input
-            type="number"
-            min={0}
-            max={744}
-            step={0.5}
-            className={pIn}
-            placeholder="z. B. 86"
-            value={hoursPerMonth}
-            onChange={(e) => setHoursPerMonth(e.target.value)}
-          />
-        );
       case 'wageType':
         return (
           <select value={wageType} onChange={(e) => setWageType(e.target.value)} className={`${selectStyle} mt-1`}>
@@ -1752,51 +1768,37 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="rounded-2xl border bg-card px-5 py-4 sm:px-6 sm:py-5">
-          <button onClick={onClose} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-2 transition-colors">
+      {/* Header: nur Zurück-Link (Titel/Intro entfallen – Inhalt folgt im Workflow-Card bzw. Upload-Bereich) */}
+      <div className="rounded-2xl border bg-card px-5 py-3 sm:px-6 sm:py-3.5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
             <ArrowLeft className="w-4 h-4" /> Zurück zur Übersicht
           </button>
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-start gap-3 min-w-0">
-              <div className="w-12 h-12 rounded-2xl bg-white/80 border border-primary/20 flex items-center justify-center shrink-0 overflow-hidden shadow-sm">
-                <img src={asklepiosLogoUrl} alt="Asklepios" className="w-full h-full object-contain p-1" draggable={false} />
-              </div>
-              <div className="min-w-0">
-                <p className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
-                  Agentic Workflow
-                </p>
-                <h1 className="text-2xl font-bold leading-tight">
-                  {editAssistant ? 'Assistenzperson bearbeiten' : 'Neue Assistenzperson erfassen'}
-                </h1>
-                <p className="text-muted-foreground mt-1">
-                  {editAssistant
-                    ? 'Überprüfen und ändern Sie die Stammdaten und Abrechnungsdetails.'
-                    : 'Asklepios hilft dir bei der Anlage deiner Assistenzperson, indem er Stamm- und Vertragsdaten für dich aus dem Arbeitsvertrag ausliest.'}
-                </p>
-              </div>
+          {step === 'upload' ? (
+            <div className="hidden sm:block">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.doc,.docx,.txt,image/*,application/pdf"
+                onChange={handleUpload}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-foreground text-background font-bold text-sm shadow-sm hover:bg-foreground/90 transition-colors cursor-pointer"
+              >
+                <UploadCloud className="w-4 h-4" />
+                Vertrag hochladen & scannen
+              </button>
             </div>
-            {step === 'upload' ? (
-              <div className="hidden sm:block">
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf,.doc,.docx,.txt,image/*,application/pdf"
-                  onChange={handleUpload}
-                  className="hidden"
-                />
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-foreground text-background font-bold text-sm shadow-sm hover:bg-foreground/90 transition-colors cursor-pointer"
-                >
-                  <UploadCloud className="w-4 h-4" />
-                  Vertrag hochladen & scannen
-                </button>
-              </div>
-            ) : null}
-          </div>
+          ) : null}
         </div>
+      </div>
 
       {/* Upload */}
       {step === 'upload' && (
