@@ -1,14 +1,16 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useId } from 'react';
 import { FileText, ShieldCheck, CheckCircle2, Clock } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
-const DATAPOINTS = [
-  'Name', 'Geburtsdatum', 'AHV-Nummer', 'Stundenlohn',
-  'Pensum %', 'Ferienanspruch', 'Vertragsbeginn', 'Kündigungsfrist',
-  'BVG-pflichtig', 'Nachtarbeit', 'IV-Kategorie', 'IBAN',
-];
+/** Anzeige-Dauer: länger als typische Extraktion, damit der Ring nicht auf 0 springt bevor fertig. */
+const TOTAL_SECONDS = 300;
 
-const DP_DELAYS = [3, 5, 8, 11, 15, 19, 24, 28, 33, 38, 42, 47];
+const PHASES = [
+  { label: 'Stammdaten & Personalien', threshold: 0.18 },
+  { label: 'Lohn, Arbeitszeit & Ferien', threshold: 0.38 },
+  { label: 'Vertragslaufzeit & Kündigung', threshold: 0.58 },
+  { label: 'Sozialversicherung & IV', threshold: 0.78 },
+] as const;
 
 interface Props {
   asklepiosLogoUrl: string;
@@ -16,35 +18,31 @@ interface Props {
 }
 
 export function ExtractingScreen({ asklepiosLogoUrl, onCancel }: Props) {
-  const [remaining, setRemaining] = useState(120);
-  const [doneDps, setDoneDps] = useState<Set<number>>(new Set());
-  const [activeDp, setActiveDp] = useState<number | null>(null);
+  const ringGradId = useId().replace(/:/g, '');
+  const [remaining, setRemaining] = useState(TOTAL_SECONDS);
+  const [elapsedRatio, setElapsedRatio] = useState(0);
   const startRef = useRef(Date.now());
 
   useEffect(() => {
-    const iv = setInterval(() => {
+    const tick = () => {
       const elapsed = (Date.now() - startRef.current) / 1000;
-      setRemaining(Math.max(0, 120 - Math.floor(elapsed)));
-
-      const newDone = new Set<number>();
-      let nextActive: number | null = null;
-      DP_DELAYS.forEach((delay, i) => {
-        if (elapsed >= delay) newDone.add(i);
-        else if (elapsed >= delay - 1.5 && nextActive === null) nextActive = i;
-      });
-      setDoneDps(newDone);
-      setActiveDp(nextActive);
-    }, 500);
+      setRemaining(Math.max(0, TOTAL_SECONDS - Math.floor(elapsed)));
+      setElapsedRatio(Math.min(1, elapsed / TOTAL_SECONDS));
+    };
+    tick();
+    const iv = setInterval(tick, 500);
     return () => clearInterval(iv);
   }, []);
 
   const mins = Math.floor(remaining / 60);
   const secs = remaining % 60;
   const timeStr = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-  const progress = ((120 - remaining) / 120) * 100;
+  const progressPct = ((TOTAL_SECONDS - remaining) / TOTAL_SECONDS) * 100;
 
   const circumference = 2 * Math.PI * 88;
-  const dashOffset = circumference - (progress / 100) * circumference;
+  const dashOffset = circumference - (progressPct / 100) * circumference;
+
+  const fieldsRead = Math.min(32, Math.floor(elapsedRatio * 34));
 
   return (
     <div className="bg-card rounded-2xl border overflow-hidden relative">
@@ -64,13 +62,8 @@ export function ExtractingScreen({ asklepiosLogoUrl, onCancel }: Props) {
           30% { opacity: .7; }
           100% { transform: translateX(140%); opacity: .25; }
         }
-        @keyframes dp-in {
-          from { opacity: 0; transform: translateX(6px); }
-          to { opacity: 1; transform: translateX(0); }
-        }
       `}</style>
 
-      {/* Background */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute inset-0 bg-[#020617]" aria-hidden />
         <div className="absolute inset-0 bg-[radial-gradient(1200px_600px_at_15%_0%,rgba(59,130,246,0.25),transparent_55%),radial-gradient(900px_520px_at_85%_15%,rgba(168,85,247,0.25),transparent_50%),radial-gradient(700px_520px_at_40%_110%,rgba(16,185,129,0.18),transparent_55%),linear-gradient(to_bottom,rgb(15_23_42),rgb(2_6_23))]" aria-hidden />
@@ -96,9 +89,8 @@ export function ExtractingScreen({ asklepiosLogoUrl, onCancel }: Props) {
         />
       </div>
 
-      {/* Header */}
-      <div className="px-8 py-6 text-white relative">
-        <div className="flex items-start gap-4">
+      <div className="px-6 sm:px-8 py-5 sm:py-6 text-white relative">
+        <div className="flex items-start gap-3 sm:gap-4">
           <div className="relative w-12 h-12 flex-shrink-0">
             <div className="absolute inset-0 rounded-2xl bg-white/10 backdrop-blur border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.35)]" />
             <div
@@ -117,25 +109,23 @@ export function ExtractingScreen({ asklepiosLogoUrl, onCancel }: Props) {
             <p className="text-[11px] font-semibold tracking-wide text-white/70 uppercase">
               Agentic Workflow aktiv
             </p>
-            <h3 className="text-lg font-bold leading-tight">Asklepios legt deine Assistenzperson an</h3>
-            <p className="text-sm text-white/70">Vertrag wird analysiert und Stammdaten werden vorbereitet.</p>
+            <h3 className="text-base sm:text-lg font-bold leading-tight">Asklepios legt deine Assistenzperson an</h3>
+            <p className="text-xs sm:text-sm text-white/70 mt-0.5">Vertrag wird analysiert und Stammdaten werden vorbereitet.</p>
           </div>
-          <Badge variant="outline" className="flex-shrink-0 mt-1 gap-1.5 rounded-full border-white/20 bg-white/5 text-white/80 px-3 py-1.5 text-[11px] font-medium backdrop-blur">
-            <Clock className="w-3.5 h-3.5 text-white/60" />
-            ca. 2 Min.
+          <Badge variant="outline" className="flex-shrink-0 mt-0.5 gap-1.5 rounded-full border-white/20 bg-white/5 text-white/80 px-2.5 sm:px-3 py-1.5 text-[10px] sm:text-[11px] font-medium backdrop-blur whitespace-nowrap">
+            <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-white/60" />
+            ca. 3–5 Min.
           </Badge>
         </div>
       </div>
 
-      {/* Main content: Timer + Pipeline + Datapoints */}
-      <div className="relative px-8 pb-8 grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-8 items-start">
+      <div className="relative px-6 sm:px-8 pb-6 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] gap-8 lg:gap-10 items-start">
 
-        {/* Left: Timer + Message */}
-        <div className="flex flex-col items-center text-center">
-          <div className="relative w-44 h-44 mb-5">
-            <svg viewBox="0 0 200 200" className="w-full h-full -rotate-90">
+        <div className="flex flex-col items-center text-center lg:items-center mx-auto max-w-sm">
+          <div className="relative w-40 h-40 sm:w-44 sm:h-44 mb-4">
+            <svg viewBox="0 0 200 200" className="w-full h-full -rotate-90" aria-hidden>
               <defs>
-                <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <linearGradient id={ringGradId} x1="0%" y1="0%" x2="100%" y2="100%">
                   <stop offset="0%" stopColor="#3B82F6" />
                   <stop offset="50%" stopColor="#A855F7" />
                   <stop offset="100%" stopColor="#10B981" />
@@ -144,7 +134,7 @@ export function ExtractingScreen({ asklepiosLogoUrl, onCancel }: Props) {
               <circle cx="100" cy="100" r="88" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="3.5" />
               <circle
                 cx="100" cy="100" r="88"
-                fill="none" stroke="url(#ringGrad)" strokeWidth="3.5"
+                fill="none" stroke={`url(#${ringGradId})`} strokeWidth="3.5"
                 strokeLinecap="round"
                 strokeDasharray={circumference}
                 strokeDashoffset={dashOffset}
@@ -152,7 +142,7 @@ export function ExtractingScreen({ asklepiosLogoUrl, onCancel }: Props) {
               />
               <circle
                 cx="100" cy="100" r="88"
-                fill="none" stroke="url(#ringGrad)" strokeWidth="8"
+                fill="none" stroke={`url(#${ringGradId})`} strokeWidth="8"
                 strokeLinecap="round"
                 strokeDasharray={circumference}
                 strokeDashoffset={dashOffset}
@@ -161,30 +151,28 @@ export function ExtractingScreen({ asklepiosLogoUrl, onCancel }: Props) {
               />
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-4xl font-bold text-white tracking-tight">{timeStr}</span>
-              <span className="text-[10px] font-medium tracking-[2px] uppercase text-white/50 mt-1">verbleibend</span>
+              <span className="text-3xl sm:text-4xl font-bold text-white tracking-tight tabular-nums">{timeStr}</span>
+              <span className="text-[10px] font-medium tracking-[2px] uppercase text-white/45 mt-1">verbleibend</span>
             </div>
           </div>
-          <h3 className="text-xl font-bold text-white mb-1.5">Lehn dich zurück.</h3>
-          <p className="text-sm text-white/50 leading-relaxed max-w-[280px]">
-            Der Agent liest <strong className="text-emerald-300 font-semibold">über 30 Datenpunkte</strong> aus deinem Vertrag aus.
+          <h3 className="text-lg sm:text-xl font-bold text-white mb-1">Lehn dich zurück.</h3>
+          <p className="text-sm text-white/50 leading-relaxed">
+            Der Agent wertet <strong className="text-emerald-300/95 font-semibold">über 30 Datenfelder</strong> aus — das braucht etwas Zeit.
           </p>
         </div>
 
-        {/* Right: Pipeline + Datapoints */}
-        <div>
-          {/* Pipeline Steps */}
-          <div className="space-y-0 mb-6">
+        <div className="space-y-6">
+          <div className="space-y-0">
             <div className="relative flex gap-3">
               <div className="flex flex-col items-center">
                 <div className="w-9 h-9 rounded-xl bg-blue-500/15 border border-blue-300/30 flex items-center justify-center shadow-[0_10px_26px_rgba(59,130,246,0.22)] animate-pulse">
                   <FileText className="w-4 h-4 text-blue-200" />
                 </div>
-                <div className="w-0.5 h-6 bg-gradient-to-b from-blue-300/70 to-white/10 my-0.5" />
+                <div className="w-0.5 h-5 bg-gradient-to-b from-blue-300/70 to-white/10 my-0.5" />
               </div>
-              <div className="pt-1 pb-4">
+              <div className="pt-1 pb-3">
                 <p className="text-[13px] font-bold text-white">Agent 1 – Datenextraktion</p>
-                <p className="text-[11px] text-white/60 mt-0.5">Strukturierte Stammdaten & Vertragswerte werden erkannt.</p>
+                <p className="text-[11px] text-white/55 mt-0.5 leading-snug">Strukturierte Stammdaten und Vertragswerte werden erkannt.</p>
               </div>
             </div>
             <div className="relative flex gap-3">
@@ -192,73 +180,78 @@ export function ExtractingScreen({ asklepiosLogoUrl, onCancel }: Props) {
                 <div className="w-9 h-9 rounded-xl bg-purple-500/15 border border-purple-300/30 flex items-center justify-center shadow-[0_10px_26px_rgba(168,85,247,0.20)]">
                   <ShieldCheck className="w-4 h-4 text-purple-200" />
                 </div>
-                <div className="w-0.5 h-6 bg-gradient-to-b from-purple-200/70 to-white/10 my-0.5" />
+                <div className="w-0.5 h-5 bg-gradient-to-b from-purple-200/70 to-white/10 my-0.5" />
               </div>
-              <div className="pt-1 pb-4">
+              <div className="pt-1 pb-3">
                 <p className="text-[13px] font-bold text-white/90">Agent 2 – Qualitätscheck</p>
-                <p className="text-[11px] text-white/60 mt-0.5">Unsichere Felder werden begründet markiert.</p>
+                <p className="text-[11px] text-white/55 mt-0.5 leading-snug">Unsichere Felder werden markiert und begründet.</p>
               </div>
             </div>
             <div className="relative flex gap-3">
               <div className="flex flex-col items-center">
                 <div className="w-9 h-9 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center">
-                  <CheckCircle2 className="w-4 h-4 text-white/60" />
+                  <CheckCircle2 className="w-4 h-4 text-white/55" />
                 </div>
               </div>
               <div className="pt-1">
                 <p className="text-[13px] font-bold text-white/90">Schritt 3 – Manuelle Überprüfung</p>
-                <p className="text-[11px] text-white/60 mt-0.5">Markierte Felder prüfen und anpassen.</p>
+                <p className="text-[11px] text-white/55 mt-0.5 leading-snug">Markierte Felder prüfen und bei Bedarf anpassen.</p>
               </div>
             </div>
           </div>
 
-          {/* Datapoints */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-semibold tracking-[1.5px] uppercase text-white/30">Datenpunkte</span>
-              <span className="text-[11px] font-semibold text-white/50"><span className="text-emerald-300">{doneDps.size}</span> / 30+</span>
+          <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3">
+            <div className="flex items-baseline justify-between gap-3 mb-2">
+              <span className="text-[11px] font-medium text-white/45">Auswertung</span>
+              <span className="text-xs text-white/60 tabular-nums">
+                <span className="text-emerald-300/90 font-semibold">{fieldsRead}</span>
+                <span className="text-white/35 mx-1">/</span>
+                <span>30+</span>
+                <span className="text-white/35 ml-1.5 font-normal">Felder</span>
+              </span>
             </div>
-            <div className="grid grid-cols-2 gap-1.5">
-              {DATAPOINTS.map((name, i) => {
-                const done = doneDps.has(i);
-                const active = activeDp === i;
+            <div
+              className="h-1.5 rounded-full bg-white/[0.08] overflow-hidden"
+              role="progressbar"
+              aria-valuenow={Math.round(elapsedRatio * 100)}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label="Fortschritt der Datenfelder"
+            >
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-blue-500/80 via-purple-500/75 to-emerald-500/70 transition-[width] duration-500 ease-out"
+                style={{ width: `${Math.min(100, elapsedRatio * 100)}%` }}
+              />
+            </div>
+            <ul className="mt-3 space-y-2">
+              {PHASES.map(({ label, threshold }) => {
+                const done = elapsedRatio >= threshold;
                 return (
-                  <div
-                    key={name}
-                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md border transition-all duration-300 ${
-                      done
-                        ? 'border-emerald-500/25 bg-emerald-500/5'
-                        : active
-                          ? 'border-blue-400/35 bg-blue-500/8'
-                          : 'border-white/[0.06] bg-white/[0.025]'
-                    }`}
-                    style={{ animation: `dp-in 0.35s ease ${i * 0.07}s both` }}
-                  >
-                    <div className={`w-3.5 h-3.5 rounded flex items-center justify-center flex-shrink-0 border transition-all duration-300 ${
-                      done ? 'bg-emerald-500 border-emerald-500' : 'border-white/15'
-                    }`}>
-                      {done && (
-                        <svg viewBox="0 0 12 12" className="w-2.5 h-2.5" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <li key={label} className="flex items-center gap-2.5 text-[11px]">
+                    <span
+                      className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors duration-300 ${
+                        done ? 'border-emerald-500/60 bg-emerald-500/20 text-emerald-200' : 'border-white/15 text-transparent'
+                      }`}
+                      aria-hidden
+                    >
+                      {done ? (
+                        <svg viewBox="0 0 12 12" className="h-2.5 w-2.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                           <polyline points="2 6 5 9 10 3" />
                         </svg>
-                      )}
-                    </div>
-                    <span className={`text-[11px] truncate transition-colors duration-300 ${
-                      done ? 'text-white/70' : active ? 'text-blue-300' : 'text-white/50'
-                    }`}>{name}</span>
-                  </div>
+                      ) : null}
+                    </span>
+                    <span className={done ? 'text-white/65' : 'text-white/38'}>{label}</span>
+                  </li>
                 );
               })}
-              <div className="col-span-2 text-center text-[10px] text-white/30 pt-1">+ 18 weitere Datenpunkte</div>
-            </div>
+            </ul>
           </div>
         </div>
       </div>
 
-      {/* Progress bar + cancel */}
-      <div className="relative px-8 pb-6 flex flex-col items-center gap-3">
+      <div className="relative px-6 sm:px-8 pb-5 flex flex-col items-center gap-3 border-t border-white/[0.06] pt-4">
         <div
-          className="relative h-1 w-56 overflow-hidden rounded-full bg-white/10"
+          className="relative h-1 w-full max-w-xs overflow-hidden rounded-full bg-white/10"
           role="progressbar"
           aria-label="Analyse Fortschritt"
         >
@@ -270,7 +263,7 @@ export function ExtractingScreen({ asklepiosLogoUrl, onCancel }: Props) {
         <button
           type="button"
           onClick={onCancel}
-          className="text-xs font-medium text-white/50 hover:text-white/80 transition-colors"
+          className="text-xs font-medium text-white/45 hover:text-white/80 transition-colors"
         >
           Analyse abbrechen
         </button>
