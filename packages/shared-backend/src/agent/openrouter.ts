@@ -107,6 +107,7 @@ Regeln:
 - Prozentsätze immer als Dezimal: 5.3% = 0.053. NBU-Sätze liegen typisch bei 0.005–0.03.
 - NBU-Aufteilung: AG+AN muss Gesamtsatz ergeben. "Je hälftig" = Gesamt/2. Ohne Angabe: AN = Gesamt.
 - source_text MUSS ein wörtliches Zitat aus dem Vertrag sein. Wenn kein Zitat möglich → value = null.
+- Arbeitszeit: nur hours_per_week (Stunden pro Woche) extrahieren. Kein Feld für Stunden/Monat – Monatswerte werden nicht erfasst.
 
 Format: Nur valides JSON. Keine Erklärungen. Kein Text vor oder nach dem JSON.`;
 
@@ -149,7 +150,6 @@ Format: Nur valides JSON. Sprache der Keys: Englisch.
       "end_date": { "value": null, "source_text": "", "note": "null wenn unbefristet" },
       "is_indefinite": { "value": null, "source_text": "", "note": "true|false" },
       "hours_per_week": { "value": null, "source_text": "", "note": "" },
-      "hours_per_month": { "value": null, "source_text": "", "note": "null wenn nicht im Vertrag" },
       "notice_period_days": { "value": null, "source_text": "", "note": "in Tagen" } },
     "wage": {
       "wage_type": { "value": "hourly", "source_text": "", "note": "" },
@@ -485,6 +485,7 @@ export function mergeWithJudgeResult(
     for (const [fieldName, rawField] of Object.entries(
       sectionFields as Record<string, RawExtractionField>,
     )) {
+      if (sectionName === 'contract_terms' && fieldName === 'hours_per_month') continue;
       const judgeField = judgeSection[fieldName] as JudgeFieldResult | undefined;
 
       const confidenceScore = judgeField?.confidence_score ?? 0.5;

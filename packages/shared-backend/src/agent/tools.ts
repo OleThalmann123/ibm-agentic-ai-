@@ -251,6 +251,7 @@ export const contractDataSubmissionTool = tool(
       employerData = JSON.parse(employer);
       assistantData = JSON.parse(assistant);
       contractData = JSON.parse(contract_terms);
+      delete contractData.hours_per_month;
       wageData = JSON.parse(wage);
       insuranceData = JSON.parse(social_insurance);
     } catch {
@@ -379,20 +380,6 @@ export const contractDataSubmissionTool = tool(
       }
     }
 
-    // Derive monthly hours from weekly hours (rule of thumb: 4 weeks/month)
-    if (!contractData.hours_per_month?.value && contractData.hours_per_week?.value) {
-      const perWeek = Number(contractData.hours_per_week.value);
-      if (Number.isFinite(perWeek) && perWeek > 0) {
-        const perMonth = Math.round(perWeek * 4 * 100) / 100; // keep 2 decimals at most
-        if (!contractData.hours_per_month) contractData.hours_per_month = {};
-        contractData.hours_per_month.value = perMonth;
-        contractData.hours_per_month.note =
-          contractData.hours_per_month.note ||
-          `Abgeleitet aus Stunden/Woche (${perWeek}) mit 4 Wochen/Monat`;
-        corrections.push(`Hours per month derived from hours per week: ${perWeek} → ${perMonth} (×4)`);
-      }
-    }
-
     // Validate Nichtberufsunfallversicherung split: employer_pct + employee_pct must equal 100%
     if (insuranceData.nbu_total_rate_pct?.value != null) {
       const total = Number(insuranceData.nbu_total_rate_pct.value);
@@ -465,7 +452,7 @@ export const contractDataSubmissionTool = tool(
     schema: z.object({
       employer: z.string().describe('JSON string with employer fields: {first_name, last_name, street, zip, city}'),
       assistant: z.string().describe('JSON string with assistant fields: {first_name, last_name, street, zip, city, country, phone, email, birth_date, gender, ahv_number, civil_status, residence_permit}'),
-      contract_terms: z.string().describe('JSON string with contract fields: {start_date, end_date, is_indefinite, hours_per_week, hours_per_month, notice_period_days}'),
+      contract_terms: z.string().describe('JSON string with contract fields: {start_date, end_date, is_indefinite, hours_per_week, notice_period_days}'),
       wage: z.string().describe('JSON string with wage fields: {wage_type, hourly_rate, vacation_weeks, holiday_supplement_pct, payment_iban}'),
       social_insurance: z.string().describe('JSON string with insurance fields: {accounting_method, canton, nbu_total_rate_pct, nbu_employer_pct, nbu_employee_pct, nbu_employer_voluntary, nbu_insurer_name, nbu_policy_number}'),
     }),

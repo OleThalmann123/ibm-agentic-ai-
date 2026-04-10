@@ -61,7 +61,6 @@ export interface ContractSchema {
     end_date: IDPField<string>;
     is_indefinite: IDPField<boolean>;
     hours_per_week: IDPField<number>;
-    hours_per_month: IDPField<number>;
     notice_period_days: IDPField<number>;
   };
   wage: {

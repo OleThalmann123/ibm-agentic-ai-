@@ -169,7 +169,6 @@ export function AssistantOnboarding({ onComplete, onClose }: AssistantOnboarding
       setField('contractStart', ct.start_date, setContractStart);
       setField('contractEnd', ct.end_date, setContractEnd);
       setField('hoursPerWeek', ct.hours_per_week, setHoursPerWeek);
-      setField('hoursPerMonth', ct.hours_per_month, setHoursPerMonth);
     }
 
     if (w) {
@@ -187,17 +186,6 @@ export function AssistantOnboarding({ onComplete, onClose }: AssistantOnboarding
       setField('canton', si.canton, setCanton);
       setField('nbuEmployer', si.nbu_employer_pct, setNbuEmployer);
       setField('nbuEmployee', si.nbu_employee_pct, setNbuEmployee);
-    }
-
-    // Vertragswerte können "pro Monat" angegeben sein – UI arbeitet mit Stunden/Woche.
-    // Regel: Falls keine Wochenstunden vorhanden sind, Monatsstunden auf 4 Wochen umrechnen.
-    const weekRaw = ct?.hours_per_week?.value;
-    const monthRaw = ct?.hours_per_month?.value;
-    if ((weekRaw == null || String(weekRaw).trim() === '') && monthRaw != null && String(monthRaw).trim() !== '') {
-      const n = Number(monthRaw);
-      if (Number.isFinite(n) && n > 0) {
-        setHoursPerWeek(String(Number((n / 4).toFixed(2))));
-      }
     }
 
     setConfidenceMap(cMap);

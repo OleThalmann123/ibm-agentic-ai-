@@ -141,6 +141,12 @@ async function runDocumentPipelineImpl(
 
     completeTraceStep(step3, { classification: 'contract' });
 
+    // Stunden/Monat: weder extrahieren noch bewerten (nur Stunden/Woche).
+    const ct = rawResult.contracts?.contract_terms as Record<string, unknown> | undefined;
+    if (ct && 'hours_per_month' in ct) {
+      delete ct.hours_per_month;
+    }
+
     // ── Step 4: Agent 2 – LLM-as-a-Judge ──
     const step4 = addTraceStep('agent_judge', 'Agent 2: Qualitätsprüfung (LLM-as-a-Judge)', {
       inputFields: Object.keys(rawResult.contracts),
