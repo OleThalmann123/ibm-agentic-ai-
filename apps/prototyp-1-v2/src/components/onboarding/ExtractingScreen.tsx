@@ -80,7 +80,7 @@ export function ExtractingScreen({ asklepiosLogoUrl, onCancel }: Props) {
 
       <div className="px-6 sm:px-8 py-5 sm:py-6 text-white relative">
         <div className="flex items-start gap-3 sm:gap-4">
-          <div className="relative w-12 h-12 flex-shrink-0">
+          <div className="relative w-14 h-14 flex-shrink-0">
             <div className="absolute inset-0 rounded-2xl bg-white/10 backdrop-blur border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.35)]" />
             <div
               className="relative w-14 h-14 rounded-2xl bg-white/10 border border-white/10 shadow-[0_14px_26px_rgba(59,130,246,0.25)] flex items-center justify-center overflow-hidden"
@@ -192,7 +192,8 @@ export function ExtractingScreen({ asklepiosLogoUrl, onCancel }: Props) {
       <div className="relative px-6 sm:px-8 pb-5 flex flex-col items-center gap-3 border-t border-white/[0.06] pt-4">
         <div
           className="relative h-1 w-full max-w-xs overflow-hidden rounded-full bg-white/10"
-          role="progressbar"
+          role="status"
+          aria-live="polite"
           aria-label="Analyse Fortschritt"
         >
           <div

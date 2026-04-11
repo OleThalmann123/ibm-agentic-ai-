@@ -10,7 +10,7 @@ import { AsklepiosLogo } from '@/components/brand/AsklepiosLogo';
 import { AssistantOnboarding } from '@/components/onboarding/AssistantOnboarding';
 
 export function AssistantsPage() {
-  const { employer, employerAccess, refreshProfile } = useAuth();
+  const { employer, employerAccess } = useAuth();
   const [assistants, setAssistants] = useState<Assistant[]>([]);
   const [showAssistantOnboarding, setShowAssistantOnboarding] = useState(false);
   const [initialUploadFile, setInitialUploadFile] = useState<File | null>(null);
@@ -87,15 +87,6 @@ export function AssistantsPage() {
         toast.success(`${a.name} wurde gelöscht.`);
         loadAssistants();
       }
-    }
-  };
-
-  const toggleActive = async (a: Assistant) => {
-    const { error } = await supabase.from('assistant').update({ is_active: !a.is_active }).eq('id', a.id);
-    if (error) toast.error('Fehler');
-    else {
-      toast.success(a.is_active ? 'Deaktiviert' : 'Aktiviert');
-      loadAssistants();
     }
   };
 

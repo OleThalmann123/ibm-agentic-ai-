@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
-import { Calculator, ChevronDown, ChevronUp, Download, RotateCcw, Info, Building2, User } from 'lucide-react';
+import { Calculator, ChevronDown, ChevronUp, RotateCcw, Info, Building2, User } from 'lucide-react';
 import { formatCHF } from '@asklepios/backend';
 import { cn } from '@/lib/utils';
 
