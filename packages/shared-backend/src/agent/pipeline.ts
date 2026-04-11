@@ -218,12 +218,12 @@ export async function runDocumentPipeline(
     const project =
       import.meta.env.VITE_LANGSMITH_PROJECT || 'asklepios-agent';
     rootRun = new RunTree({
-      name: 'Asklepios: Dokument-Pipeline',
+      name: 'Asklepios_extract: Dokument-Pipeline',
       client,
       project_name: project,
       run_type: 'chain',
       tracingEnabled: true,
-      tags: ['asklepios', 'pipeline', 'idp'],
+      tags: ['asklepios', 'asklepios_extract', 'pipeline', 'idp'],
       inputs: {
         fileName: file?.name ?? null,
         hasText: !!text,

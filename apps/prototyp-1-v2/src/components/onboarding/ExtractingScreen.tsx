@@ -1,16 +1,16 @@
 import { useState, useEffect, useRef, useId } from 'react';
 import { FileText, ShieldCheck, CheckCircle2, Clock } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { AsklepiosExtractLogo } from '@/components/brand/AsklepiosExtractLogo';
 
 /** Anzeige-Dauer: länger als typische Extraktion, damit der Ring nicht auf 0 springt bevor fertig. */
 const TOTAL_SECONDS = 300;
 
 interface Props {
-  asklepiosLogoUrl: string;
   onCancel: () => void;
 }
 
-export function ExtractingScreen({ asklepiosLogoUrl, onCancel }: Props) {
+export function ExtractingScreen({ onCancel }: Props) {
   const ringGradId = useId().replace(/:/g, '');
   const [remaining, setRemaining] = useState(TOTAL_SECONDS);
   const startRef = useRef(Date.now());
@@ -86,19 +86,14 @@ export function ExtractingScreen({ asklepiosLogoUrl, onCancel }: Props) {
               className="relative w-14 h-14 rounded-2xl bg-white/10 border border-white/10 shadow-[0_14px_26px_rgba(59,130,246,0.25)] flex items-center justify-center overflow-hidden"
               style={{ animation: 'ask-float 2.8s ease-in-out infinite' }}
             >
-              <img
-                src={asklepiosLogoUrl}
-                alt="Asklepios"
-                className="w-full h-full object-contain p-1.5 select-none pointer-events-none"
-                draggable={false}
-              />
+              <AsklepiosExtractLogo className="w-7 h-7 text-white select-none pointer-events-none" />
             </div>
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-[11px] font-semibold tracking-wide text-white/70 uppercase">
               Agentic Workflow aktiv
             </p>
-            <h3 className="text-base sm:text-lg font-bold leading-tight">Asklepios legt deine Assistenzperson an</h3>
+            <h3 className="text-base sm:text-lg font-bold leading-tight">Asklepios_extract legt deine Assistenzperson an</h3>
             <p className="text-xs sm:text-sm text-white/70 mt-0.5">Vertrag wird analysiert und Stammdaten werden vorbereitet.</p>
           </div>
           <Badge variant="outline" className="flex-shrink-0 mt-0.5 gap-1.5 rounded-full border-white/20 bg-white/5 text-white/80 px-2.5 sm:px-3 py-1.5 text-[10px] sm:text-[11px] font-medium backdrop-blur whitespace-nowrap">
