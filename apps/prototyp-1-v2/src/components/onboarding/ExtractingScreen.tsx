@@ -1,6 +1,5 @@
-import { useState, useEffect, useRef, useId } from 'react';
+import { useState, useEffect, useRef, useId, type ReactNode } from 'react';
 import { FileText, ShieldCheck, CheckCircle2, Clock } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 
 /** Anzeige-Dauer: länger als typische Extraktion, damit der Ring nicht auf 0 springt bevor fertig. */
 const TOTAL_SECONDS = 300;
@@ -34,180 +33,145 @@ export function ExtractingScreen({ asklepiosLogoUrl, onCancel }: Props) {
   const dashOffset = circumference - (progressPct / 100) * circumference;
 
   return (
-    <div className="bg-card rounded-2xl border overflow-hidden relative">
+    <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-[#020617]">
       <style>{`
         @keyframes ask-float {
-          0% { transform: translate3d(0, 0, 0) rotate(-2deg); }
-          50% { transform: translate3d(0, -10px, 0) rotate(2deg); }
-          100% { transform: translate3d(0, 0, 0) rotate(-2deg); }
-        }
-        @keyframes ask-dust {
-          0% { transform: translate3d(0,0,0); opacity: .45; }
-          50% { transform: translate3d(-10px,-6px,0); opacity: .65; }
-          100% { transform: translate3d(0,0,0); opacity: .45; }
-        }
-        @keyframes ask-progress {
-          0% { transform: translateX(-60%); opacity: .25; }
-          30% { opacity: .7; }
-          100% { transform: translateX(140%); opacity: .25; }
+          0%, 100% { transform: translate3d(0, 0, 0); }
+          50% { transform: translate3d(0, -6px, 0); }
         }
       `}</style>
 
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute inset-0 bg-[#020617]" aria-hidden />
-        <div className="absolute inset-0 bg-[radial-gradient(1200px_600px_at_15%_0%,rgba(59,130,246,0.25),transparent_55%),radial-gradient(900px_520px_at_85%_15%,rgba(168,85,247,0.25),transparent_50%),radial-gradient(700px_520px_at_40%_110%,rgba(16,185,129,0.18),transparent_55%),linear-gradient(to_bottom,rgb(15_23_42),rgb(2_6_23))]" aria-hidden />
-        <div
-          className="absolute inset-0 mix-blend-screen opacity-60"
-          style={{
-            backgroundImage:
-              'radial-gradient(circle at 20% 30%, rgba(255,255,255,0.18) 0 1px, transparent 2px),' +
-              'radial-gradient(circle at 70% 20%, rgba(147,197,253,0.18) 0 1px, transparent 2px),' +
-              'radial-gradient(circle at 40% 70%, rgba(196,181,253,0.16) 0 1px, transparent 2px),' +
-              'radial-gradient(circle at 85% 75%, rgba(110,231,183,0.14) 0 1px, transparent 2px)',
-            backgroundSize: '220px 220px, 260px 260px, 240px 240px, 280px 280px',
-            filter: 'blur(0.2px)',
-            animation: 'ask-dust 6.5s ease-in-out infinite',
-          }}
-        />
-        <div
-          className="absolute -left-10 -top-10 w-56 h-56 rounded-full blur-2xl opacity-50"
-          style={{
-            background:
-              'radial-gradient(circle at 30% 30%, rgba(59,130,246,0.35), transparent 60%), radial-gradient(circle at 70% 70%, rgba(168,85,247,0.25), transparent 65%)',
-          }}
-        />
+      {/* Soft background gradients (decorative) */}
+      <div className="pointer-events-none absolute inset-0" aria-hidden>
+        <div className="absolute inset-0 bg-[radial-gradient(1200px_600px_at_15%_0%,rgba(59,130,246,0.22),transparent_55%),radial-gradient(900px_520px_at_85%_15%,rgba(168,85,247,0.20),transparent_50%),radial-gradient(700px_520px_at_40%_110%,rgba(16,185,129,0.15),transparent_55%)]" />
       </div>
 
-      <div className="px-6 sm:px-8 py-5 sm:py-6 text-white relative">
-        <div className="flex items-start gap-3 sm:gap-4">
-          <div className="relative w-14 h-14 flex-shrink-0">
-            <div className="absolute inset-0 rounded-2xl bg-white/10 backdrop-blur border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.35)]" />
-            <div
-              className="relative w-14 h-14 rounded-2xl bg-white/10 border border-white/10 shadow-[0_14px_26px_rgba(59,130,246,0.25)] flex items-center justify-center overflow-hidden"
-              style={{ animation: 'ask-float 2.8s ease-in-out infinite' }}
-            >
-              <img
-                src={asklepiosLogoUrl}
-                alt="Asklepios"
-                className="w-full h-full object-contain p-1.5 select-none pointer-events-none"
-                draggable={false}
-              />
-            </div>
+      <div className="relative text-white">
+        {/* Header */}
+        <div className="flex flex-wrap items-center gap-5 px-8 sm:px-12 pt-10 sm:pt-12 pb-8 sm:pb-10">
+          <div
+            className="relative flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/15 bg-white/10 shadow-[0_14px_30px_rgba(59,130,246,0.25)]"
+            style={{ animation: 'ask-float 3s ease-in-out infinite' }}
+          >
+            <img
+              src={asklepiosLogoUrl}
+              alt="Asklepios"
+              className="pointer-events-none h-full w-full select-none object-contain p-2"
+              draggable={false}
+            />
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-[11px] font-semibold tracking-wide text-white/70 uppercase">
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <p className="text-xs font-semibold uppercase tracking-[0.15em] text-white/60">
               Agentic Workflow aktiv
             </p>
-            <h3 className="text-base sm:text-lg font-bold leading-tight">Asklepios legt deine Assistenzperson an</h3>
-            <p className="text-xs sm:text-sm text-white/70 mt-0.5">Vertrag wird analysiert und Stammdaten werden vorbereitet.</p>
+            <h2 className="text-xl font-bold leading-tight sm:text-2xl">
+              Asklepios legt deine Assistenzperson an
+            </h2>
+            <p className="text-sm text-white/60">
+              Vertrag wird analysiert und Stammdaten werden vorbereitet.
+            </p>
           </div>
-          <Badge variant="outline" className="flex-shrink-0 mt-0.5 gap-1.5 rounded-full border-white/20 bg-white/5 text-white/80 px-2.5 sm:px-3 py-1.5 text-[10px] sm:text-[11px] font-medium backdrop-blur whitespace-nowrap">
-            <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-white/60" />
+          <div className="inline-flex flex-shrink-0 items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-xs font-medium text-white/75 backdrop-blur">
+            <Clock className="h-3.5 w-3.5 text-white/55" />
             ca. 3–5 Min.
-          </Badge>
+          </div>
+        </div>
+
+        {/* Main content */}
+        <div className="grid grid-cols-1 items-center gap-12 px-8 pb-10 sm:px-12 sm:pb-14 lg:grid-cols-2 lg:gap-16">
+          {/* Timer ring */}
+          <div className="flex flex-col items-center text-center">
+            <div className="relative mb-6 h-52 w-52 sm:h-56 sm:w-56">
+              <svg viewBox="0 0 200 200" className="h-full w-full -rotate-90" aria-hidden>
+                <defs>
+                  <linearGradient id={ringGradId} x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#3B82F6" />
+                    <stop offset="50%" stopColor="#A855F7" />
+                    <stop offset="100%" stopColor="#10B981" />
+                  </linearGradient>
+                </defs>
+                <circle cx="100" cy="100" r="88" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="4" />
+                <circle
+                  cx="100"
+                  cy="100"
+                  r="88"
+                  fill="none"
+                  stroke={`url(#${ringGradId})`}
+                  strokeWidth="4"
+                  strokeLinecap="round"
+                  strokeDasharray={circumference}
+                  strokeDashoffset={dashOffset}
+                  className="transition-[stroke-dashoffset] duration-500 ease-linear"
+                />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-4xl font-bold tracking-tight text-white tabular-nums sm:text-5xl">{timeStr}</span>
+                <span className="mt-2 text-[11px] font-medium uppercase tracking-[0.2em] text-white/45">verbleibend</span>
+              </div>
+            </div>
+            <h3 className="mb-2 text-lg font-bold text-white sm:text-xl">Lehn dich zurück.</h3>
+            <p className="max-w-xs text-sm leading-relaxed text-white/55">
+              Der Agent wertet <span className="font-semibold text-emerald-300">über 30 Datenfelder</span> aus — das braucht etwas Zeit.
+            </p>
+          </div>
+
+          {/* Steps */}
+          <div className="space-y-4">
+            <StepItem
+              icon={<FileText className="h-5 w-5 text-blue-200" />}
+              iconBg="bg-blue-500/15 border-blue-300/25 shadow-[0_10px_26px_rgba(59,130,246,0.22)]"
+              title="Agent 1 – Datenextraktion"
+              description="Strukturierte Stammdaten und Vertragswerte werden erkannt."
+            />
+            <StepItem
+              icon={<ShieldCheck className="h-5 w-5 text-purple-200" />}
+              iconBg="bg-purple-500/15 border-purple-300/25 shadow-[0_10px_26px_rgba(168,85,247,0.20)]"
+              title="Agent 2 – Qualitätscheck"
+              description="Unsichere Felder werden markiert und begründet."
+            />
+            <StepItem
+              icon={<CheckCircle2 className="h-5 w-5 text-white/55" />}
+              iconBg="bg-white/10 border-white/15"
+              title="Schritt 3 – Manuelle Überprüfung"
+              description="Markierte Felder prüfen und bei Bedarf anpassen."
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="relative flex items-center justify-center border-t border-white/[0.06] px-8 py-5 sm:px-12">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="text-xs font-medium text-white/45 transition-colors hover:text-white/80"
+          >
+            Analyse abbrechen
+          </button>
         </div>
       </div>
+    </div>
+  );
+}
 
-      <div className="relative px-6 sm:px-8 pb-6 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] gap-8 lg:gap-10 items-start">
-
-        <div className="flex flex-col items-center text-center lg:items-center mx-auto max-w-sm">
-          <div className="relative w-40 h-40 sm:w-44 sm:h-44 mb-4">
-            <svg viewBox="0 0 200 200" className="w-full h-full -rotate-90" aria-hidden>
-              <defs>
-                <linearGradient id={ringGradId} x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#3B82F6" />
-                  <stop offset="50%" stopColor="#A855F7" />
-                  <stop offset="100%" stopColor="#10B981" />
-                </linearGradient>
-              </defs>
-              <circle cx="100" cy="100" r="88" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="3.5" />
-              <circle
-                cx="100" cy="100" r="88"
-                fill="none" stroke={`url(#${ringGradId})`} strokeWidth="3.5"
-                strokeLinecap="round"
-                strokeDasharray={circumference}
-                strokeDashoffset={dashOffset}
-                className="transition-[stroke-dashoffset] duration-500 ease-linear"
-              />
-              <circle
-                cx="100" cy="100" r="88"
-                fill="none" stroke={`url(#${ringGradId})`} strokeWidth="8"
-                strokeLinecap="round"
-                strokeDasharray={circumference}
-                strokeDashoffset={dashOffset}
-                className="transition-[stroke-dashoffset] duration-500 ease-linear"
-                style={{ filter: 'blur(8px)', opacity: 0.3 }}
-              />
-            </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-3xl sm:text-4xl font-bold text-white tracking-tight tabular-nums">{timeStr}</span>
-              <span className="text-[10px] font-medium tracking-[2px] uppercase text-white/45 mt-1">verbleibend</span>
-            </div>
-          </div>
-          <h3 className="text-lg sm:text-xl font-bold text-white mb-1">Lehn dich zurück.</h3>
-          <p className="text-sm text-white/50 leading-relaxed">
-            Der Agent wertet <strong className="text-emerald-300/95 font-semibold">über 30 Datenfelder</strong> aus — das braucht etwas Zeit.
-          </p>
-        </div>
-
-        <div className="space-y-0">
-          <div className="relative flex gap-3">
-            <div className="flex flex-col items-center">
-              <div className="w-9 h-9 rounded-xl bg-blue-500/15 border border-blue-300/30 flex items-center justify-center shadow-[0_10px_26px_rgba(59,130,246,0.22)] animate-pulse">
-                <FileText className="w-4 h-4 text-blue-200" />
-              </div>
-              <div className="w-0.5 h-5 bg-gradient-to-b from-blue-300/70 to-white/10 my-0.5" />
-            </div>
-            <div className="pt-1 pb-3">
-              <p className="text-[13px] font-bold text-white">Agent 1 – Datenextraktion</p>
-              <p className="text-[11px] text-white/55 mt-0.5 leading-snug">Strukturierte Stammdaten und Vertragswerte werden erkannt.</p>
-            </div>
-          </div>
-          <div className="relative flex gap-3">
-            <div className="flex flex-col items-center">
-              <div className="w-9 h-9 rounded-xl bg-purple-500/15 border border-purple-300/30 flex items-center justify-center shadow-[0_10px_26px_rgba(168,85,247,0.20)]">
-                <ShieldCheck className="w-4 h-4 text-purple-200" />
-              </div>
-              <div className="w-0.5 h-5 bg-gradient-to-b from-purple-200/70 to-white/10 my-0.5" />
-            </div>
-            <div className="pt-1 pb-3">
-              <p className="text-[13px] font-bold text-white/90">Agent 2 – Qualitätscheck</p>
-              <p className="text-[11px] text-white/55 mt-0.5 leading-snug">Unsichere Felder werden markiert und begründet.</p>
-            </div>
-          </div>
-          <div className="relative flex gap-3">
-            <div className="flex flex-col items-center">
-              <div className="w-9 h-9 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center">
-                <CheckCircle2 className="w-4 h-4 text-white/55" />
-              </div>
-            </div>
-            <div className="pt-1">
-              <p className="text-[13px] font-bold text-white/90">Schritt 3 – Manuelle Überprüfung</p>
-              <p className="text-[11px] text-white/55 mt-0.5 leading-snug">Markierte Felder prüfen und bei Bedarf anpassen.</p>
-            </div>
-          </div>
-        </div>
+function StepItem({
+  icon,
+  iconBg,
+  title,
+  description,
+}: {
+  icon: ReactNode;
+  iconBg: string;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="flex items-start gap-4 rounded-2xl border border-white/[0.06] bg-white/[0.03] px-5 py-4 backdrop-blur-sm">
+      <div className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl border ${iconBg}`}>
+        {icon}
       </div>
-
-      <div className="relative px-6 sm:px-8 pb-5 flex flex-col items-center gap-3 border-t border-white/[0.06] pt-4">
-        <div
-          className="relative h-1 w-full max-w-xs overflow-hidden rounded-full bg-white/10"
-          role="status"
-          aria-live="polite"
-          aria-label="Analyse Fortschritt"
-        >
-          <div
-            className="absolute inset-y-0 left-0 w-1/3 rounded-full bg-[linear-gradient(90deg,rgba(59,130,246,0.70),rgba(168,85,247,0.65),rgba(16,185,129,0.55))]"
-            style={{ animation: 'ask-progress 1.15s ease-in-out infinite' }}
-          />
-        </div>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="text-xs font-medium text-white/45 hover:text-white/80 transition-colors"
-        >
-          Analyse abbrechen
-        </button>
+      <div className="pt-0.5">
+        <p className="text-sm font-bold text-white">{title}</p>
+        <p className="mt-1 text-xs leading-relaxed text-white/55">{description}</p>
       </div>
     </div>
   );
