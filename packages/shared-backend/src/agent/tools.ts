@@ -380,33 +380,20 @@ export const contractDataSubmissionTool = tool(
       }
     }
 
-    // Validate Nichtberufsunfallversicherung split: employer_pct + employee_pct must equal 100%
+    // Validate Nichtberufsunfallversicherung split: employer_pct + employee_pct must equal 100%.
+    // Kein Auto-Default mehr: Wenn die Aufteilung im Vertrag fehlt, trägt der
+    // Arbeitgeber sie manuell im Onboarding-Formular ein. Der Freiwillig-Flag
+    // ("AG übernimmt NBU freiwillig auch unter 8h/Woche") verändert die
+    // Aufteilung nicht mehr automatisch.
     if (insuranceData.nbu_total_rate_pct?.value != null) {
       const total = Number(insuranceData.nbu_total_rate_pct.value);
       const empPct = Number(insuranceData.nbu_employee_pct?.value ?? 0);
       const agPct = Number(insuranceData.nbu_employer_pct?.value ?? 0);
 
-      // Auto-derive: if total is set but split is missing, default AN = 100% share, AG = 0%
-      if (total > 0 && empPct === 0 && agPct === 0) {
-        if (!insuranceData.nbu_employee_pct) insuranceData.nbu_employee_pct = {};
-        insuranceData.nbu_employee_pct.value = 100;
-        insuranceData.nbu_employee_pct.note = insuranceData.nbu_employee_pct.note || 'Standard: AN zahlt 100% der Nichtberufsunfallversicherungs-Prämie';
-        if (!insuranceData.nbu_employer_pct) insuranceData.nbu_employer_pct = {};
-        insuranceData.nbu_employer_pct.value = 0;
-        corrections.push('Nichtberufsunfallversicherung: AN = 100%, AG = 0% (Standard: AN zahlt 100%)');
-      } else if (total > 0 && empPct + agPct > 0 && Math.abs(empPct + agPct - 100) > 0.1) {
+      if (total > 0 && empPct + agPct > 0 && Math.abs(empPct + agPct - 100) > 0.1) {
         validationErrors.push(
           `Nichtberufsunfallversicherungs-Aufteilung stimmt nicht: AN (${empPct}%) + AG (${agPct}%) = ${empPct + agPct}% ≠ 100%`,
         );
-      }
-
-      // If employer_voluntary is true, set AG = total, AN = 0
-      if (insuranceData.nbu_employer_voluntary?.value === true && total > 0) {
-        if (!insuranceData.nbu_employer_pct) insuranceData.nbu_employer_pct = {};
-        if (!insuranceData.nbu_employee_pct) insuranceData.nbu_employee_pct = {};
-        insuranceData.nbu_employer_pct.value = 100;
-        insuranceData.nbu_employee_pct.value = 0;
-        corrections.push('Nichtberufsunfallversicherung: AG übernimmt freiwillig → AG = 100%, AN = 0%');
       }
     }
 

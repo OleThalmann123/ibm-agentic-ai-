@@ -81,14 +81,22 @@ export interface PayrollInput {
   // Optional employer contributions
   ktvAG?: number;  // KTV rate (decimal)
   buAG?: number;   // BU rate (decimal)
-  nbuAG?: number;  // Nichtberufsunfallversicherung AG rate (decimal) – when employer pays voluntarily
 
   // Optional employee deductions
   ktvAN?: number;  // KTV rate (decimal)
-  nbuAN?: number;  // Nichtberufsunfallversicherung rate (decimal)
 
-  // Nichtberufsunfallversicherung status
+  // ── Nichtberufsunfallversicherung (NBU) ─────────────────────────────
+  // Zweistufige Berechnung:
+  //   1. Gesamtprämie = massgebenderLohn × nbuTotalRate
+  //   2. Abzug AN     = round2(Gesamtprämie × nbuEmployeeShare)
+  //      Beitrag AG   = round2(Gesamtprämie × nbuEmployerShare)
+  nbuTotalRate?: number;       // Gesamtprämiensatz (Dezimal, z.B. 0.015 = 1.5%)
+  nbuEmployerShare?: number;   // AG-Anteil an der Prämie (Fraktion 0–1)
+  nbuEmployeeShare?: number;   // AN-Anteil an der Prämie (Fraktion 0–1)
   nbuEligible?: boolean;
+  // Flag aus dem Onboarding: "AG schliesst NBU freiwillig auch bei Pensum
+  // unter 8h/Woche ein". Wird nur für die Kennzeichnung der AG-Zeile verwendet
+  // ("freiwillig"), beeinflusst die Aufteilung der Prämie nicht.
   nbuEmployerVoluntary?: boolean;
 
   // Metadata (for payslip document)
@@ -143,6 +151,13 @@ export function round5(value: number): number {
   return Math.round(value * 20) / 20;
 }
 
+/** Kaufmännische Rundung auf 2 Dezimalstellen (Rappen). Wird für die
+ *  NBU-Beträge verwendet, damit die feine Prämie (z.B. CHF 0.913) nicht
+ *  auf 5 Rappen verzerrt wird, sondern sauber auf CHF 0.91 gerundet bleibt. */
+export function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 export function calculatePayroll(input: PayrollInput): PayrollResult {
   const { stundenlohn, anzahlStunden, kanton, abrechnungsverfahren, ferienzuschlag } = input;
   void abrechnungsverfahren; // MVP: aktuell nur 'ordentlich' unterstützt
@@ -182,12 +197,26 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   if (input.buAG != null && input.buAG > 0) {
     agLines.push({ label: 'BU (AG)', rate: input.buAG, perHour: bruttoH * input.buAG, perYear: round5(bruttoY * input.buAG) });
   }
-  if (input.nbuEmployerVoluntary && input.nbuAG != null && input.nbuAG > 0) {
+
+  // ── NBU – zweistufige Berechnung ──
+  // Schritt 1: Gesamtprämie = massgebender Lohn × Gesamtprämiensatz
+  // Schritt 2: AG-/AN-Anteil = Gesamtprämie × jeweiliger Anteil (Fraktion 0–1)
+  const nbuEligibleEff = input.nbuEligible !== false;
+  const nbuTotalRate = input.nbuTotalRate ?? 0;
+  const nbuTotalPremiumY = nbuEligibleEff && nbuTotalRate > 0 ? uvgBaseY * nbuTotalRate : 0;
+  const nbuAgShare = input.nbuEmployerShare ?? 0;
+  const nbuAnShare = input.nbuEmployeeShare ?? 0;
+
+  if (nbuTotalPremiumY > 0 && nbuAgShare > 0) {
+    const agPortionY = round2(nbuTotalPremiumY * nbuAgShare);
+    const agEffectiveRate = nbuTotalRate * nbuAgShare;
     agLines.push({
-      label: 'Nichtberufsunfallversicherung (AG freiwillig)',
-      rate: input.nbuAG,
-      perHour: anzahlStunden > 0 ? round5(uvgBaseY * input.nbuAG) / anzahlStunden : 0,
-      perYear: round5(uvgBaseY * input.nbuAG),
+      label: input.nbuEmployerVoluntary
+        ? 'Nichtberufsunfallversicherung (AG freiwillig)'
+        : 'Nichtberufsunfallversicherung (AG)',
+      rate: agEffectiveRate,
+      perHour: anzahlStunden > 0 ? agPortionY / anzahlStunden : 0,
+      perYear: agPortionY,
     });
   }
 
@@ -212,12 +241,15 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   if (input.ktvAN != null && input.ktvAN > 0) {
     anLines.push({ label: 'KTV (AN)', rate: input.ktvAN, perHour: bruttoH * input.ktvAN, perYear: round5(bruttoY * input.ktvAN) });
   }
-  if (input.nbuAN != null && input.nbuAN > 0 && !input.nbuEmployerVoluntary && input.nbuEligible !== false) {
+  if (nbuTotalPremiumY > 0 && nbuAnShare > 0) {
+    // Zweistufig: Abzug AN = Gesamtprämie × AN-Anteil (kaufmännisch auf 2 Dezimalstellen gerundet)
+    const anPortionY = round2(nbuTotalPremiumY * nbuAnShare);
+    const anEffectiveRate = nbuTotalRate * nbuAnShare;
     anLines.push({
       label: 'Nichtberufsunfallversicherung (AN)',
-      rate: input.nbuAN,
-      perHour: anzahlStunden > 0 ? round5(uvgBaseY * input.nbuAN) / anzahlStunden : 0,
-      perYear: round5(uvgBaseY * input.nbuAN),
+      rate: anEffectiveRate,
+      perHour: anzahlStunden > 0 ? anPortionY / anzahlStunden : 0,
+      perYear: anPortionY,
     });
   }
 

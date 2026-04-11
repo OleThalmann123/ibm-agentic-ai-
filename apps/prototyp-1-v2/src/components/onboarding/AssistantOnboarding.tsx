@@ -38,10 +38,8 @@ const REQUIRED_FIELDS = [
   'contractStart',
   'hoursPerWeek',
   'hourlyRate',
-  'nbuTotal',
-  'nbuEmployer',
-  'nbuEmployee',
-  'nbuEmployerVoluntary',
+  // NBU-Felder sind nicht mehr pauschal Pflicht. Sie werden dynamisch in
+  // isRequired() als Pflicht markiert, wenn das Pensum ≥ 8h/Woche beträgt.
 ];
 
 const PIPELINE_TIMEOUT_MS = 300_000;
@@ -121,8 +119,6 @@ const FIELD_LABELS: Record<string, string> = {
   'social_insurance.nbu_employer_pct': 'Nichtberufsunfallversicherung (NBU) AG-Prämienanteil (%) – aus Vertrag',
   'social_insurance.nbu_employee_pct': 'Nichtberufsunfallversicherung (NBU) AN-Prämienanteil (%) – aus Vertrag',
   'social_insurance.nbu_employer_voluntary': 'AG übernimmt Nichtberufsunfallversicherung (NBU) freiwillig',
-  'social_insurance.nbu_insurer_name': 'Unfallversicherer – optional',
-  'social_insurance.nbu_policy_number': 'Policennummer – optional',
 };
 
 /** UI-Feld-Schlüssel → Extraktions-Pfad (für Status, Review, Popup) */
@@ -156,8 +152,6 @@ const FIELD_KEY_TO_PATH: Record<string, string> = {
   nbuEmployer: 'social_insurance.nbu_employer_pct',
   nbuEmployee: 'social_insurance.nbu_employee_pct',
   nbuEmployerVoluntary: 'social_insurance.nbu_employer_voluntary',
-  nbuInsurerName: 'social_insurance.nbu_insurer_name',
-  nbuPolicyNumber: 'social_insurance.nbu_policy_number',
 };
 
 const PATH_TO_FIELD_KEY: Record<string, string> = Object.fromEntries(
@@ -195,8 +189,6 @@ const REVIEW_POPUP_PATH_ORDER: readonly string[] = [
   'social_insurance.nbu_employer_pct',
   'social_insurance.nbu_employee_pct',
   'social_insurance.nbu_employer_voluntary',
-  'social_insurance.nbu_insurer_name',
-  'social_insurance.nbu_policy_number',
 ];
 
 function popupAttentionPathOrderIndex(path: string): number {
@@ -319,8 +311,6 @@ function buildPopupAttentionFields(
   const out: PopupAttentionField[] = [];
   const OPTIONAL_MISSING_PATHS = new Set<string>([
     'assistant.phone',
-    'social_insurance.nbu_insurer_name',
-    'social_insurance.nbu_policy_number',
   ]);
 
   for (const path of paths) {
@@ -932,9 +922,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
   const [nbuEmployer, setNbuEmployer] = useState('');
   const [nbuEmployee, setNbuEmployee] = useState('');
   const [nbuEmployerVoluntary, setNbuEmployerVoluntary] = useState(false);
-  const [nbuInsurerName, setNbuInsurerName] = useState('');
-  const [nbuPolicyNumber, setNbuPolicyNumber] = useState('');
-  
+
   const [saving, setSaving] = useState(false);
   // Binary review state
   const [reviewFields, setReviewFields] = useState<string[]>([]);
@@ -1049,9 +1037,15 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
     // UI-Regel: Leere Werte dürfen nie als OK erscheinen.
     if (key === 'canton' && !canton.trim()) return 'review_required';
 
-    if (key === 'nbuTotal' && !nbuTotal.trim()) return 'review_required';
-    if (key === 'nbuEmployer' && !nbuEmployerVoluntary && !nbuEmployer.trim()) return 'review_required';
-    if (key === 'nbuEmployee' && !nbuEmployerVoluntary && !nbuEmployee.trim()) return 'review_required';
+    // NBU-Felder sind nur bei Pensum ≥ 8h/Woche gesetzlich obligatorisch.
+    // Darunter zeigen wir keinen Pflicht-/Review-Hinweis.
+    const _nbuHw = parseFloat(hoursPerWeek);
+    const _nbuRequired = Number.isFinite(_nbuHw) && _nbuHw >= 8;
+    if (_nbuRequired) {
+      if (key === 'nbuTotal' && !nbuTotal.trim()) return 'review_required';
+      if (key === 'nbuEmployer' && !nbuEmployer.trim()) return 'review_required';
+      if (key === 'nbuEmployee' && !nbuEmployee.trim()) return 'review_required';
+    }
 
     const field = confidenceMap[key];
     if (!field) return undefined;
@@ -1115,8 +1109,6 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
       setNbuEmployer(shareFieldToUiString(data.nbu_employer || data.nbu_employer_pct));
       setNbuEmployee(shareFieldToUiString(data.nbu_employee || data.nbu_employee_pct));
       setNbuEmployerVoluntary(data.nbu_employer_voluntary === true);
-      setNbuInsurerName(data.nbu_insurer_name || '');
-      setNbuPolicyNumber(data.nbu_policy_number || '');
     }
   }, [editAssistant]);
 
@@ -1194,13 +1186,9 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
       if (si.nbu_employer_pct) cMap.nbuEmployer = si.nbu_employer_pct;
       if (si.nbu_employee_pct) cMap.nbuEmployee = si.nbu_employee_pct;
       if (si.nbu_employer_voluntary) cMap.nbuEmployerVoluntary = si.nbu_employer_voluntary;
-      if (si.nbu_insurer_name) cMap.nbuInsurerName = si.nbu_insurer_name;
-      if (si.nbu_policy_number) cMap.nbuPolicyNumber = si.nbu_policy_number;
       setNbuEmployer(shareFieldToUiString(si.nbu_employer_pct?.value));
       setNbuEmployee(shareFieldToUiString(si.nbu_employee_pct?.value));
       if (si.nbu_employer_voluntary?.value === true) setNbuEmployerVoluntary(true);
-      if (si.nbu_insurer_name?.value) setNbuInsurerName(String(si.nbu_insurer_name.value));
-      if (si.nbu_policy_number?.value) setNbuPolicyNumber(String(si.nbu_policy_number.value));
     }
 
     // UX: Wenn der Judge bereits ein konkretes ISO-Land vorschlägt, vorbefüllen,
@@ -1378,20 +1366,30 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
       return;
     }
 
-    const nbuTotalN = parseLooseNumber(nbuTotal);
-    if (nbuTotalN === null || nbuTotalN <= 0) {
-      toast.error('NBU unvollständig', {
-        description: 'Bitte den Nichtberufsunfall-Gesamtprämiensatz (%) eingeben.',
-      });
-      return;
-    }
+    // NBU-Validierung
+    //
+    // Regeln (Fehler 4):
+    //   - < 8h/Woche → NBU-Felder vollständig optional, keine Blockierung
+    //   - ≥ 8h/Woche ohne NBU-Daten → nicht-blockierende Warnung
+    //   - Wenn irgendein NBU-Feld befüllt ist, muss der Datensatz konsistent
+    //     sein (Gesamtprämiensatz > 0, Aufteilung AG+AN = 100%).
+    //
+    // Der Freiwillig-Flag verändert die Aufteilung nicht mehr (Fehler 5).
+    const nbuTotalTrim = nbuTotal.trim();
+    const nbuEmployerOut = nbuEmployer.trim();
+    const nbuEmployeeOut = nbuEmployee.trim();
+    const anyNbuFieldEntered = !!(nbuTotalTrim || nbuEmployerOut || nbuEmployeeOut);
+    const hwNum = parseFloat(hoursPerWeek);
+    const nbuMandatory = Number.isFinite(hwNum) && hwNum >= 8;
 
-    let nbuEmployerOut = nbuEmployer.trim();
-    let nbuEmployeeOut = nbuEmployee.trim();
-    if (nbuEmployerVoluntary) {
-      nbuEmployerOut = nbuTotal.trim();
-      nbuEmployeeOut = '0';
-    } else {
+    if (anyNbuFieldEntered) {
+      const nbuTotalN = parseLooseNumber(nbuTotalTrim);
+      if (nbuTotalN === null || nbuTotalN <= 0) {
+        toast.error('NBU unvollständig', {
+          description: 'Bitte den Nichtberufsunfall-Gesamtprämiensatz (%) eingeben oder alle NBU-Felder leer lassen.',
+        });
+        return;
+      }
       if (!nbuEmployerOut || !nbuEmployeeOut) {
         toast.error('NBU unvollständig', {
           description: 'Bitte AG- und AN-Prämienanteil (%) eingeben.',
@@ -1412,6 +1410,14 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
         });
         return;
       }
+    } else if (nbuMandatory) {
+      // Nicht blockierend: Warnung anzeigen, aber Speichern nicht verhindern.
+      toast.warning('Nichtberufsunfallversicherung fehlt', {
+        description:
+          `Bei einem Pensum von ${hoursPerWeek}h/Woche ist eine Nichtberufsunfallversicherung gesetzlich obligatorisch. ` +
+          `Das Onboarding kann trotzdem abgeschlossen werden, die NBU-Angaben sollten jedoch nachgetragen werden.`,
+        duration: 8000,
+      });
     }
 
     setSaving(true);
@@ -1448,12 +1454,10 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
         billing_method:
           billingMethod === 'ordinary' ? billingMethod : null,
         canton,
-        nbu_total: nbuTotal.trim(),
+        nbu_total: nbuTotalTrim,
         nbu_employer: nbuEmployerOut,
         nbu_employee: nbuEmployeeOut,
         nbu_employer_voluntary: nbuEmployerVoluntary,
-        nbu_insurer_name: nbuInsurerName || null,
-        nbu_policy_number: nbuPolicyNumber || null,
         extraction_metadata: extraction?.extraction_metadata ?? null,
       }
     };
@@ -1502,6 +1506,12 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
 
     // Wenn Wohnsitzkanton Prüfbedarf hat, braucht es zwingend eine PLZ.
     if (key === 'plz' && getFieldStatus('canton') === 'review_required') return true;
+
+    // NBU-Felder sind nur bei Pensum ≥ 8h/Woche gesetzlich obligatorisch.
+    if (key === 'nbuTotal' || key === 'nbuEmployer' || key === 'nbuEmployee') {
+      const hw = parseFloat(hoursPerWeek);
+      return Number.isFinite(hw) && hw >= 8;
+    }
 
     return false;
   };
@@ -1726,40 +1736,21 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
       case 'nbuEmployer':
         return (
           <input type="number" min={0} max={100} step={1} className={pIn} placeholder="z. B. 0.75"
-            value={nbuEmployer} onChange={(e) => setNbuEmployer(e.target.value)}
-            disabled={nbuEmployerVoluntary} />
+            value={nbuEmployer} onChange={(e) => setNbuEmployer(e.target.value)} />
         );
       case 'nbuEmployee':
         return (
           <input type="number" min={0} max={100} step={1} className={pIn} placeholder="z. B. 0.75"
-            value={nbuEmployee} onChange={(e) => setNbuEmployee(e.target.value)}
-            disabled={nbuEmployerVoluntary} />
+            value={nbuEmployee} onChange={(e) => setNbuEmployee(e.target.value)} />
         );
       case 'nbuEmployerVoluntary':
         return (
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" checked={nbuEmployerVoluntary}
-              onChange={(e) => {
-                const checked = e.target.checked;
-                setNbuEmployerVoluntary(checked);
-                if (checked && nbuTotal) {
-                  setNbuEmployer(nbuTotal);
-                  setNbuEmployee('0');
-                }
-              }}
+              onChange={(e) => setNbuEmployerVoluntary(e.target.checked)}
               className="rounded border-gray-300" />
             <span className="text-sm">Arbeitgeber übernimmt Nichtberufsunfallversicherung freiwillig</span>
           </label>
-        );
-      case 'nbuInsurerName':
-        return (
-          <input type="text" className={pIn} placeholder="z. B. SUVA, Helvetia"
-            value={nbuInsurerName} onChange={(e) => setNbuInsurerName(e.target.value)} />
-        );
-      case 'nbuPolicyNumber':
-        return (
-          <input type="text" className={pIn} placeholder="Policennummer"
-            value={nbuPolicyNumber} onChange={(e) => setNbuPolicyNumber(e.target.value)} />
         );
       default:
         return null;
@@ -2245,58 +2236,39 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                     <HelpCircle className="w-4 h-4 mt-0.5 shrink-0 text-blue-500" />
                     <span>Der <strong>Nichtberufsunfallversicherungs-Gesamtprämiensatz (NBU)</strong> muss zwingend manuell eingegeben werden – entnehmen Sie ihn Ihrer Versicherungspolice (typischerweise 0.5–3&nbsp;%). Die Aufteilung in AG-/AN-Anteil kann aus dem Arbeitsvertrag übernommen werden.</span>
                   </div>
+                  <MiniField title="AG übernimmt Nichtberufsunfallvers. (NBU) freiwillig" {...fieldProps('nbuEmployerVoluntary')} hasValue>
+                    <label className="flex items-center gap-2 cursor-pointer mt-1">
+                      <input type="checkbox" checked={nbuEmployerVoluntary}
+                        onChange={e => setNbuEmployerVoluntary(e.target.checked)}
+                        className="rounded border-gray-300 h-4 w-4" />
+                      <span className="text-sm text-muted-foreground">Auch bei Pensum unter 8h/Woche</span>
+                    </label>
+                  </MiniField>
                   <MiniField title="Nichtberufsunfallvers. (NBU) Gesamtprämiensatz (%) – manuell" {...fieldProps('nbuTotal')} hasValue={!!nbuTotal}
                     hint="Gesamtprämiensatz gemäss Ihrer Versicherungspolice (typ. 0.5–3%)"
                     error={nbuTotal && parseFloat(nbuTotal) > 5 ? 'Unrealistisch hoch – Prämiensätze liegen typischerweise bei 0.5–3%' : undefined}>
                     <input type="number" min={0} max={10} step="0.01" placeholder="z.B. 1.50"
                       value={nbuTotal} onChange={e => setNbuTotal(e.target.value)} className={inputStyle} />
                   </MiniField>
-                  <MiniField title="Nichtberufsunfallvers. (NBU) AG-Prämienanteil (%)" {...fieldProps('nbuEmployer')} hasValue={nbuEmployerVoluntary || !!nbuEmployer}
-                    error={nbuTotal && nbuEmployer && nbuEmployee && Math.abs(parseFloat(nbuEmployer || '0') + parseFloat(nbuEmployee || '0') - 100) > 0.1 ? 'AG-Anteil + AN-Anteil muss 100% ergeben' : undefined}>
+                  <MiniField title="Nichtberufsunfallvers. (NBU) AG-Prämienanteil (%)" {...fieldProps('nbuEmployer')} hasValue={!!nbuEmployer}
+                    error={nbuEmployer && nbuEmployee && Math.abs(parseFloat(nbuEmployer || '0') + parseFloat(nbuEmployee || '0') - 100) > 0.1 ? 'AG-Anteil + AN-Anteil muss 100% ergeben' : undefined}>
                     <input type="number" min={0} max={100} step="1" placeholder="z.B. 0"
                       value={nbuEmployer} onChange={e => setNbuEmployer(e.target.value)}
-                      disabled={nbuEmployerVoluntary} className={inputStyle} />
+                      className={inputStyle} />
                   </MiniField>
-                  <MiniField title="Nichtberufsunfallvers. (NBU) AN-Prämienanteil (%)" {...fieldProps('nbuEmployee')} hasValue={nbuEmployerVoluntary || !!nbuEmployee}
-                    error={nbuTotal && nbuEmployer && nbuEmployee && Math.abs(parseFloat(nbuEmployer || '0') + parseFloat(nbuEmployee || '0') - 100) > 0.1 ? 'AG-Anteil + AN-Anteil muss 100% ergeben' : undefined}>
+                  <MiniField title="Nichtberufsunfallvers. (NBU) AN-Prämienanteil (%)" {...fieldProps('nbuEmployee')} hasValue={!!nbuEmployee}
+                    error={nbuEmployer && nbuEmployee && Math.abs(parseFloat(nbuEmployer || '0') + parseFloat(nbuEmployee || '0') - 100) > 0.1 ? 'AG-Anteil + AN-Anteil muss 100% ergeben' : undefined}>
                     <input type="number" min={0} max={100} step="1" placeholder="z.B. 100"
                       value={nbuEmployee} onChange={e => setNbuEmployee(e.target.value)}
-                      disabled={nbuEmployerVoluntary} className={inputStyle} />
-                  </MiniField>
-                  <MiniField title="AG übernimmt Nichtberufsunfallvers. (NBU) freiwillig" {...fieldProps('nbuEmployerVoluntary')} hasValue>
-                    <label className="flex items-center gap-2 cursor-pointer mt-1">
-                      <input type="checkbox" checked={nbuEmployerVoluntary}
-                        onChange={e => {
-                          const checked = e.target.checked;
-                          setNbuEmployerVoluntary(checked);
-                          if (checked && nbuTotal) {
-                            setNbuEmployer(nbuTotal);
-                            setNbuEmployee('0');
-                          }
-                        }}
-                        className="rounded border-gray-300 h-4 w-4" />
-                      <span className="text-sm text-muted-foreground">Auch bei Pensum unter 8h/Woche</span>
-                    </label>
-                  </MiniField>
-                  <MiniField title="Unfallversicherer – optional" {...fieldProps('nbuInsurerName')} hasValue={!!nbuInsurerName}>
-                    <input type="text" placeholder="z.B. SUVA, Helvetia" value={nbuInsurerName}
-                      onChange={e => setNbuInsurerName(e.target.value)} className={inputStyle} />
-                  </MiniField>
-                  <MiniField title="Policennummer – optional" {...fieldProps('nbuPolicyNumber')} hasValue={!!nbuPolicyNumber}>
-                    <input type="text" placeholder="Vertragsnummer" value={nbuPolicyNumber}
-                      onChange={e => setNbuPolicyNumber(e.target.value)} className={inputStyle} />
+                      className={inputStyle} />
                   </MiniField>
                   {(() => {
                     const hw = parseFloat(hoursPerWeek);
                     if (!Number.isFinite(hw) || hw <= 0) return null;
-                    if (hw < 7) return (
-                      <div className="col-span-2 md:col-span-4 bg-blue-50 rounded-xl border border-blue-100 p-3 text-sm text-blue-700">
-                        Pensum unter 7h/Woche – voraussichtlich kein Abzug für Nichtberufsunfallversicherung.
-                      </div>
-                    );
+                    // Gesetzliche Grenze für die Nichtberufsunfallversicherung: 8h/Woche.
                     if (hw < 8) return (
-                      <div className="col-span-2 md:col-span-4 bg-amber-50 rounded-xl border border-amber-200 p-3 text-sm text-amber-800">
-                        Grenzfall (7–8h/Woche) – Nichtberufsunfallversicherungs-Pflicht abhängig von tatsächlichen Arbeitsstunden. Bitte mit Versicherer klären.
+                      <div className="col-span-2 md:col-span-4 bg-blue-50 rounded-xl border border-blue-100 p-3 text-sm text-blue-700">
+                        Pensum unter 8h/Woche – Nichtberufsunfallversicherung ist nicht obligatorisch. Die NBU-Felder sind optional und können leer bleiben.
                       </div>
                     );
                     return (

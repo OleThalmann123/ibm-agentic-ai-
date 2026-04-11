@@ -10,10 +10,15 @@ export interface PayslipInput {
   hours: number; // month total
   vacationSurchargeRate: number; // decimal (e.g. 0.0833)
   ktvRateEmployee?: number; // decimal (e.g. 0.01 for 1%)
-  nbuRateEmployee?: number; // decimal
+  // ── Nichtberufsunfallversicherung (NBU) ─────────────────────────────
+  // Zweistufige Berechnung:
+  //   1. Gesamtprämie = massgebender Lohn × nbuTotalRate
+  //   2. Abzug AN     = round2(Gesamtprämie × nbuEmployeeShare)
+  nbuTotalRate?: number;       // Gesamtprämiensatz (decimal, z.B. 0.015 = 1.5%)
+  nbuEmployeeShare?: number;   // AN-Anteil an der Prämie (fraction 0–1)
+  nbuEmployerShare?: number;   // AG-Anteil an der Prämie (fraction 0–1)
   nbuEligible?: boolean;
   nbuEmployerVoluntary?: boolean;
-  nbuRateEmployer?: number; // decimal (AG-Anteil, for internal tracking)
   withholdingTaxRate?: number; // decimal (only for ordinary_with_withholding)
 }
 
@@ -48,6 +53,12 @@ const PAYSLIP_UVG_CAP = 12_350; // CHF 148'200 / 12
 
 function round5(value: number): number {
   return Math.round(value * 20) / 20;
+}
+
+/** Kaufmännische Rundung auf 2 Dezimalstellen – für den NBU-Abzug, der
+ *  nicht auf 5 Rappen, sondern exakt auf Rappen gerundet wird. */
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
 }
 
 export function calculatePayslip(input: PayslipInput): PayslipResult {
@@ -99,7 +110,11 @@ export function calculatePayslip(input: PayslipInput): PayslipResult {
     });
   }
 
-  const nbu = input.nbuRateEmployee;
+  // ── NBU – zweistufige Berechnung ──
+  // Schritt 1: Gesamtprämie = massgebender Lohn × Gesamtprämiensatz
+  // Schritt 2: Abzug AN     = round2(Gesamtprämie × AN-Anteil)
+  const nbuTotalRate = input.nbuTotalRate ?? 0;
+  const nbuAnShare = input.nbuEmployeeShare ?? 0;
   const nbuEligible = input.nbuEligible;
   const nbuEmployerVoluntary = input.nbuEmployerVoluntary;
   let nbuDisplayNote: string | undefined;
@@ -113,7 +128,25 @@ export function calculatePayslip(input: PayslipInput): PayslipResult {
       enabled: true,
     });
     nbuDisplayNote = 'Nichtberufsunfallversicherung: Kein Abzug (Beschäftigung < 8h/Woche)';
-  } else if (nbuEmployerVoluntary && nbu != null) {
+  } else if (nbuTotalRate > 0 && nbuAnShare > 0) {
+    const uvgBase = Math.min(grossPerMonth, PAYSLIP_UVG_CAP);
+    const totalPremiumPerMonth = uvgBase * nbuTotalRate;
+    const anPerMonth = round2(totalPremiumPerMonth * nbuAnShare);
+    const anEffectiveRate = nbuTotalRate * nbuAnShare;
+    const anPerHour = hours > 0 ? anPerMonth / hours : 0;
+    deductions.push({
+      label: 'Nichtberufsunfallversicherung',
+      rate: anEffectiveRate,
+      perHour: anPerHour,
+      perMonth: anPerMonth,
+      enabled: true,
+    });
+    nbuDisplayNote = `Nichtberufsunfallversicherung (NBU) ${(nbuTotalRate * 100).toFixed(2)}% – AN-Anteil ${(nbuAnShare * 100).toFixed(0)}%`;
+    if (nbuEmployerVoluntary) {
+      nbuDisplayNote += ' · auch bei Pensum unter 8h/Woche';
+    }
+  } else if (nbuTotalRate > 0 && nbuAnShare === 0) {
+    // AG zahlt die gesamte Prämie – AN hat keinen Abzug
     deductions.push({
       label: 'Nichtberufsunfallversicherung',
       rate: null,
@@ -121,18 +154,7 @@ export function calculatePayslip(input: PayslipInput): PayslipResult {
       perMonth: 0,
       enabled: true,
     });
-    nbuDisplayNote = 'Nichtberufsunfallversicherung vom Arbeitgeber freiwillig übernommen';
-  } else if (nbu != null && nbu > 0) {
-    const uvgBase = Math.min(grossPerMonth, PAYSLIP_UVG_CAP);
-    const uvgBasePerHour = hours > 0 ? uvgBase / hours : grossPerHour;
-    deductions.push({
-      label: 'Nichtberufsunfallversicherung',
-      rate: nbu,
-      perHour: uvgBasePerHour * nbu,
-      perMonth: round5(uvgBase * nbu),
-      enabled: true,
-    });
-    nbuDisplayNote = `Nichtberufsunfallversicherung (NBU) ${(nbu * 100).toFixed(2)}%`;
+    nbuDisplayNote = 'Nichtberufsunfallversicherung vom Arbeitgeber getragen';
   }
 
   if (input.accountingMethod === 'simplified') {
