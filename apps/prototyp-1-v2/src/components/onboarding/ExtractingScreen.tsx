@@ -1,15 +1,15 @@
 import { useState, useEffect, useRef, useId, type ReactNode } from 'react';
 import { FileText, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { AsklepiosExtractLogo } from '@/components/brand/AsklepiosExtractLogo';
 
 /** Anzeige-Dauer: länger als typische Extraktion, damit der Ring nicht auf 0 springt bevor fertig. */
 const TOTAL_SECONDS = 300;
 
 interface Props {
-  asklepiosLogoUrl: string;
   onCancel: () => void;
 }
 
-export function ExtractingScreen({ asklepiosLogoUrl, onCancel }: Props) {
+export function ExtractingScreen({ onCancel }: Props) {
   const ringGradId = useId().replace(/:/g, '');
   const [remaining, setRemaining] = useState(TOTAL_SECONDS);
   const startRef = useRef(Date.now());
@@ -53,18 +53,13 @@ export function ExtractingScreen({ asklepiosLogoUrl, onCancel }: Props) {
             className="mx-auto flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl border border-white/15 bg-white/10 shadow-[0_18px_40px_rgba(59,130,246,0.28)]"
             style={{ animation: 'ask-float 3s ease-in-out infinite' }}
           >
-            <img
-              src={asklepiosLogoUrl}
-              alt="Asklepios"
-              className="pointer-events-none h-full w-full select-none object-contain p-2.5"
-              draggable={false}
-            />
+            <AsklepiosExtractLogo className="h-10 w-10 text-white" />
           </div>
           <p className="mt-6 text-xs font-semibold uppercase tracking-[0.2em] text-white/55">
             Agentic Workflow aktiv &middot; ca. 3 bis 5 Min.
           </p>
           <h2 className="mx-auto mt-3 max-w-2xl text-2xl font-bold leading-tight sm:text-3xl">
-            Asklepios legt deine Assistenzperson an
+            Asklepios_extract legt deine Assistenzperson an
           </h2>
           <p className="mx-auto mt-3 max-w-xl text-base text-white/65">
             Vertrag wird analysiert und Stammdaten werden vorbereitet.
