@@ -295,16 +295,27 @@ export function PayrollPage() {
     const vacWeeks = assistant.vacation_weeks || 4;
     const ferienzuschlag = vacWeeks === 5 ? 0.1064 : vacWeeks === 6 ? 0.1304 : vacWeeks === 7 ? 0.1556 : 0.0833;
 
+    // NBU wird zweistufig berechnet (Gesamtprämie × Anteil), siehe payroll.ts.
+    // Die Aufteilung ist immer in nbu_employer/nbu_employee hinterlegt (Fehler 5);
+    // der Freiwillig-Flag steuert nur noch, ob die NBU auch bei < 8h/Woche greift.
+    const nbuTotalRate = cd?.nbu_total ? parseFloat(cd.nbu_total) / 100 : undefined;
+    const nbuEmployerShare = cd?.nbu_employer != null && cd?.nbu_employer !== '' ? parseFloat(cd.nbu_employer) / 100 : undefined;
+    const nbuEmployeeShare = cd?.nbu_employee != null && cd?.nbu_employee !== '' ? parseFloat(cd.nbu_employee) / 100 : undefined;
+    const nbuEmployerVoluntary = cd?.nbu_employer_voluntary === true;
+    // Eligible = regulär (nbu_eligible aus Zeiterfassung) ODER freiwillig-auch-unter-8h
+    const nbuEligible = cd?.nbu_eligible !== undefined ? (cd.nbu_eligible || nbuEmployerVoluntary) : undefined;
+
     return calculatePayroll({
       stundenlohn,
       anzahlStunden: hours.totalHours,
       kanton,
       abrechnungsverfahren: 'ordentlich',
       ferienzuschlag,
-      nbuAN: cd?.nbu_employee && cd?.nbu_total ? (parseFloat(cd.nbu_total) / 100) * (parseFloat(cd.nbu_employee) / 100) : undefined,
-      nbuAG: cd?.nbu_employer_voluntary && cd?.nbu_total ? parseFloat(cd.nbu_total) / 100 : undefined,
-      nbuEligible: cd?.nbu_eligible !== undefined ? cd.nbu_eligible : undefined,
-      nbuEmployerVoluntary: cd?.nbu_employer_voluntary === true,
+      nbuTotalRate,
+      nbuEmployerShare,
+      nbuEmployeeShare,
+      nbuEligible,
+      nbuEmployerVoluntary,
       agName: employer?.name,
       anName: assistant.name,
     });
@@ -611,16 +622,20 @@ export function PayrollPage() {
                 ? 'Ordentliches mit Quellensteuer'
                 : 'Ordentliches';
 
-          const nbuRateEmployee = cd2?.nbu_employee && cd2?.nbu_total ? (parseFloat(cd2.nbu_total) / 100) * (parseFloat(cd2.nbu_employee) / 100) : undefined;
-          const nbuEligible = cd2?.nbu_eligible !== undefined ? cd2.nbu_eligible : undefined;
+          const nbuTotalRate = cd2?.nbu_total ? parseFloat(cd2.nbu_total) / 100 : undefined;
+          const nbuEmployerShare = cd2?.nbu_employer != null && cd2?.nbu_employer !== '' ? parseFloat(cd2.nbu_employer) / 100 : undefined;
+          const nbuEmployeeShare = cd2?.nbu_employee != null && cd2?.nbu_employee !== '' ? parseFloat(cd2.nbu_employee) / 100 : undefined;
           const nbuEmployerVoluntary = cd2?.nbu_employer_voluntary === true;
+          const nbuEligible = cd2?.nbu_eligible !== undefined ? (cd2.nbu_eligible || nbuEmployerVoluntary) : undefined;
           const payslip = calculatePayslip({
             canton: kanton,
             accountingMethod,
             hourlyRate: stundenlohn,
             hours: hours.totalHours,
             vacationSurchargeRate: ferienzuschlagRate,
-            nbuRateEmployee,
+            nbuTotalRate,
+            nbuEmployerShare,
+            nbuEmployeeShare,
             nbuEligible,
             nbuEmployerVoluntary,
           });
@@ -714,16 +729,20 @@ export function PayrollPage() {
               ? 'Ordentliches mit Quellensteuer'
               : 'Ordentliches';
 
-        const nbuRateEmployee = cd2?.nbu_employee && cd2?.nbu_total ? (parseFloat(cd2.nbu_total) / 100) * (parseFloat(cd2.nbu_employee) / 100) : undefined;
-        const nbuEligible = cd2?.nbu_eligible !== undefined ? cd2.nbu_eligible : undefined;
+        const nbuTotalRate = cd2?.nbu_total ? parseFloat(cd2.nbu_total) / 100 : undefined;
+        const nbuEmployerShare = cd2?.nbu_employer != null && cd2?.nbu_employer !== '' ? parseFloat(cd2.nbu_employer) / 100 : undefined;
+        const nbuEmployeeShare = cd2?.nbu_employee != null && cd2?.nbu_employee !== '' ? parseFloat(cd2.nbu_employee) / 100 : undefined;
         const nbuEmployerVoluntary = cd2?.nbu_employer_voluntary === true;
+        const nbuEligible = cd2?.nbu_eligible !== undefined ? (cd2.nbu_eligible || nbuEmployerVoluntary) : undefined;
         const payslip = calculatePayslip({
           canton: kanton,
           accountingMethod,
           hourlyRate: stundenlohn,
           hours: hours.totalHours,
           vacationSurchargeRate: ferienzuschlagRate,
-          nbuRateEmployee,
+          nbuTotalRate,
+          nbuEmployerShare,
+          nbuEmployeeShare,
           nbuEligible,
           nbuEmployerVoluntary,
         });
@@ -792,16 +811,20 @@ export function PayrollPage() {
           ? 'Ordentliches mit Quellensteuer'
           : 'Ordentliches';
 
-    const nbuRateEmployee = cd?.nbu_employee && cd?.nbu_total ? (parseFloat(cd.nbu_total) / 100) * (parseFloat(cd.nbu_employee) / 100) : undefined;
-    const nbuEligible = cd?.nbu_eligible !== undefined ? cd.nbu_eligible : undefined;
+    const nbuTotalRate = cd?.nbu_total ? parseFloat(cd.nbu_total) / 100 : undefined;
+    const nbuEmployerShare = cd?.nbu_employer != null && cd?.nbu_employer !== '' ? parseFloat(cd.nbu_employer) / 100 : undefined;
+    const nbuEmployeeShare = cd?.nbu_employee != null && cd?.nbu_employee !== '' ? parseFloat(cd.nbu_employee) / 100 : undefined;
     const nbuEmployerVoluntary = cd?.nbu_employer_voluntary === true;
+    const nbuEligible = cd?.nbu_eligible !== undefined ? (cd.nbu_eligible || nbuEmployerVoluntary) : undefined;
     const payslip = calculatePayslip({
       canton: kanton,
       accountingMethod,
       hourlyRate: stundenlohn,
       hours: hours.totalHours,
       vacationSurchargeRate: ferienzuschlagRate,
-      nbuRateEmployee,
+      nbuTotalRate,
+      nbuEmployerShare,
+      nbuEmployeeShare,
       nbuEligible,
       nbuEmployerVoluntary,
     });
@@ -1530,9 +1553,11 @@ export function PayrollPage() {
                                       : 'Ordentliches';
 
                                 const ktvRateEmployee = cd?.ktv_employee ? (parseFloat(cd.ktv_employee) / 100) : undefined;
-                                const nbuRateEmployee = cd?.nbu_employee && cd?.nbu_total ? (parseFloat(cd.nbu_total) / 100) * (parseFloat(cd.nbu_employee) / 100) : undefined;
-                                const nbuEligible = cd?.nbu_eligible !== undefined ? cd.nbu_eligible : undefined;
+                                const nbuTotalRate = cd?.nbu_total ? parseFloat(cd.nbu_total) / 100 : undefined;
+                                const nbuEmployerShare = cd?.nbu_employer != null && cd?.nbu_employer !== '' ? parseFloat(cd.nbu_employer) / 100 : undefined;
+                                const nbuEmployeeShare = cd?.nbu_employee != null && cd?.nbu_employee !== '' ? parseFloat(cd.nbu_employee) / 100 : undefined;
                                 const nbuEmployerVoluntary = cd?.nbu_employer_voluntary === true;
+                                const nbuEligible = cd?.nbu_eligible !== undefined ? (cd.nbu_eligible || nbuEmployerVoluntary) : undefined;
                                 const withholdingTaxRate = cd?.withholding_tax_rate ? (parseFloat(cd.withholding_tax_rate) / 100) : undefined;
 
                                 const payslip = calculatePayslip({
@@ -1542,7 +1567,9 @@ export function PayrollPage() {
                                   hours: hours.totalHours,
                                   vacationSurchargeRate: ferienzuschlagRate,
                                   ktvRateEmployee,
-                                  nbuRateEmployee,
+                                  nbuTotalRate,
+                                  nbuEmployerShare,
+                                  nbuEmployeeShare,
                                   nbuEligible,
                                   nbuEmployerVoluntary,
                                   withholdingTaxRate,

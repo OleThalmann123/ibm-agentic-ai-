@@ -863,7 +863,14 @@ function LohnTab({
         : 'ordinary';
 
   const ktvRateEmployee = contract?.ktv_employee ? (parseFloat(String(contract.ktv_employee)) / 100) : undefined;
-  const nbuRateEmployee = contract?.nbu_employee ? (parseFloat(String(contract.nbu_employee)) / 100) : undefined;
+  // NBU: zweistufige Berechnung (Gesamtprämie × Anteil). Vorher wurde fälschlich
+  // nur nbu_employee (%-Anteil an der Prämie) direkt als Abzugsprozentsatz
+  // angewendet – das ergab bei 100% AN-Anteil einen Abzug von 100% des Lohns.
+  const nbuTotalRate = contract?.nbu_total ? parseFloat(String(contract.nbu_total)) / 100 : undefined;
+  const nbuEmployerShare = contract?.nbu_employer != null && contract?.nbu_employer !== '' ? parseFloat(String(contract.nbu_employer)) / 100 : undefined;
+  const nbuEmployeeShare = contract?.nbu_employee != null && contract?.nbu_employee !== '' ? parseFloat(String(contract.nbu_employee)) / 100 : undefined;
+  const nbuEmployerVoluntary = contract?.nbu_employer_voluntary === true;
+  const nbuEligible = contract?.nbu_eligible !== undefined ? (contract.nbu_eligible || nbuEmployerVoluntary) : undefined;
   const withholdingTaxRate = contract?.withholding_tax_rate ? (parseFloat(String(contract.withholding_tax_rate)) / 100) : undefined;
 
   const payslip = calculatePayslip({
@@ -873,7 +880,11 @@ function LohnTab({
     hours: stunden,
     vacationSurchargeRate: ferienzuschlagRate,
     ktvRateEmployee,
-    nbuRateEmployee,
+    nbuTotalRate,
+    nbuEmployerShare,
+    nbuEmployeeShare,
+    nbuEligible,
+    nbuEmployerVoluntary,
     withholdingTaxRate,
   });
 

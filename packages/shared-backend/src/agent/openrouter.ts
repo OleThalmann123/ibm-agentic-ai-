@@ -162,8 +162,8 @@ Format: Nur valides JSON. Sprache der Keys: Englisch.
       "canton": { "value": "", "source_text": "", "note": "2-stellig, aus PLZ ableiten" },
       "nbu_total_rate_pct": { "value": null, "source_text": "", "note": "Dezimal, 0.015=1.5%, typ. 0.005-0.03" },
       "nbu_employer_pct": { "value": null, "source_text": "", "note": "Dezimal, AG-Anteil" },
-      "nbu_employee_pct": { "value": null, "source_text": "", "note": "Dezimal, AN-Anteil, Standard=Gesamt" },
-      "nbu_employer_voluntary": { "value": null, "source_text": "", "note": "true wenn AG freiwillig zahlt" },
+      "nbu_employee_pct": { "value": null, "source_text": "", "note": "Dezimal, AN-Anteil an der Gesamtprämie" },
+      "nbu_employer_voluntary": { "value": null, "source_text": "", "note": "true wenn AG die NBU auch bei Pensum unter 8h/Woche freiwillig einschliesst" },
       "nbu_insurer_name": { "value": "", "source_text": "", "note": "SUVA, Helvetia, etc." },
       "nbu_policy_number": { "value": "", "source_text": "", "note": "" } }
   } }`;
