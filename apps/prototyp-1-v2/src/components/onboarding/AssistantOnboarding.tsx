@@ -625,7 +625,7 @@ function ReviewPopup({
                 <div className="h-full overflow-auto rounded-lg border border-slate-200 bg-white p-4 sm:p-6">
                   <div
                     className="prose prose-sm max-w-none prose-headings:text-slate-800 prose-p:text-slate-700 prose-table:text-sm"
-                    dangerouslySetInnerHTML={{ __html: docxHtml! }}
+                    dangerouslySetInnerHTML={{ __html: docxHtml ?? '' }}
                   />
                 </div>
               ) : (
