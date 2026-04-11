@@ -1737,12 +1737,12 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
         );
       case 'nbuEmployer':
         return (
-          <input type="number" min={0} max={100} step={1} className={pIn} placeholder="z. B. 0.75"
+          <input type="number" min={0} max={100} step={1} className={pIn} placeholder="z.B. 0"
             value={nbuEmployer} onChange={(e) => setNbuEmployer(e.target.value)} />
         );
       case 'nbuEmployee':
         return (
-          <input type="number" min={0} max={100} step={1} className={pIn} placeholder="z. B. 0.75"
+          <input type="number" min={0} max={100} step={1} className={pIn} placeholder="z.B. 100"
             value={nbuEmployee} onChange={(e) => setNbuEmployee(e.target.value)} />
         );
       case 'nbuEmployerVoluntary':
