@@ -142,8 +142,8 @@ Format: Nur valides JSON. Sprache der Keys: Englisch.
       "email": { "value": "", "source_text": "", "note": "" },
       "birth_date": { "value": "", "source_text": "", "note": "YYYY-MM-DD" },
       "gender": { "value": "", "source_text": "", "note": "male|female|diverse, nur wenn explizit" },
-      "civil_status": { "value": "", "source_text": "", "note": "ledig|verheiratet|geschieden|verwitwet" },
-      "residence_permit": { "value": "", "source_text": "", "note": "B|C|G|L|N|F|CH" },
+      "civil_status": { "value": "", "source_text": "", "note": "ledig|verheiratet|geschieden|verwitwet|eingetragene Partnerschaft" },
+      "residence_permit": { "value": "", "source_text": "", "note": "CH|C|B|G|L|N|F (Schweizer Bürger = CH)" },
       "ahv_number": { "value": "", "source_text": "", "note": "756.XXXX.XXXX.XX" } },
     "contract_terms": {
       "start_date": { "value": "", "source_text": "", "note": "YYYY-MM-DD" },
@@ -156,7 +156,7 @@ Format: Nur valides JSON. Sprache der Keys: Englisch.
       "hourly_rate": { "value": null, "source_text": "", "note": "CHF brutto, nur Zahl" },
       "vacation_weeks": { "value": null, "source_text": "", "note": "null wenn nicht explizit im Vertrag. NUR setzen wenn Ferienanspruch wörtlich angegeben." },
       "holiday_supplement_pct": { "value": null, "source_text": "", "note": "null wenn nicht explizit im Vertrag. Wird automatisch berechnet falls vacation_weeks gesetzt." },
-      "payment_iban": { "value": "", "source_text": "", "note": "CH/LI IBAN" } },
+      "payment_iban": { "value": "", "source_text": "", "note": "CH/LI IBAN. NUR setzen wenn wörtlich im Vertrag. source_text MUSS die IBAN enthalten. Sonst null." } },
     "social_insurance": {
       "accounting_method": { "value": "ordinary", "source_text": "", "note": "" },
       "canton": { "value": "", "source_text": "", "note": "2-stellig, aus PLZ ableiten" },

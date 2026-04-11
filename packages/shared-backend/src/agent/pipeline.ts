@@ -110,6 +110,22 @@ async function runDocumentPipelineImpl(
       toolsUsed: toolCalls,
     });
 
+    // Enforce tool usage: contract_data_submission MUST have been called so
+    // Swiss-specific validation (IBAN, AHV, canton, enums, hallucination
+    // guards) actually ran. Otherwise the extraction is untrusted and we
+    // refuse to accept it.
+    const hadContracts =
+      rawResult.contracts &&
+      (rawResult.contracts.employer ||
+        rawResult.contracts.assistant ||
+        rawResult.contracts.contract_terms);
+    const submissionCalled = toolCalls.includes('contract_data_submission');
+    if (hadContracts && !submissionCalled) {
+      throw new Error(
+        'Agent hat contract_data_submission nicht aufgerufen – Validierung fehlt, Ergebnis nicht akzeptiert.',
+      );
+    }
+
     // ── Step 3: Safety-Check – Hat Agent 1 Vertragsdaten erkannt? ──
     const step3 = addTraceStep('classification', 'Vertragserkennung (Safety-Check)');
 
