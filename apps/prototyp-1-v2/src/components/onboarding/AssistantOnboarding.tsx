@@ -714,38 +714,23 @@ function formatIban(raw: string): string {
   return clean.replace(/(.{4})/g, '$1 ').trim();
 }
 
-/** Validate Swiss IBAN */
+/** Validate Swiss IBAN (CH: 2 Prüfziffern + 5 Ziffern Bank + 12 alphanumerisch) */
 function validateIban(value: string): string | null {
   if (!value) return null;
-  const cleanedRaw = value
+  const cleaned = value
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, '');
 
-  if (cleanedRaw.length > 0 && !cleanedRaw.startsWith('CH')) return 'Muss mit CH beginnen';
-  if (cleanedRaw.length > 2 && cleanedRaw.length < 21) return `${21 - cleanedRaw.length} Zeichen fehlen`;
-  if (cleanedRaw.length > 21) return 'Zu viele Zeichen';
-  if (cleanedRaw.length !== 21) return null;
+  if (cleaned.length > 0 && !cleaned.startsWith('CH')) return 'Muss mit CH beginnen';
+  if (cleaned.length > 2 && cleaned.length < 21) return `${21 - cleaned.length} Zeichen fehlen`;
+  if (cleaned.length > 21) return 'Zu viele Zeichen';
+  if (cleaned.length !== 21) return null;
 
-  // OCR-Toleranz: häufige Buchstaben↔Ziffern-Verwechslungen im Zahlenteil
-  const ocrDigitMap: Record<string, string> = {
-    O: '0',
-    Q: '0',
-    D: '0',
-    I: '1',
-    L: '1',
-    Z: '2',
-    S: '5',
-    G: '6',
-    B: '8',
-  };
-
-  const normalized = `${cleanedRaw.slice(0, 2)}${cleanedRaw
-    .slice(2)
-    .split('')
-    .map((c) => ocrDigitMap[c] ?? c)
-    .join('')}`;
-
-  if (!/^CH\d{19}$/.test(normalized)) return 'Ungültige IBAN (Format)';
+  // Per SWIFT IBAN Registry: CH-Format ist 2!n5!n12!c. Der Konto-Teil (letzte
+  // 12 Zeichen) ist alphanumerisch – Buchstaben sind legal. KEIN OCR-Remap
+  // hier: das würde valide IBANs zerstören oder falsche zu scheinbar validen
+  // machen.
+  if (!/^CH\d{7}[0-9A-Z]{12}$/.test(cleaned)) return 'Ungültige IBAN (Format)';
 
   const mod97 = (iban: string): number => {
     const rearranged = `${iban.slice(4)}${iban.slice(0, 4)}`;
@@ -767,7 +752,7 @@ function validateIban(value: string): string | null {
     return remainder;
   };
 
-  if (mod97(normalized) !== 1) return 'Ungültige IBAN (Prüfziffer)';
+  if (mod97(cleaned) !== 1) return 'Ungültige IBAN (Prüfziffer)';
   return null;
 }
 
@@ -1625,7 +1610,12 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
           <select value={residencePermit} onChange={(e) => setResidencePermit(e.target.value)} className={`${selectStyle} mt-1`}>
             <option value="">Bitte wählen…</option>
             <option value="CH">Schweizer/in</option>
-            <option value="C">Ausweis C</option>
+            <option value="C">Ausweis C (Niederlassung)</option>
+            <option value="B">Ausweis B (Aufenthalt)</option>
+            <option value="G">Ausweis G (Grenzgänger)</option>
+            <option value="L">Ausweis L (Kurzaufenthalt)</option>
+            <option value="N">Ausweis N (Asylsuchende)</option>
+            <option value="F">Ausweis F (vorläufig Aufgenommene)</option>
           </select>
         );
       case 'contractStart':
@@ -2080,6 +2070,11 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                       <option value="">Bitte wählen...</option>
                       <option value="CH">Schweizer/in</option>
                       <option value="C">Ausweis C (Niederlassung)</option>
+                      <option value="B">Ausweis B (Aufenthalt)</option>
+                      <option value="G">Ausweis G (Grenzgänger)</option>
+                      <option value="L">Ausweis L (Kurzaufenthalt)</option>
+                      <option value="N">Ausweis N (Asylsuchende)</option>
+                      <option value="F">Ausweis F (vorläufig Aufgenommene)</option>
                     </select>
                   </MiniField>
                 </div>

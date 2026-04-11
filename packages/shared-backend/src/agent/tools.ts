@@ -205,36 +205,18 @@ export const contractDataSubmissionTool = tool(
     };
 
     const normalizeIban = (raw: unknown): { cleaned: string; formatted: string | null } => {
-      const cleanedRaw = String(raw ?? '')
+      const cleaned = String(raw ?? '')
         .toUpperCase()
-        .replace(/[^A-Z0-9]/g, ''); // tolerate spaces, punctuation, OCR artifacts
+        .replace(/[^A-Z0-9]/g, ''); // tolerate spaces, punctuation
 
-      // We currently only support CH/LI. Swiss/Liechtenstein IBANs are digits after country code.
-      if (!/^(CH|LI)/.test(cleanedRaw)) return { cleaned: cleanedRaw, formatted: null };
+      // We currently only support CH/LI.
+      if (!/^(CH|LI)/.test(cleaned)) return { cleaned, formatted: null };
 
-      const ocrDigitMap: Record<string, string> = {
-        O: '0',
-        Q: '0',
-        D: '0',
-        I: '1',
-        L: '1',
-        Z: '2',
-        S: '5',
-        G: '6',
-        B: '8',
-      };
-
-      const country = cleanedRaw.slice(0, 2);
-      const rest = cleanedRaw
-        .slice(2)
-        .split('')
-        .map((c) => ocrDigitMap[c] ?? c)
-        .join('');
-
-      const cleaned = `${country}${rest}`;
-
-      // CH/LI IBAN length is 21 (2 letters + 19 digits)
-      if (!/^(CH|LI)\d{19}$/.test(cleaned)) return { cleaned, formatted: null };
+      // Per SWIFT IBAN Registry, CH/LI IBAN format is: 2 check digits + 5 numeric
+      // bank code + 12 ALPHANUMERIC account characters. Letters in the account
+      // portion are legal and MUST NOT be "OCR-corrected" to digits — doing so
+      // either destroys correct IBANs or turns wrong ones into fake-valid ones.
+      if (!/^(CH|LI)\d{7}[0-9A-Z]{12}$/.test(cleaned)) return { cleaned, formatted: null };
       if (!isValidIban(cleaned)) return { cleaned, formatted: null };
 
       const formatted = cleaned.match(/.{1,4}/g)?.join(' ') ?? cleaned;
@@ -261,14 +243,30 @@ export const contractDataSubmissionTool = tool(
       });
     }
 
+    // Map country names / ISO-3 codes to ISO-2. Must stay in sync with the
+    // COUNTRY_OPTIONS list in AssistantOnboarding.tsx, otherwise the frontend
+    // dropdown falls back to "OTHER" and the user loses the value.
+    const COUNTRY_TO_ISO2: Record<string, string> = {
+      CH: 'CH', CHE: 'CH', SCHWEIZ: 'CH', SWITZERLAND: 'CH', SUISSE: 'CH', SVIZZERA: 'CH',
+      DE: 'DE', DEU: 'DE', DEUTSCHLAND: 'DE', GERMANY: 'DE', ALLEMAGNE: 'DE',
+      AT: 'AT', AUT: 'AT', ÖSTERREICH: 'AT', OESTERREICH: 'AT', AUSTRIA: 'AT',
+      IT: 'IT', ITA: 'IT', ITALIEN: 'IT', ITALY: 'IT', ITALIA: 'IT',
+      FR: 'FR', FRA: 'FR', FRANKREICH: 'FR', FRANCE: 'FR',
+      LI: 'LI', LIE: 'LI', LIECHTENSTEIN: 'LI',
+    };
     const normalizeCountry = (v: unknown): string => {
       if (v === null || v === undefined) return '';
       return String(v).trim().toUpperCase();
     };
+    const toIso2Country = (v: unknown): string | null => {
+      const key = normalizeCountry(v);
+      if (!key) return null;
+      return COUNTRY_TO_ISO2[key] ?? null;
+    };
     const isSwissCountry = (countryValue: unknown): boolean => {
       const c = normalizeCountry(countryValue);
       if (!c) return true; // default: assume CH if unknown
-      return c === 'CH' || c === 'CHE' || c === 'SCHWEIZ' || c === 'SWITZERLAND';
+      return toIso2Country(countryValue) === 'CH';
     };
 
     // Validate assistant phone (soft)
@@ -287,11 +285,66 @@ export const contractDataSubmissionTool = tool(
       }
     }
 
-    // Validate assistant gender (soft)
+    // Normalise assistant country to ISO-2 (matches the frontend dropdown).
+    if (assistantData.country?.value) {
+      const iso2 = toIso2Country(assistantData.country.value);
+      if (!iso2) {
+        validationErrors.push(`Land nicht erkannt: ${assistantData.country.value}`);
+      } else if (assistantData.country.value !== iso2) {
+        corrections.push(`Land normalisiert: ${assistantData.country.value} → ${iso2}`);
+        assistantData.country.value = iso2;
+      }
+    }
+
+    // Normalise assistant gender to English enum (male|female|diverse).
     if (assistantData.gender?.value) {
-      const g = String(assistantData.gender.value).trim().toLowerCase();
-      if (!['male', 'female', 'diverse', 'männlich', 'weiblich', 'divers'].includes(g)) {
+      const raw = String(assistantData.gender.value).trim().toLowerCase();
+      const genderMap: Record<string, 'male' | 'female' | 'diverse'> = {
+        male: 'male', female: 'female', diverse: 'diverse',
+        männlich: 'male', maennlich: 'male', mann: 'male', m: 'male',
+        weiblich: 'female', frau: 'female', w: 'female', f: 'female',
+        divers: 'diverse', d: 'diverse',
+      };
+      const norm = genderMap[raw];
+      if (!norm) {
         validationErrors.push('Geschlecht nicht erkannt (erwartet: male|female|diverse)');
+      } else if (assistantData.gender.value !== norm) {
+        corrections.push(`Geschlecht normalisiert: ${assistantData.gender.value} → ${norm}`);
+        assistantData.gender.value = norm;
+      }
+    }
+
+    // Normalise civil_status to the exact casing used by the frontend
+    // dropdown in AssistantOnboarding.tsx (otherwise the <select> would not
+    // match the extracted value and render as empty).
+    if (assistantData.civil_status?.value) {
+      const raw = String(assistantData.civil_status.value).trim().toLowerCase();
+      const civilMap: Record<string, string> = {
+        ledig: 'ledig', single: 'ledig', unmarried: 'ledig',
+        verheiratet: 'verheiratet', married: 'verheiratet',
+        geschieden: 'geschieden', divorced: 'geschieden',
+        verwitwet: 'verwitwet', widowed: 'verwitwet',
+        'eingetragene partnerschaft': 'eingetragene Partnerschaft',
+        'registered partnership': 'eingetragene Partnerschaft',
+      };
+      const norm = civilMap[raw];
+      if (!norm) {
+        validationErrors.push(`Zivilstand nicht erkannt: ${assistantData.civil_status.value}`);
+      } else if (assistantData.civil_status.value !== norm) {
+        corrections.push(`Zivilstand normalisiert: ${assistantData.civil_status.value} → ${norm}`);
+        assistantData.civil_status.value = norm;
+      }
+    }
+
+    // Normalise residence_permit to ISO enum shared with the frontend dropdown.
+    if (assistantData.residence_permit?.value) {
+      const raw = String(assistantData.residence_permit.value).trim().toUpperCase();
+      const allowed = new Set(['CH', 'C', 'B', 'G', 'L', 'N', 'F']);
+      if (!allowed.has(raw)) {
+        validationErrors.push(`Aufenthaltsstatus nicht erkannt: ${assistantData.residence_permit.value}`);
+      } else if (assistantData.residence_permit.value !== raw) {
+        corrections.push(`Aufenthaltsstatus normalisiert: ${assistantData.residence_permit.value} → ${raw}`);
+        assistantData.residence_permit.value = raw;
       }
     }
 
@@ -319,14 +372,46 @@ export const contractDataSubmissionTool = tool(
       }
     }
 
+    // Guard against hallucinated payment_iban: require non-empty source_text.
+    // Same pattern as vacation_weeks below — if the LLM produced a value but
+    // couldn't quote the contract, we treat it as a hallucination.
+    if (wageData.payment_iban?.value) {
+      const src = String(wageData.payment_iban.source_text ?? '').trim();
+      if (!src) {
+        corrections.push(
+          `payment_iban (${wageData.payment_iban.value}) hat keinen source_text – wahrscheinlich nicht im Vertrag vorhanden. Wert auf null gesetzt.`,
+        );
+        wageData.payment_iban.value = null;
+        wageData.payment_iban.note = 'Nicht im Vertrag gefunden (kein source_text vorhanden)';
+      }
+    }
+
     // Validate IBAN
     if (wageData.payment_iban?.value) {
       const { formatted } = normalizeIban(wageData.payment_iban.value);
       if (!formatted) {
-        validationErrors.push('IBAN ungültig (erwartet CH/LI + 19 Zeichen; Trennzeichen wie Leerzeichen/Punkte sind ok)');
+        validationErrors.push(
+          'IBAN ungültig (erwartet CH/LI: 2 Prüfziffern + 5 Ziffern Bank + 12 alphanumerische Zeichen; Trennzeichen wie Leerzeichen/Punkte sind ok)',
+        );
       } else if (wageData.payment_iban.value !== formatted) {
         corrections.push(`IBAN normalisiert: ${wageData.payment_iban.value} → ${formatted}`);
         wageData.payment_iban.value = formatted;
+      }
+    }
+
+    // Semantic sanity: the source_text must literally contain the IBAN.
+    // Otherwise the LLM quoted something else and is probably hallucinating.
+    if (wageData.payment_iban?.value) {
+      const srcAlnum = String(wageData.payment_iban.source_text ?? '')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '');
+      const valAlnum = String(wageData.payment_iban.value)
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '');
+      if (valAlnum && !srcAlnum.includes(valAlnum)) {
+        validationErrors.push(
+          'IBAN source_text enthält den extrahierten Wert nicht – möglicher Halluzinationshinweis.',
+        );
       }
     }
 
