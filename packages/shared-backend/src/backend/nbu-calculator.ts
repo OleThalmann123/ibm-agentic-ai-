@@ -40,6 +40,17 @@ function parseHoursFromEntry(entry: Pick<TimeEntry, 'start_time' | 'end_time'>):
   const sh = sp[0] ?? 0, sm = sp[1] ?? 0;
   const eh = ep[0] ?? 0, em = ep[1] ?? 0;
   let diff = (eh * 60 + em) - (sh * 60 + sm);
+  // Bug D4: identische Start/End-Zeiten (diff === 0) sind sehr wahrscheinlich
+  // ein Tippfehler und sollten nicht still als 0 h zählen (würde den
+  // NBU-Durchschnitt verwässern). Wir warnen und liefern 0 zurück.
+  if (diff === 0) {
+    if (typeof console !== 'undefined') {
+      console.warn(
+        `[nbu] Zeiteintrag mit identischer Start-/Endzeit (${entry.start_time}) – 0 h gezählt.`,
+      );
+    }
+    return 0;
+  }
   if (diff < 0) diff += 24 * 60;
   return diff / 60;
 }
@@ -62,8 +73,18 @@ function filterEntriesByWindow(
   months: number,
   referenceDate: Date,
 ): Pick<TimeEntry, 'date' | 'start_time' | 'end_time'>[] {
-  const windowStart = new Date(referenceDate);
-  windowStart.setMonth(windowStart.getMonth() - months);
+  // Bug B1: `setMonth` auf einen Monatsletzten kann durch JS-Overflow in den
+  // Folgemonat springen (z.B. 31. Mai – 3 Monate → 3. März). Wir berechnen
+  // die Fenstergrenze komponentenweise in UTC und clampen den Tag auf die
+  // Monatslänge.
+  const refY = referenceDate.getUTCFullYear();
+  const refM = referenceDate.getUTCMonth(); // 0-11
+  const refD = referenceDate.getUTCDate();
+  const startY = refY + Math.floor((refM - months) / 12);
+  const startM = ((refM - months) % 12 + 12) % 12;
+  const daysInStartMonth = new Date(Date.UTC(startY, startM + 1, 0)).getUTCDate();
+  const startD = Math.min(refD, daysInStartMonth);
+  const windowStart = new Date(Date.UTC(startY, startM, startD));
   const startStr = windowStart.toISOString().slice(0, 10);
   const endStr = referenceDate.toISOString().slice(0, 10);
 
@@ -136,8 +157,18 @@ export function calculateNbuEligibility(input: NbuCalcInput): NbuStatus {
   // The result more favourable for the employee applies
   const eligible = eligible3m || eligible12m;
 
-  const avgHours = result3m.avgHours ?? result12m.avgHours ?? (input.hoursPerWeek || null);
-  const borderline = avgHours != null && avgHours >= 7.0 && avgHours < 8.0;
+  // Borderline darf nur greifen, wenn KEINES der Fenster klar NBU-pflichtig ist
+  // ("für Arbeitnehmer günstigeres Ergebnis gilt"). Sonst würde ein klar
+  // pflichtiges 12-Monats-Ergebnis durch ein borderline 3-Monats-Fenster
+  // fälschlich gekippt. Für den Borderline-Wert verwenden wir den höheren der
+  // beiden Durchschnitte, damit wir nicht an einem einzelnen Fenster aufhängen.
+  const windowAvgs = [result3m.avgHours, result12m.avgHours].filter(
+    (h): h is number => h != null,
+  );
+  const avgHours = windowAvgs.length > 0
+    ? Math.max(...windowAvgs)
+    : (input.hoursPerWeek ?? null);
+  const borderline = !eligible && avgHours != null && avgHours >= 7.0 && avgHours < 8.0;
 
   return {
     nbu_eligible: eligible && !borderline,

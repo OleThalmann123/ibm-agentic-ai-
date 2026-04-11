@@ -53,6 +53,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const storedId = localStorage.getItem(ACTIVE_EMPLOYER_ACCESS_KEY);
     const picked = storedId ? list.find((a) => a.id === storedId) : null;
+    // Bug C1: Gespeicherte ID zeigt auf einen Mandanten, den es nicht mehr
+    // gibt (oder nie gab für diesen User) – localStorage aufräumen und
+    // sichtbar warnen, statt still auf list[0] zu kippen.
+    if (storedId && !picked) {
+      console.warn(
+        `[auth] Gespeicherter employer_access "${storedId}" ist nicht mehr verfügbar – fallback auf ersten verfügbaren Mandanten.`,
+      );
+      localStorage.removeItem(ACTIVE_EMPLOYER_ACCESS_KEY);
+    }
     const access = picked ?? list[0]!;
 
     setEmployerAccess(access);

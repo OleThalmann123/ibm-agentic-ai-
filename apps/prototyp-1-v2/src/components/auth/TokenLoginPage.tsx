@@ -13,6 +13,7 @@ import {
   fmt,
   fmtPct,
   getIvAssistanceActivityOptions,
+  getFerienzuschlagRate,
   type PayslipAccountingMethod,
 } from '@asklepios/backend';
 import { toast } from 'sonner';
@@ -853,8 +854,8 @@ function LohnTab({
   const stundenlohn = assistant.hourly_rate || (contract?.hourly_rate ? parseFloat(String(contract.hourly_rate)) : 0);
   const stunden = Number(trackedHours.toFixed(2));
   const kanton = (employer?.canton || contract?.canton || 'ZH') as string;
-  const vacWeeks = assistant.vacation_weeks || 4;
-  const ferienzuschlagRate = vacWeeks === 5 ? 0.1064 : vacWeeks === 6 ? 0.1304 : vacWeeks === 7 ? 0.1556 : 0.0833;
+  // Bug A4: zentral berechnet, kein stilles 4-Wochen-Fallback mehr in der Tabelle.
+  const ferienzuschlagRate = getFerienzuschlagRate(assistant.vacation_weeks) ?? 0.0833;
 
   const bm = String(contract?.billing_method || 'ordinary').toLowerCase();
   const accountingMethod: PayslipAccountingMethod =
@@ -908,7 +909,8 @@ function LohnTab({
   };
 
   const kantonName = FAK_RATES[kanton]?.name || kanton;
-  const ferienzuschlagLabel = vacWeeks === 5 ? '10.64%' : vacWeeks === 6 ? '13.04%' : vacWeeks === 7 ? '15.56%' : '8.33%';
+  // Bug A4: zentraler Helper statt einer zweiten Cascade.
+  const ferienzuschlagLabel = `${(ferienzuschlagRate * 100).toFixed(2).replace(/\.?0+$/, '')}%`;
   const accountingMethodLabel =
     accountingMethod === 'simplified'
       ? 'Vereinfachtes'

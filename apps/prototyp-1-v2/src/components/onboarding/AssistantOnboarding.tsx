@@ -1417,7 +1417,12 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
       email: email.trim() || '',
       date_of_birth: birthDate.trim() || null,
       hourly_rate: parseFloat(hourlyRate) || null,
-      vacation_weeks: parseInt(vacationWeeks, 10) || null,
+      // Bug D1: vacation_weeks muss 4–7 sein (OR); alles ausserhalb wird auf
+      // null gesetzt, sodass der Lohnlauf nachfragt statt still zu defaulten.
+      vacation_weeks: (() => {
+        const n = parseInt(vacationWeeks, 10);
+        return Number.isFinite(n) && n >= 4 && n <= 7 ? n : null;
+      })(),
       has_bvg: false,
       time_entry_mode: 'manual' as const,
       is_active: true,

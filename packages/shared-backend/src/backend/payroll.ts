@@ -63,6 +63,32 @@ export const VACATION_OPTIONS = [
   { label: '15.56% (7 Wochen)', value: 0.1556 },
 ] as const;
 
+/**
+ * Ferienzuschlag-Satz für eine gegebene Wochenzahl (4–7).
+ *
+ * Gibt `null` zurück, wenn `vacWeeks` null/undefined ist oder ausserhalb des
+ * gültigen Bereichs liegt. Aufrufer müssen in diesem Fall den User prompten
+ * oder einen expliziten Default setzen – ein stilles 4-Wochen-Fallback ist
+ * nicht mehr erlaubt (Bug A4).
+ */
+export function getFerienzuschlagRate(vacWeeks: number | null | undefined): number | null {
+  if (vacWeeks == null || !Number.isFinite(vacWeeks)) return null;
+  switch (vacWeeks) {
+    case 4: return 0.0833;
+    case 5: return 0.1064;
+    case 6: return 0.1304;
+    case 7: return 0.1556;
+    default: return null;
+  }
+}
+
+/** Label für einen Ferienzuschlag-Satz, passend zu {@link getFerienzuschlagRate}. */
+export function getFerienzuschlagLabel(vacWeeks: number | null | undefined): string {
+  const rate = getFerienzuschlagRate(vacWeeks);
+  if (rate == null) return '—';
+  return (rate * 100).toFixed(2).replace(/\.?0+$/, '') + '%';
+}
+
 // ─── Billing method enum ───
 export type BillingMethod = 'ordentlich';
 
@@ -177,7 +203,15 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   const uvgBaseY = Math.min(bruttoY, MONTHLY_UVG_CAP);
 
   // ── Stage 2: Employer contributions ──
-  const fakRate = FAK_RATES[kanton]?.rate ?? 0;
+  // FAK ist kantonal obligatorisch – bei unbekanntem Kanton hart abbrechen,
+  // statt stillschweigend 0 zu verrechnen (Bug A3).
+  const fakEntry = FAK_RATES[kanton];
+  if (!fakEntry) {
+    throw new Error(
+      `FAK-Satz für Kanton "${kanton}" unbekannt. Bitte gültigen Kanton-Kürzel (z.B. ZH, BE, …) angeben.`,
+    );
+  }
+  const fakRate = fakEntry.rate;
 
   const agLines: PayrollLine[] = [
     { label: 'AHV/IV/EO', rate: RATES.AHV_IV_EO, perHour: bruttoH * RATES.AHV_IV_EO, perYear: round5(bruttoY * RATES.AHV_IV_EO) },
@@ -201,7 +235,12 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
   // ── NBU – zweistufige Berechnung ──
   // Schritt 1: Gesamtprämie = massgebender Lohn × Gesamtprämiensatz
   // Schritt 2: AG-/AN-Anteil = Gesamtprämie × jeweiliger Anteil (Fraktion 0–1)
-  const nbuEligibleEff = input.nbuEligible !== false;
+  //
+  // Bug A2: NBU-Abzug nur, wenn `nbuEligible` explizit true ist (oder der AG
+  // die Prämie freiwillig übernimmt). Ein fehlendes / noch nicht berechnetes
+  // Flag darf nicht zum stillen Default "pflichtig" führen.
+  const nbuEligibleEff =
+    input.nbuEligible === true || input.nbuEmployerVoluntary === true;
   const nbuTotalRate = input.nbuTotalRate ?? 0;
   const nbuTotalPremiumY = nbuEligibleEff && nbuTotalRate > 0 ? uvgBaseY * nbuTotalRate : 0;
   const nbuAgShare = input.nbuEmployerShare ?? 0;
@@ -215,7 +254,8 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
         ? 'Nichtberufsunfallversicherung (AG freiwillig)'
         : 'Nichtberufsunfallversicherung (AG)',
       rate: agEffectiveRate,
-      perHour: anzahlStunden > 0 ? agPortionY / anzahlStunden : 0,
+      // Bug A6: NBU-perHour auf Rappen runden (kein 0.14130952 in der UI).
+      perHour: anzahlStunden > 0 ? round2(agPortionY / anzahlStunden) : 0,
       perYear: agPortionY,
     });
   }
@@ -248,7 +288,8 @@ export function calculatePayroll(input: PayrollInput): PayrollResult {
     anLines.push({
       label: 'Nichtberufsunfallversicherung (AN)',
       rate: anEffectiveRate,
-      perHour: anzahlStunden > 0 ? anPortionY / anzahlStunden : 0,
+      // Bug A6: NBU-perHour auf Rappen runden (kein 0.14130952 in der UI).
+      perHour: anzahlStunden > 0 ? round2(anPortionY / anzahlStunden) : 0,
       perYear: anPortionY,
     });
   }

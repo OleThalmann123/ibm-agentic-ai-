@@ -2,7 +2,8 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '@asklepios/backend';
 import { useAuth } from '@/contexts/AuthContext';
 import {
-  calculatePayroll, FAK_RATES, fmt, fmtPct, type PayrollResult
+  calculatePayroll, FAK_RATES, fmt, fmtPct, type PayrollResult,
+  getFerienzuschlagRate, getFerienzuschlagLabel,
 } from '@asklepios/backend';
 import { calculatePayslip, generatePayslipPdf, type PayslipAccountingMethod } from '@asklepios/backend';
 import { generateTimesheetPdf } from '@asklepios/backend';
@@ -202,8 +203,10 @@ export function PayrollPage() {
     if (aData) setAssistants(aData);
 
     const parts = currentMonth.split('-').map(Number);
-    const year = parts[0] ?? 2026;
-    const month = parts[1] ?? 1;
+    // Bug B4: Fallback auf "jetzt" statt hartkodiertes Jahr 2026.
+    const _now = new Date();
+    const year = Number.isFinite(parts[0]) ? (parts[0] as number) : _now.getFullYear();
+    const month = Number.isFinite(parts[1]) ? (parts[1] as number) : _now.getMonth() + 1;
     const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
     const endDate = month === 12
       ? `${year + 1}-01-01`
@@ -251,10 +254,19 @@ export function PayrollPage() {
       const nextConfirmed: Record<string, boolean> = {};
       for (const row of confRows || []) {
         if (!row.confirmed || !row.assistant_id) continue;
-        const mk =
-          typeof row.month === 'string'
-            ? row.month.slice(0, 7)
-            : `${year}-${String(month).padStart(2, '0')}`;
+        // Bug B3: statt blindem slice(0,7) die gespeicherte Monats-Info
+        // korrekt parsen. Supabase kann je nach Client Date oder String
+        // liefern – beide Pfade robust behandeln.
+        let mk: string | null = null;
+        if (typeof row.month === 'string' && /^\d{4}-\d{2}/.test(row.month)) {
+          mk = row.month.slice(0, 7);
+        } else if (row.month != null) {
+          const parsed = new Date(row.month as string | number | Date);
+          if (!Number.isNaN(parsed.getTime())) {
+            mk = `${parsed.getUTCFullYear()}-${String(parsed.getUTCMonth() + 1).padStart(2, '0')}`;
+          }
+        }
+        if (!mk) continue;
         nextConfirmed[`${row.assistant_id}-${mk}`] = true;
         void mirrorPayrollFreigabeToAssistant(row.assistant_id, monthFirst);
       }
@@ -267,8 +279,12 @@ export function PayrollPage() {
   };
 
   const shiftMonth = (dir: number) => {
+    // Bug B4: Fallback nicht auf 2026 fest verdrahten – bei korruptem
+    // currentMonth auf "jetzt" zurückfallen.
+    const now = new Date();
     const parts = currentMonth.split('-').map(Number);
-    const y = parts[0] ?? 2026, m = parts[1] ?? 1;
+    const y = Number.isFinite(parts[0]) ? (parts[0] as number) : now.getFullYear();
+    const m = Number.isFinite(parts[1]) ? (parts[1] as number) : now.getMonth() + 1;
     const d = new Date(y, m - 1 + dir, 1);
     setCurrentMonth(monthKey(d));
     setExpandedId(null);
@@ -292,8 +308,17 @@ export function PayrollPage() {
     if (!stundenlohn || hours.totalHours === 0) return null;
 
     const kanton = cd?.canton || employer?.canton || 'ZH';
-    const vacWeeks = assistant.vacation_weeks || 4;
-    const ferienzuschlag = vacWeeks === 5 ? 0.1064 : vacWeeks === 6 ? 0.1304 : vacWeeks === 7 ? 0.1556 : 0.0833;
+    // Bug A4: Ferienwochen dürfen nicht mehr still auf 4 fallen. Fehlt der
+    // Wert oder ist er ungültig, warnen wir und benutzen 4 Wochen als
+    // dokumentierten Fallback – sichtbar in der Konsole und im Toast.
+    const rawVacWeeks = assistant.vacation_weeks;
+    const resolvedRate = getFerienzuschlagRate(rawVacWeeks);
+    const ferienzuschlag = resolvedRate ?? 0.0833;
+    if (resolvedRate == null) {
+      console.warn(
+        `[payroll] Ferienwochen für ${assistant.name ?? assistant.id} fehlen oder sind ungültig (${rawVacWeeks}). Fallback 4 Wochen / 8.33% verwendet.`,
+      );
+    }
 
     // NBU wird zweistufig berechnet (Gesamtprämie × Anteil), siehe payroll.ts.
     // Die Aufteilung ist immer in nbu_employer/nbu_employee hinterlegt (Fehler 5);
@@ -302,8 +327,9 @@ export function PayrollPage() {
     const nbuEmployerShare = cd?.nbu_employer != null && cd?.nbu_employer !== '' ? parseFloat(cd.nbu_employer) / 100 : undefined;
     const nbuEmployeeShare = cd?.nbu_employee != null && cd?.nbu_employee !== '' ? parseFloat(cd.nbu_employee) / 100 : undefined;
     const nbuEmployerVoluntary = cd?.nbu_employer_voluntary === true;
-    // Eligible = regulär (nbu_eligible aus Zeiterfassung) ODER freiwillig-auch-unter-8h
-    const nbuEligible = cd?.nbu_eligible !== undefined ? (cd.nbu_eligible || nbuEmployerVoluntary) : undefined;
+    // Bug A2: Nur explizit true durchlassen – payroll.ts verlangt jetzt ein
+    // explizites Opt-in. Voluntary wird dort separat behandelt.
+    const nbuEligible = cd?.nbu_eligible === true;
 
     return calculatePayroll({
       stundenlohn,
@@ -323,8 +349,10 @@ export function PayrollPage() {
 
   const handleConfirm = async (assistantId: string, name: string) => {
     const parts = currentMonth.split('-').map(Number);
-    const year = parts[0] ?? 2026;
-    const month = parts[1] ?? 1;
+    // Bug B4: Fallback auf "jetzt" statt hartkodiertes Jahr 2026.
+    const _now = new Date();
+    const year = Number.isFinite(parts[0]) ? (parts[0] as number) : _now.getFullYear();
+    const month = Number.isFinite(parts[1]) ? (parts[1] as number) : _now.getMonth() + 1;
     const monthFirst = `${year}-${String(month).padStart(2, '0')}-01`;
 
     const { error: confErr } = await supabase.from('payroll_confirmation').upsert({
@@ -353,8 +381,9 @@ export function PayrollPage() {
       const { error: patchErr } = await supabase.from('assistant').update({ contract_data: cd }).eq('id', assistantId);
       if (patchErr) {
         console.error('payroll_freigaben update', patchErr);
-        toast.message('Hinweis', {
-          description: 'Freigabe ist gespeichert; der Assistenz-Link sieht sie ggf. erst nach erneutem Öffnen des Lohn-Tabs.',
+        // Bug D2: DB-Fehler muss als Fehler sichtbar werden, nicht als Hinweis.
+        toast.error('Freigabe nur teilweise gespeichert', {
+          description: `Die Spiegelung in contract_data ist fehlgeschlagen (${patchErr.message}). Der Assistenz-Link sieht die Freigabe ggf. erst nach erneutem Öffnen.`,
         });
       }
     }
@@ -606,9 +635,8 @@ export function PayrollPage() {
           const kanton = employer?.canton || cd2?.canton || 'ZH';
           const kantonName = FAK_RATES[kanton]?.name || kanton;
           const stundenlohn = a.hourly_rate || 0;
-          const vacWeeks = a.vacation_weeks || 4;
-          const ferienzuschlagRate = vacWeeks === 5 ? 0.1064 : vacWeeks === 6 ? 0.1304 : vacWeeks === 7 ? 0.1556 : 0.0833;
-          const ferienzuschlagLabel = vacWeeks === 5 ? '10.64%' : vacWeeks === 6 ? '13.04%' : vacWeeks === 7 ? '15.56%' : '8.33%';
+          const ferienzuschlagRate = getFerienzuschlagRate(a.vacation_weeks) ?? 0.0833;
+          const ferienzuschlagLabel = getFerienzuschlagLabel(a.vacation_weeks ?? 4);
 
           const bm = String(cd2?.billing_method || 'ordinary').toLowerCase();
           const accountingMethod: PayslipAccountingMethod =
@@ -713,9 +741,8 @@ export function PayrollPage() {
         const kanton = employer?.canton || cd2?.canton || 'ZH';
         const kantonName = FAK_RATES[kanton]?.name || kanton;
         const stundenlohn = assistant.hourly_rate || 0;
-        const vacWeeks = assistant.vacation_weeks || 4;
-        const ferienzuschlagRate = vacWeeks === 5 ? 0.1064 : vacWeeks === 6 ? 0.1304 : vacWeeks === 7 ? 0.1556 : 0.0833;
-        const ferienzuschlagLabel = vacWeeks === 5 ? '10.64%' : vacWeeks === 6 ? '13.04%' : vacWeeks === 7 ? '15.56%' : '8.33%';
+        const ferienzuschlagRate = getFerienzuschlagRate(assistant.vacation_weeks) ?? 0.0833;
+        const ferienzuschlagLabel = getFerienzuschlagLabel(assistant.vacation_weeks ?? 4);
 
         const bm = String(cd2?.billing_method || 'ordinary').toLowerCase();
         const accountingMethod: PayslipAccountingMethod =
@@ -795,9 +822,8 @@ export function PayrollPage() {
     const kanton = employer?.canton || cd?.canton || 'ZH';
     const kantonName = FAK_RATES[kanton]?.name || kanton;
     const stundenlohn = assistant.hourly_rate || 0;
-    const vacWeeks = assistant.vacation_weeks || 4;
-    const ferienzuschlagRate = vacWeeks === 5 ? 0.1064 : vacWeeks === 6 ? 0.1304 : vacWeeks === 7 ? 0.1556 : 0.0833;
-    const ferienzuschlagLabel = vacWeeks === 5 ? '10.64%' : vacWeeks === 6 ? '13.04%' : vacWeeks === 7 ? '15.56%' : '8.33%';
+    const ferienzuschlagRate = getFerienzuschlagRate(assistant.vacation_weeks) ?? 0.0833;
+    const ferienzuschlagLabel = getFerienzuschlagLabel(assistant.vacation_weeks ?? 4);
 
     const bm = String(cd?.billing_method || 'ordinary').toLowerCase();
     const accountingMethod: PayslipAccountingMethod =
@@ -1536,9 +1562,8 @@ export function PayrollPage() {
                                 const kanton = employer?.canton || cd?.canton || 'ZH';
                                 const kantonName = FAK_RATES[kanton]?.name || kanton;
                                 const stundenlohn = a.hourly_rate || 0;
-                                const vacWeeks = a.vacation_weeks || 4;
-                                const ferienzuschlagRate = vacWeeks === 5 ? 0.1064 : vacWeeks === 6 ? 0.1304 : vacWeeks === 7 ? 0.1556 : 0.0833;
-                                const ferienzuschlagLabel = vacWeeks === 5 ? '10.64%' : vacWeeks === 6 ? '13.04%' : vacWeeks === 7 ? '15.56%' : '8.33%';
+                                const ferienzuschlagRate = getFerienzuschlagRate(a.vacation_weeks) ?? 0.0833;
+                                const ferienzuschlagLabel = getFerienzuschlagLabel(a.vacation_weeks ?? 4);
 
                                 const bm = String(cd?.billing_method || 'ordinary').toLowerCase();
                                 const accountingMethod: PayslipAccountingMethod =
