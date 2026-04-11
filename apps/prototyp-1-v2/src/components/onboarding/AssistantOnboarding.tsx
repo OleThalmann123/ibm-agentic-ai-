@@ -12,7 +12,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { getCityFromChPlz, isValidChPlz } from '@/utils/chPlz';
 import asklepiosMark from '@/assets/asklepios-mark.svg';
-import asklepiosLogoUrl from '@/assets/asklepios-logo.png';
+import { AsklepiosExtractLogo } from '@/components/brand/AsklepiosExtractLogo';
 import { UploadCloud, CheckCircle2, FileText, ArrowRight, AlertCircle, HelpCircle, User, ArrowLeft, Loader2, Share2, Copy, Check, ShieldCheck, AlertTriangle, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { ExtractingScreen } from './ExtractingScreen';
@@ -458,9 +458,11 @@ function ReviewPopup({
           <div className="absolute inset-0 bg-[radial-gradient(1200px_600px_at_15%_0%,rgba(59,130,246,0.22),transparent_55%),radial-gradient(900px_520px_at_85%_15%,rgba(168,85,247,0.22),transparent_50%),radial-gradient(700px_520px_at_40%_120%,rgba(16,185,129,0.16),transparent_55%),linear-gradient(to_bottom,rgba(2,6,23,0.92),rgba(2,6,23,0.82))]" />
           <div className="flex items-start justify-between gap-4">
             <div className="relative flex items-start gap-4">
-              <img src={asklepiosLogoUrl} alt="Asklepios" className="w-14 h-14 rounded-2xl border border-white/15 bg-white/10 object-contain p-1.5 shrink-0 shadow-lg" />
+              <div className="w-14 h-14 rounded-2xl border border-white/15 bg-white/10 shrink-0 shadow-lg flex items-center justify-center">
+                <AsklepiosExtractLogo className="w-7 h-7 text-white" />
+              </div>
               <div>
-              <h3 className="text-xl font-bold leading-tight">Asklepios braucht deine Hilfe</h3>
+              <h3 className="text-xl font-bold leading-tight">Asklepios_extract braucht deine Hilfe</h3>
               <p className="text-sm text-white/70 mt-0.5">
                 Bitte <span className="font-semibold text-white">prüfen</span> (mit Arbeitsvertrag) und <span className="font-semibold text-white">ergänzen</span> (falls nicht im Vertrag).
               </p>
@@ -480,7 +482,7 @@ function ReviewPopup({
           {attentionFields.length > 0 ? (
             <div className="mt-3 space-y-2 relative">
               <p className="text-sm text-white/80 leading-relaxed">
-                Asklepios hat deine Daten erfolgreich ausgelesen. Er benötigt an einigen Stellen noch Hilfe:
+                Asklepios_extract hat deine Daten erfolgreich ausgelesen. Er benötigt an einigen Stellen noch Hilfe:
                 <br />
                 <span className="font-semibold text-white">Prüfen:</span> Unsichere Werte mit dem Arbeitsvertrag rechts abgleichen.
                 <br />
@@ -1840,7 +1842,6 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
       {/* Extracting */}
       {step === 'extracting' && (
         <ExtractingScreen
-          asklepiosLogoUrl={asklepiosLogoUrl}
           onCancel={() => {
             extractionRunIdRef.current++;
             toast.dismiss(TOAST_EXTRACTION_LOADING);

@@ -5,7 +5,7 @@ import { formatCHF } from '@asklepios/backend';
 import type { Assistant } from '@asklepios/backend';
 import { toast } from 'sonner';
 import { Users, Pencil, X, UserPlus, Share2, Copy, Check, UploadCloud, Trash2 } from 'lucide-react';
-import { AsklepiosLogo } from '@/components/brand/AsklepiosLogo';
+import { AsklepiosExtractLogo } from '@/components/brand/AsklepiosExtractLogo';
 
 import { AssistantOnboarding } from '@/components/onboarding/AssistantOnboarding';
 
@@ -150,12 +150,12 @@ export function AssistantsPage() {
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/15 bg-white/10 overflow-hidden">
-                  <AsklepiosLogo className="w-full h-full object-contain p-1.5" />
+                  <AsklepiosExtractLogo className="w-6 h-6 text-white" />
                 </div>
                 <h2 className="text-xl font-bold">Neue Assistenzperson erfassen</h2>
               </div>
               <p className="max-w-md text-white/70">
-                Asklepios hilft dir bei der Anlage deiner Assistenzperson, indem er Stamm- und Vertragsdaten für dich aus dem Arbeitsvertrag ausliest.
+                Asklepios_extract hilft dir bei der Anlage deiner Assistenzperson, indem er Stamm- und Vertragsdaten für dich aus dem Arbeitsvertrag ausliest.
               </p>
             </div>
             <label className="flex cursor-pointer items-center gap-2 rounded-xl bg-white px-6 py-3.5 text-sm font-bold text-slate-900 shadow-lg transition-all hover:scale-[1.02] hover:bg-white/90 hover:shadow-xl">
