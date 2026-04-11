@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 import { getCityFromChPlz, isValidChPlz } from '@/utils/chPlz';
 import asklepiosMark from '@/assets/asklepios-mark.svg';
 import { AsklepiosExtractLogo } from '@/components/brand/AsklepiosExtractLogo';
-import { UploadCloud, CheckCircle2, FileText, ArrowRight, AlertCircle, HelpCircle, User, ArrowLeft, Loader2, Share2, Copy, Check, ShieldCheck, AlertTriangle, X } from 'lucide-react';
+import { UploadCloud, CheckCircle2, FileText, ArrowRight, AlertCircle, HelpCircle, User, ArrowLeft, Loader2, Share2, Copy, Check, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { ExtractingScreen } from './ExtractingScreen';
 import { runDocumentPipeline } from '@asklepios/backend';
@@ -284,12 +284,67 @@ function shareFieldToUiString(value: unknown): string {
   return '';
 }
 
+export type ErgaenzenSource =
+  | 'insurance_policy'
+  | 'bank_statement'
+  | 'personal'
+  | 'id_document'
+  | 'address'
+  | 'contract';
+
+const ERGAENZEN_SOURCE_BY_PATH: Record<string, ErgaenzenSource> = {
+  'social_insurance.nbu_total_rate_pct': 'insurance_policy',
+  'social_insurance.nbu_employer_share_pct': 'insurance_policy',
+  'social_insurance.nbu_employee_share_pct': 'insurance_policy',
+  'wage.iban': 'bank_statement',
+  'assistant.phone': 'personal',
+  'assistant.email': 'personal',
+  'assistant.gender': 'personal',
+  'assistant.civil_status': 'personal',
+  'assistant.ahv_number': 'id_document',
+  'assistant.birth_date': 'id_document',
+  'assistant.nationality': 'id_document',
+  'assistant.residence_permit': 'id_document',
+  'assistant.street': 'address',
+  'assistant.zip': 'address',
+  'assistant.city': 'address',
+  'social_insurance.canton': 'address',
+};
+
+const SOURCE_LABELS: Record<ErgaenzenSource, { label: string; description: string }> = {
+  insurance_policy: {
+    label: 'Versicherungspolice',
+    description: 'Aus der Unfallversicherungs-Police (NBU-Prämiensätze).',
+  },
+  bank_statement: {
+    label: 'Kontoauszug / E-Banking',
+    description: 'IBAN des Lohnkontos.',
+  },
+  personal: {
+    label: 'Persönliche Angabe',
+    description: 'Eigene Kontakt- und Personendaten.',
+  },
+  id_document: {
+    label: 'Ausweis / AHV-Karte',
+    description: 'Aus Ausweis, AHV-Karte oder Aufenthaltstitel.',
+  },
+  address: {
+    label: 'Wohnadresse',
+    description: 'Aktuelle Wohnadresse der Assistenzperson.',
+  },
+  contract: {
+    label: 'Im Vertrag (nicht extrahierbar)',
+    description: 'Steht eigentlich im Vertrag – bitte manuell nachschlagen.',
+  },
+};
+
 export type PopupAttentionField = {
   path: string;
   label: string;
   missing: boolean;
   needsReview: boolean;
   hint?: string;
+  source?: ErgaenzenSource;
 };
 
 /** Alle Formular-relevanten Pfade + alle vom Judge gemeldeten Pfade. */
@@ -361,12 +416,17 @@ function buildPopupAttentionFields(
       hint = 'Unsicherer Wert im Vertrag – bitte mit dem Arbeitsvertrag rechts abgleichen.';
     }
 
+    const source: ErgaenzenSource | undefined = missing
+      ? ERGAENZEN_SOURCE_BY_PATH[path] ?? (hasSourceInContract ? 'contract' : 'personal')
+      : undefined;
+
     out.push({
       path,
       label: FIELD_LABELS[path] || path.replace(/\./g, ' › '),
       missing,
       needsReview,
       hint,
+      source,
     });
   }
 
@@ -380,6 +440,7 @@ function buildPopupAttentionFields(
       plzRow.missing = true;
       plzRow.needsReview = true;
       plzRow.hint = 'Bitte PLZ ergänzen – sie wird für den Wohnsitzkanton benötigt.';
+      plzRow.source = ERGAENZEN_SOURCE_BY_PATH['assistant.zip'];
     } else {
       out.unshift({
         path: 'assistant.zip',
@@ -387,6 +448,7 @@ function buildPopupAttentionFields(
         missing: true,
         needsReview: true,
         hint: 'Bitte PLZ ergänzen – sie wird für den Wohnsitzkanton benötigt.',
+        source: ERGAENZEN_SOURCE_BY_PATH['assistant.zip'],
       });
     }
   }
@@ -403,22 +465,18 @@ function buildPopupAttentionFields(
   return out;
 }
 
-function ReviewPopup({
-  attentionFields,
+// ─── Contract Preview (rechte Spalte im Prüfen-Modus) ─────────────────
+
+function ContractPreview({
   contractPreviewUrl,
   contractFileName,
   contractMimeType,
   docxHtml,
-  renderFieldEditor,
-  onClose,
 }: {
-  attentionFields: PopupAttentionField[];
   contractPreviewUrl: string | null;
   contractFileName: string;
   contractMimeType: string;
   docxHtml: string | null;
-  renderFieldEditor: (path: string) => ReactNode;
-  onClose: () => void;
 }) {
   const isPdf =
     contractMimeType.includes('pdf') ||
@@ -426,254 +484,299 @@ function ReviewPopup({
     contractPreviewUrl?.toLowerCase().includes('.pdf') === true;
   const isImage = contractMimeType.startsWith('image/');
   const isDocx = !!docxHtml;
-  const showOpenLink = !!contractPreviewUrl && !(isPdf || isImage || isDocx);
-
-  const reviewRowsAll = attentionFields.filter(r => !r.missing && r.needsReview);
-  const missingRowsAll = attentionFields.filter(r => r.missing);
-
-  const hasReview = reviewRowsAll.length > 0;
-  // Immer konsistent führen: zuerst "Prüfen" (wenn vorhanden), sonst direkt "Ergänzen".
-  const [mode, setMode] = useState<'pruefen' | 'ergaenzen'>(hasReview ? 'pruefen' : 'ergaenzen');
-
-  const reviewRows = mode === 'pruefen' ? reviewRowsAll : [];
-  const missingRows = mode === 'ergaenzen' ? missingRowsAll : [];
-  const hasMissing = missingRowsAll.length > 0;
-  const canContinueToMissing = mode === 'pruefen' && hasMissing;
+  const hasPreview = (contractPreviewUrl && (isPdf || isImage)) || isDocx;
+  const showOpenLink = !!contractPreviewUrl && !hasPreview;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/45 backdrop-blur-sm animate-in fade-in duration-200 p-2 sm:p-4 sm:pt-4">
-      <div className="w-full max-w-[96vw] xl:max-w-[1400px] max-h-[96vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-300 rounded-2xl p-[1px] bg-[linear-gradient(90deg,rgba(59,130,246,0.55),rgba(168,85,247,0.50),rgba(16,185,129,0.38))] shadow-[0_26px_90px_rgba(2,6,23,0.35)]">
-        <div className="bg-white rounded-2xl overflow-hidden flex flex-col max-h-[96vh]">
-        <div className="shrink-0 px-5 py-4 sm:px-8 sm:py-5 text-white relative overflow-hidden">
-          <div className="absolute inset-0 bg-[radial-gradient(1200px_600px_at_15%_0%,rgba(59,130,246,0.22),transparent_55%),radial-gradient(900px_520px_at_85%_15%,rgba(168,85,247,0.22),transparent_50%),radial-gradient(700px_520px_at_40%_120%,rgba(16,185,129,0.16),transparent_55%),linear-gradient(to_bottom,rgba(2,6,23,0.92),rgba(2,6,23,0.82))]" />
-          <div className="flex items-start justify-between gap-4">
-            <div className="relative flex items-start gap-4">
-              <div className="w-14 h-14 rounded-2xl border border-white/15 bg-white/10 shrink-0 shadow-lg flex items-center justify-center">
-                <AsklepiosExtractLogo className="w-7 h-7 text-white" />
-              </div>
-              <div>
-              <h3 className="text-xl font-bold leading-tight">Asklepios_extract braucht deine Hilfe</h3>
-              <p className="text-sm text-white/70 mt-0.5">
-                Bitte <span className="font-semibold text-white">prüfen</span> (mit Arbeitsvertrag) und <span className="font-semibold text-white">ergänzen</span> (falls nicht im Vertrag).
-              </p>
-              </div>
-            </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="relative rounded-lg p-2 text-white/70 hover:bg-white/10 hover:text-white transition-colors"
-            aria-label="Schliessen"
+    <div className="flex h-full min-h-0 flex-col rounded-2xl border border-slate-200 bg-slate-100/90 overflow-hidden shadow-sm">
+      <div className="shrink-0 px-4 py-2 border-b border-slate-200/80 flex items-center justify-between gap-2 bg-white/60">
+        <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+          Arbeitsvertrag
+        </span>
+        {contractPreviewUrl ? (
+          <a
+            href={contractPreviewUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[11px] font-semibold text-slate-600 hover:text-slate-900 underline shrink-0"
           >
-            <X className="w-5 h-5" />
-          </button>
+            Vertrag öffnen
+          </a>
+        ) : null}
+      </div>
+      <div className="flex-1 min-h-[240px] p-2 sm:p-3">
+        {contractPreviewUrl && isPdf ? (
+          <div className="w-full h-full min-h-[280px] rounded-lg border border-slate-200 bg-white overflow-hidden">
+            <embed
+              key={contractPreviewUrl}
+              src={contractPreviewUrl}
+              type="application/pdf"
+              className="w-full h-full min-h-[280px]"
+            />
           </div>
+        ) : contractPreviewUrl && isImage ? (
+          <div className="h-full overflow-auto rounded-lg border border-slate-200 bg-white flex items-start justify-center p-2">
+            <img
+              src={contractPreviewUrl}
+              alt="Hochgeladener Vertrag"
+              className="max-w-full h-auto object-contain"
+            />
+          </div>
+        ) : isDocx ? (
+          <div className="h-full overflow-auto rounded-lg border border-slate-200 bg-white p-4 sm:p-6">
+            <div
+              className="prose prose-sm max-w-none prose-headings:text-slate-800 prose-p:text-slate-700 prose-table:text-sm"
+              dangerouslySetInnerHTML={{ __html: docxHtml ?? '' }}
+            />
+          </div>
+        ) : (
+          <div className="h-full min-h-[200px] rounded-lg border border-dashed border-slate-300 bg-white flex flex-col items-center justify-center text-center px-4">
+            <FileText className="w-10 h-10 text-slate-300 mb-2" />
+            <p className="text-sm text-slate-500">
+              {showOpenLink
+                ? 'Für diesen Dateityp gibt es keine eingebettete Vorschau. Bitte die Datei separat öffnen.'
+                : 'Keine Dateivorschau verfügbar. Bitte prüfen Sie die extrahierten Felder im Formular.'}
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
-          {/* Hint + Tabs */}
-          {attentionFields.length > 0 ? (
-            <div className="mt-3 space-y-2 relative">
-              <p className="text-sm text-white/80 leading-relaxed">
-                Asklepios_extract hat deine Daten erfolgreich ausgelesen. Er benötigt an einigen Stellen noch Hilfe:
-                <br />
-                <span className="font-semibold text-white">Prüfen:</span> Unsichere Werte mit dem Arbeitsvertrag rechts abgleichen.
-                <br />
-                <span className="font-semibold text-white">Ergänzen:</span> Fehlende Werte manuell eintragen (wenn korrekt, darf es leer bleiben).
-              </p>
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="inline-flex rounded-full bg-white/10 p-0.5 border border-white/10">
-                  {hasReview ? (
-                    <button
-                      type="button"
-                      onClick={() => setMode('pruefen')}
-                      className={`px-3 py-1 rounded-full text-[11px] font-bold transition-all ${
-                        mode === 'pruefen' ? 'bg-white text-slate-900 shadow-sm' : 'text-white/80 hover:text-white'
-                      }`}
-                    >
-                      Prüfen ({reviewRowsAll.length})
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => setMode('ergaenzen')}
-                    className={`px-3 py-1 rounded-full text-[11px] font-bold transition-all ${
-                      mode === 'ergaenzen' ? 'bg-white text-slate-900 shadow-sm' : 'text-white/80 hover:text-white'
-                    }`}
-                  >
-                    Ergänzen ({missingRowsAll.length})
-                  </button>
-                </div>
-                <span className="text-[11px] text-white/60">
-                  {mode === 'pruefen' ? 'Prüfen mit Vertrag rechts' : 'Ergänzen: nicht im Vertrag vorhanden'}
-                </span>
-              </div>
-            </div>
-          ) : null}
-        </div>
+// ─── Ergänzen Source Guide (rechte Spalte im Ergänzen-Modus) ──────────
 
-        <div className="flex flex-1 min-h-0 flex-col lg:flex-row">
-          {/* Links: Feldliste */}
-          <div className={`${mode === 'pruefen' ? 'lg:w-[48%] lg:border-r' : 'w-full'} flex flex-col min-h-0 border-b lg:border-b-0 border-slate-100 max-h-[55vh] lg:max-h-none`}>
-            <div className="overflow-y-auto flex-1 px-5 py-4 sm:px-6 space-y-5">
-              {(mode === 'pruefen' ? reviewRowsAll.length === 0 : missingRowsAll.length === 0) ? (
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-sm font-semibold text-slate-800">
-                    {mode === 'pruefen' ? 'Keine Unsicherheiten zum Prüfen.' : 'Keine fehlenden Angaben zum Ergänzen.'}
-                  </p>
-                  <p className="text-xs text-slate-600 mt-1">
-                    {mode === 'pruefen'
-                      ? 'Wenn du trotzdem etwas ergänzen möchtest, wechsle zu «Ergänzen».'
-                      : hasReview
-                        ? 'Wenn du unsichere Felder abgleichen möchtest, wechsle zu «Prüfen».'
-                        : 'Du kannst den Dialog schliessen und im Formular fortfahren.'}
-                  </p>
-                  {mode === 'pruefen' ? (
-                    <button
-                      type="button"
-                      onClick={() => setMode('ergaenzen')}
-                      className="mt-3 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50"
-                    >
-                      Zu Ergänzen wechseln
-                    </button>
-                  ) : hasReview ? (
-                    <button
-                      type="button"
-                      onClick={() => setMode('pruefen')}
-                      className="mt-3 inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50"
-                    >
-                      Zu Prüfen wechseln
-                    </button>
-                  ) : null}
+function ErgaenzenSourceGuide({ fields }: { fields: PopupAttentionField[] }) {
+  const groups = useMemo(() => {
+    const map = new Map<ErgaenzenSource, PopupAttentionField[]>();
+    for (const f of fields) {
+      if (!f.missing) continue;
+      const key: ErgaenzenSource = f.source ?? 'personal';
+      const arr = map.get(key) ?? [];
+      arr.push(f);
+      map.set(key, arr);
+    }
+    return [...map.entries()];
+  }, [fields]);
+
+  return (
+    <div className="flex h-full min-h-0 flex-col rounded-2xl border border-amber-200 bg-amber-50/40 overflow-hidden shadow-sm">
+      <div className="shrink-0 px-4 py-2 border-b border-amber-200/80 flex items-center gap-2 bg-amber-50/80">
+        <HelpCircle className="w-4 h-4 text-amber-700" />
+        <span className="text-[11px] font-semibold text-amber-900 uppercase tracking-wide">
+          Nicht im Arbeitsvertrag
+        </span>
+      </div>
+      <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3">
+        <p className="text-sm text-amber-900 leading-relaxed">
+          Diese Angaben stehen <span className="font-bold">nicht</span> im Vertrag. Bitte aus den folgenden Quellen ergänzen:
+        </p>
+        {groups.length === 0 ? (
+          <div className="rounded-xl border border-amber-200 bg-white px-4 py-3 text-sm text-amber-900">
+            Keine fehlenden Angaben – alles Weitere findest du im Arbeitsvertrag.
+          </div>
+        ) : (
+          groups.map(([source, rows]) => {
+            const meta = SOURCE_LABELS[source];
+            return (
+              <div key={source} className="rounded-xl border border-amber-200 bg-white px-4 py-3 shadow-sm">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <Badge variant="secondary" className="bg-amber-100 text-amber-900 border-amber-200">
+                    {meta.label}
+                  </Badge>
                 </div>
-              ) : (
-                <>
-                  {/* Cards */}
-                  {(mode === 'pruefen' ? reviewRows : missingRows).map((row) => (
-                    <div
-                      key={row.path}
-                      className={`rounded-xl border px-3 py-2.5 shadow-sm ${
-                        mode === 'pruefen'
-                          ? 'border-orange-200 bg-white'
-                          : 'border-amber-200 bg-white'
-                      }`}
-                    >
-                      <div className="flex flex-wrap items-center gap-1.5 gap-y-1">
-                        <span className="text-sm font-semibold text-slate-800">{row.label}</span>
-                        {mode === 'ergaenzen' ? (
-                          <span className="text-[9px] font-semibold leading-tight px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-900 border border-amber-200 max-w-[14rem]">
-                            Ergänzen
-                          </span>
-                        ) : (
-                          <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-orange-50 text-orange-900 border border-orange-200 flex items-center gap-0.5">
-                            <AlertTriangle className="w-3 h-3" /> Prüfen
-                          </span>
-                        )}
-                      </div>
-                      {row.hint ? (
-                        <p className="text-xs text-slate-500 mt-1.5 leading-snug">{row.hint}</p>
-                      ) : null}
-                      <div className="mt-2.5 pt-2.5 border-t border-slate-100 space-y-2">
-                        {renderFieldEditor(row.path)}
-                      </div>
-                    </div>
+                <p className="text-xs text-slate-600 mb-2 leading-snug">{meta.description}</p>
+                <ul className="text-xs text-slate-700 space-y-0.5">
+                  {rows.map((r) => (
+                    <li key={r.path} className="flex items-center gap-1.5">
+                      <span className="inline-block w-1 h-1 rounded-full bg-amber-500" />
+                      {r.label}
+                    </li>
                   ))}
-                </>
-              )}
-              <p className="text-xs text-slate-500">
-                Tipp: Du kannst alles direkt hier im Dialog ergänzen/korrigieren.
+                </ul>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Attention Checklist (linke Spalte oberhalb des Formulars) ────────
+
+function AttentionChecklist({
+  attentionFields,
+  mode,
+  onModeChange,
+  renderFieldEditor,
+}: {
+  attentionFields: PopupAttentionField[];
+  mode: 'pruefen' | 'ergaenzen';
+  onModeChange: (m: 'pruefen' | 'ergaenzen') => void;
+  renderFieldEditor: (path: string) => ReactNode;
+}) {
+  const reviewRowsAll = attentionFields.filter((r) => !r.missing && r.needsReview);
+  const missingRowsAll = attentionFields.filter((r) => r.missing);
+
+  const hasReview = reviewRowsAll.length > 0;
+  const hasMissing = missingRowsAll.length > 0;
+
+  const visibleRows = mode === 'pruefen' ? reviewRowsAll : missingRowsAll;
+  const emptyForMode = visibleRows.length === 0;
+
+  return (
+    <div className="rounded-2xl p-[1px] bg-[linear-gradient(90deg,rgba(59,130,246,0.55),rgba(168,85,247,0.50),rgba(16,185,129,0.38))] shadow-[0_22px_80px_rgba(2,6,23,0.18)]">
+      <div className="relative rounded-2xl overflow-hidden bg-white">
+        <div className="relative px-5 py-4 sm:px-6 sm:py-5 text-white overflow-hidden">
+          <div className="absolute inset-0 bg-[radial-gradient(1200px_600px_at_15%_0%,rgba(59,130,246,0.22),transparent_55%),radial-gradient(900px_520px_at_85%_15%,rgba(168,85,247,0.22),transparent_50%),radial-gradient(700px_520px_at_40%_120%,rgba(16,185,129,0.16),transparent_55%),linear-gradient(to_bottom,rgba(2,6,23,0.92),rgba(2,6,23,0.82))]" />
+          <div className="relative flex items-start gap-4">
+            <div className="w-12 h-12 rounded-2xl border border-white/15 bg-white/10 shrink-0 shadow-lg flex items-center justify-center">
+              <AsklepiosExtractLogo className="w-6 h-6 text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-base sm:text-lg font-bold leading-tight">
+                Asklepios_extract braucht deine Hilfe
+              </h3>
+              <p className="text-xs sm:text-sm text-white/80 mt-0.5 leading-relaxed">
+                <span className="font-semibold text-white">Prüfen:</span> Unsichere Werte mit dem Vertrag rechts abgleichen.{' '}
+                <span className="font-semibold text-white">Ergänzen:</span> Werte, die nicht im Vertrag stehen, manuell eintragen.
               </p>
             </div>
           </div>
-
-          {/* Rechts: Vertrag */}
-          {mode === 'pruefen' ? (
-          <div className="flex-1 flex flex-col min-h-[300px] lg:min-h-0 bg-slate-100/90">
-            <div className="shrink-0 px-4 py-2 border-b border-slate-200/80 flex items-center justify-between gap-2">
-              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
-                Arbeitsvertrag
-              </span>
-              <div className="flex items-center gap-2 min-w-0">
-                {showOpenLink ? (
-                  <a
-                    href={contractPreviewUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[11px] font-semibold text-slate-600 hover:text-slate-900 underline shrink-0"
-                  >
-                    Vertrag öffnen
-                  </a>
-                ) : null}
-              </div>
-            </div>
-            <div className="flex-1 min-h-[240px] p-2 sm:p-3">
-              {contractPreviewUrl && isPdf ? (
-                <div className="w-full h-full min-h-[280px] rounded-lg border border-slate-200 bg-white overflow-hidden">
-                  <embed
-                    key={contractPreviewUrl}
-                    src={contractPreviewUrl}
-                    type="application/pdf"
-                    className="w-full h-full min-h-[280px]"
-                  />
-                </div>
-              ) : contractPreviewUrl && isImage ? (
-                <div className="h-full overflow-auto rounded-lg border border-slate-200 bg-white flex items-start justify-center p-2">
-                  <img
-                    src={contractPreviewUrl}
-                    alt="Hochgeladener Vertrag"
-                    className="max-w-full h-auto object-contain"
-                  />
-                </div>
-              ) : isDocx ? (
-                <div className="h-full overflow-auto rounded-lg border border-slate-200 bg-white p-4 sm:p-6">
-                  <div
-                    className="prose prose-sm max-w-none prose-headings:text-slate-800 prose-p:text-slate-700 prose-table:text-sm"
-                    dangerouslySetInnerHTML={{ __html: docxHtml ?? '' }}
-                  />
-                </div>
-              ) : (
-                <div className="h-full min-h-[200px] rounded-lg border border-dashed border-slate-300 bg-white flex flex-col items-center justify-center text-center px-4">
-                  <FileText className="w-10 h-10 text-slate-300 mb-2" />
-                  <p className="text-sm text-slate-500">
-                    {contractPreviewUrl
-                      ? 'Für diesen Dateityp gibt es keine eingebettete Vorschau. Bitte die Datei separat öffnen.'
-                    : 'Keine Dateivorschau verfügbar. Bitte prüfen Sie die extrahierten Felder im Formular.'}
-                  </p>
-                  {contractPreviewUrl ? (
-                    <a
-                      href={contractPreviewUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-3 text-sm font-semibold text-slate-700 underline"
-                    >
-                      Vertrag öffnen
-                    </a>
-                  ) : null}
-                </div>
-              )}
-            </div>
+          <div
+            role="tablist"
+            aria-label="Prüfen und Ergänzen umschalten"
+            className="relative mt-3 inline-flex rounded-full bg-white/10 p-0.5 border border-white/10"
+            onKeyDown={(e) => {
+              if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && hasReview && hasMissing) {
+                e.preventDefault();
+                onModeChange(mode === 'pruefen' ? 'ergaenzen' : 'pruefen');
+              }
+            }}
+          >
+            {hasReview ? (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mode === 'pruefen'}
+                onClick={() => onModeChange('pruefen')}
+                className={`px-3 py-1 rounded-full text-[11px] font-bold transition-all ${
+                  mode === 'pruefen' ? 'bg-white text-slate-900 shadow-sm' : 'text-white/80 hover:text-white'
+                }`}
+              >
+                Prüfen ({reviewRowsAll.length})
+              </button>
+            ) : null}
+            {hasMissing ? (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={mode === 'ergaenzen'}
+                onClick={() => onModeChange('ergaenzen')}
+                className={`px-3 py-1 rounded-full text-[11px] font-bold transition-all ${
+                  mode === 'ergaenzen' ? 'bg-white text-slate-900 shadow-sm' : 'text-white/80 hover:text-white'
+                }`}
+              >
+                Ergänzen ({missingRowsAll.length})
+              </button>
+            ) : null}
           </div>
-          ) : null}
         </div>
 
-        <div className="shrink-0 border-t border-slate-100 px-5 py-4 sm:px-8">
-          {canContinueToMissing ? (
-            <button
-              type="button"
-              onClick={() => setMode('ergaenzen')}
-              className="w-full py-3 rounded-xl bg-foreground text-background font-bold text-sm hover:bg-foreground/90 transition-colors"
-            >
-              Weiter zu Ergänzen
-            </button>
+        <div className="px-5 py-4 sm:px-6 space-y-3">
+          {emptyForMode ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-semibold text-slate-800">
+                {mode === 'pruefen' ? 'Keine Unsicherheiten zum Prüfen.' : 'Keine fehlenden Angaben zum Ergänzen.'}
+              </p>
+              <p className="text-xs text-slate-600 mt-1">
+                {mode === 'pruefen'
+                  ? hasMissing
+                    ? 'Wenn du trotzdem etwas ergänzen möchtest, wechsle zu «Ergänzen».'
+                    : 'Alles klar – keine weiteren Aktionen nötig.'
+                  : hasReview
+                    ? 'Wenn du unsichere Felder abgleichen möchtest, wechsle zu «Prüfen».'
+                    : 'Alles klar – keine weiteren Aktionen nötig.'}
+              </p>
+            </div>
           ) : (
-            <button
-              type="button"
-              onClick={onClose}
-              className="w-full py-3 rounded-xl bg-foreground text-background font-bold text-sm hover:bg-foreground/90 transition-colors"
-            >
-              Fertig – weiter im Formular
-            </button>
+            visibleRows.map((row) => {
+              const sourceMeta = row.source ? SOURCE_LABELS[row.source] : null;
+              return (
+                <div
+                  key={row.path}
+                  className={`rounded-xl border px-3 py-2.5 shadow-sm bg-white ${
+                    mode === 'pruefen' ? 'border-orange-200' : 'border-amber-200'
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center gap-1.5 gap-y-1">
+                    <span className="text-sm font-semibold text-slate-800">{row.label}</span>
+                    {mode === 'ergaenzen' ? (
+                      <>
+                        <span className="text-[9px] font-semibold leading-tight px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-900 border border-amber-200">
+                          Ergänzen
+                        </span>
+                        {sourceMeta ? (
+                          <span className="text-[9px] font-semibold leading-tight px-1.5 py-0.5 rounded-md bg-white text-slate-700 border border-slate-200">
+                            Quelle: {sourceMeta.label}
+                          </span>
+                        ) : null}
+                      </>
+                    ) : (
+                      <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-orange-50 text-orange-900 border border-orange-200 flex items-center gap-0.5">
+                        <AlertTriangle className="w-3 h-3" /> Prüfen
+                      </span>
+                    )}
+                  </div>
+                  {row.hint ? (
+                    <p className="text-xs text-slate-500 mt-1.5 leading-snug">{row.hint}</p>
+                  ) : null}
+                  <div className="mt-2.5 pt-2.5 border-t border-slate-100 space-y-2">
+                    {renderFieldEditor(row.path)}
+                  </div>
+                </div>
+              );
+            })
           )}
         </div>
-        </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Context Pane (rechte Spalte mit Kontext-Swap) ─────────────────────
+
+function ContextPane({
+  mode,
+  ergaenzenFields,
+  contractPreviewUrl,
+  contractFileName,
+  contractMimeType,
+  docxHtml,
+}: {
+  mode: 'pruefen' | 'ergaenzen';
+  ergaenzenFields: PopupAttentionField[];
+  contractPreviewUrl: string | null;
+  contractFileName: string;
+  contractMimeType: string;
+  docxHtml: string | null;
+}) {
+  return (
+    <div
+      aria-live="polite"
+      className="h-full min-h-[320px] lg:min-h-0 transition-opacity duration-200"
+    >
+      {mode === 'pruefen' ? (
+        <ContractPreview
+          contractPreviewUrl={contractPreviewUrl}
+          contractFileName={contractFileName}
+          contractMimeType={contractMimeType}
+          docxHtml={docxHtml}
+        />
+      ) : (
+        <ErgaenzenSourceGuide fields={ergaenzenFields} />
+      )}
     </div>
   );
 }
@@ -913,7 +1016,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
   const [saving, setSaving] = useState(false);
   // Binary review state
   const [reviewFields, setReviewFields] = useState<string[]>([]);
-  const [showReviewPopup, setShowReviewPopup] = useState(false);
+  const [attentionMode, setAttentionMode] = useState<'pruefen' | 'ergaenzen'>('pruefen');
   const [pipelineTrace, setPipelineTrace] = useState<PipelineTrace | null>(null);
   const extractionRunIdRef = useRef(0);
   const [extractingStartedAt, setExtractingStartedAt] = useState<number | null>(null);
@@ -1296,9 +1399,9 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
         setStep('review');
         setTab('stammdaten');
 
-        if (attention.length > 0) {
-          setShowReviewPopup(true);
-        }
+        // Default-Modus festlegen: wenn es Prüf-Felder gibt → prüfen, sonst ergänzen.
+        const hasReviewRows = attention.some((f) => !f.missing && f.needsReview);
+        setAttentionMode(hasReviewRows ? 'pruefen' : 'ergaenzen');
 
         const meta = result.extraction_metadata;
         const warnLines = (meta.warnings ?? []).map(formatAIWarning);
@@ -1887,19 +1990,6 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
         </div>
       )}
 
-      {/* Review Popup */}
-      {showReviewPopup && (
-        <ReviewPopup
-          attentionFields={popupAttentionFields}
-          contractPreviewUrl={contractPreviewUrl}
-          contractFileName={contractFileName}
-          contractMimeType={contractMimeType}
-          docxHtml={docxHtml}
-          renderFieldEditor={renderPopupFieldEditor}
-          onClose={() => setShowReviewPopup(false)}
-        />
-      )}
-
       {/* Review */}
       {step === 'review' && (
         <form
@@ -1914,8 +2004,8 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
           {/* Binary Status Banner */}
           {Object.keys(confidenceMap).length > 0 && (
             <div className={`border rounded-xl px-4 py-2.5 flex items-center gap-3 ${
-              popupAttentionFields.length > 0 
-                ? 'bg-amber-50 border-amber-200' 
+              popupAttentionFields.length > 0
+                ? 'bg-amber-50 border-amber-200'
                 : 'bg-emerald-50 border-emerald-200'
             }`}>
               {/* Pipeline-Timing nur im Dev-Modus */}
@@ -1928,35 +2018,32 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                 <>
                   <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
                   <p className="text-xs text-amber-700">
-                    <span className="font-bold">{popupAttentionFields.length} Felder prüfen oder ergänzen</span> – 
-                    Liste im Dialog; im Formular sind dieselben Felder orange markiert – bitte mit dem Vertrag abgleichen und bei Bedarf anpassen.
+                    <span className="font-bold">{popupAttentionFields.length} Felder prüfen oder ergänzen</span> – bitte die Liste unten durchgehen; im Formular sind dieselben Felder orange markiert.
                   </p>
-                  <button type="button" onClick={() => setShowReviewPopup(true)} className="text-xs text-amber-700 underline font-medium shrink-0 ml-auto">
-                    Dialog öffnen
-                  </button>
                 </>
               ) : (
                 <>
                   <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
                   <p className="text-xs text-emerald-700 flex-1">
-                    <span className="font-bold">Alle Felder mit hoher Sicherheit erkannt</span> – 
-                    Trotzdem empfehlen wir eine kurze Überprüfung.
+                    <span className="font-bold">Alle Felder mit hoher Sicherheit erkannt</span> – trotzdem empfehlen wir eine kurze Überprüfung anhand des Vertrags rechts.
                   </p>
-                  {contractPreviewUrl ? (
-                    <button
-                      type="button"
-                      onClick={() => setShowReviewPopup(true)}
-                      className="text-xs text-emerald-800 underline font-medium shrink-0"
-                    >
-                      Vertrag anzeigen
-                    </button>
-                  ) : null}
                 </>
               )}
             </div>
           )}
 
-          {/* Tab switcher */}
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,460px)] gap-4">
+            <div className="min-w-0 space-y-3">
+              {popupAttentionFields.length > 0 && (
+                <AttentionChecklist
+                  attentionFields={popupAttentionFields}
+                  mode={attentionMode}
+                  onModeChange={setAttentionMode}
+                  renderFieldEditor={renderPopupFieldEditor}
+                />
+              )}
+
+              {/* Tab switcher */}
           <div className="flex justify-center">
             <div className="inline-flex rounded-full bg-muted/50 p-1">
               <button 
@@ -2281,33 +2368,46 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
             </div>
           </div>
 
-          {/* Footer */}
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">
-              Schritt {tab === 'stammdaten' ? '1' : '2'} von 2
-            </span>
-            <div className="flex gap-3">
-              {tab === 'abrechnungsdaten' && (
-                <button type="button" onClick={() => setTab('stammdaten')}
-                  className="px-5 py-2.5 rounded-full border text-sm font-medium hover:bg-muted transition-colors flex items-center gap-2">
-                  <ArrowLeft className="w-4 h-4" /> Zurück
-                </button>
-              )}
-              {tab === 'stammdaten' ? (
-                <button type="button" onClick={() => setTab('abrechnungsdaten')}
-                  className="px-6 py-2.5 rounded-full bg-foreground text-background font-bold text-sm hover:bg-foreground/90 transition-colors flex items-center gap-2">
-                  Weiter zu Abrechnungsdaten <ArrowRight className="w-4 h-4" />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={doSave}
-                  disabled={saving || !firstName || !lastName}
-                  className="px-6 py-2.5 rounded-full bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 disabled:opacity-50 transition-colors flex items-center gap-2">
-                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><CheckCircle2 className="w-4 h-4" /> Speichern & Beenden</>}
-                </button>
-              )}
+              {/* Footer */}
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">
+                  Schritt {tab === 'stammdaten' ? '1' : '2'} von 2
+                </span>
+                <div className="flex gap-3">
+                  {tab === 'abrechnungsdaten' && (
+                    <button type="button" onClick={() => setTab('stammdaten')}
+                      className="px-5 py-2.5 rounded-full border text-sm font-medium hover:bg-muted transition-colors flex items-center gap-2">
+                      <ArrowLeft className="w-4 h-4" /> Zurück
+                    </button>
+                  )}
+                  {tab === 'stammdaten' ? (
+                    <button type="button" onClick={() => setTab('abrechnungsdaten')}
+                      className="px-6 py-2.5 rounded-full bg-foreground text-background font-bold text-sm hover:bg-foreground/90 transition-colors flex items-center gap-2">
+                      Weiter zu Abrechnungsdaten <ArrowRight className="w-4 h-4" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={doSave}
+                      disabled={saving || !firstName || !lastName}
+                      className="px-6 py-2.5 rounded-full bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 disabled:opacity-50 transition-colors flex items-center gap-2">
+                      {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><CheckCircle2 className="w-4 h-4" /> Speichern & Beenden</>}
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
+
+            <aside className="lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)]">
+              <ContextPane
+                mode={attentionMode}
+                ergaenzenFields={popupAttentionFields}
+                contractPreviewUrl={contractPreviewUrl}
+                contractFileName={contractFileName}
+                contractMimeType={contractMimeType}
+                docxHtml={docxHtml}
+              />
+            </aside>
           </div>
         </form>
       )}
