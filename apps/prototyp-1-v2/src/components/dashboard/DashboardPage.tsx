@@ -15,19 +15,35 @@ export function DashboardPage() {
 
   const loadAssistants = async () => {
     if (!employerAccess?.employer_id) { setLoading(false); return; }
-    const { data, count } = await supabase
+    const { data, count, error } = await supabase
       .from('assistant')
       .select('*', { count: 'exact' })
       .eq('employer_id', employerAccess.employer_id)
       .eq('is_active', true);
-    setAssistantCount(count ?? 0);
-    if (data) setAssistants(data);
+    // Bug C4: Fehler aus Supabase (Netzwerk / RLS) sichtbar machen, statt
+    // stillschweigend "0 Assistenzpersonen" anzuzeigen.
+    if (error) {
+      console.error('[dashboard] loadAssistants', error);
+      setAssistantCount(0);
+      setAssistants([]);
+    } else {
+      setAssistantCount(count ?? 0);
+      setAssistants(data ?? []);
+    }
     setLoading(false);
   };
 
   useEffect(() => {
-    if (employerAccess?.employer_id) loadAssistants();
-    else setLoading(false);
+    if (employerAccess?.employer_id) {
+      loadAssistants();
+    } else {
+      // Bug C3: Beim Mandantenwechsel auf null/undefined die alten Daten
+      // verwerfen – sonst sieht der User kurz die Assistenzen des vorigen
+      // Arbeitgebers.
+      setAssistants([]);
+      setAssistantCount(0);
+      setLoading(false);
+    }
   }, [employerAccess?.employer_id]);
 
   if (loading) {
