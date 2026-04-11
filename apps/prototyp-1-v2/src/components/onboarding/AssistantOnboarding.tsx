@@ -2078,11 +2078,47 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                   Agentic Workflow: Prüfen & Ergänzen
                 </span>
               </div>
-            {tab === 'stammdaten' && (
+            {tab === 'stammdaten' && (() => {
+              const ageForLogic = (() => {
+                if (!birthDate) return null;
+                const bd = new Date(birthDate);
+                if (isNaN(bd.getTime())) return null;
+                const today = new Date();
+                let age = today.getFullYear() - bd.getFullYear();
+                if (today.getMonth() < bd.getMonth() || (today.getMonth() === bd.getMonth() && today.getDate() < bd.getDate())) age--;
+                return age;
+              })();
+              const showPermitWarning = !!residencePermit && residencePermit !== 'CH' && residencePermit !== 'C';
+              const showAgeWarning = ageForLogic !== null && (ageForLogic < 18 || ageForLogic > 65);
+              const hasLogic = showPermitWarning || showAgeWarning;
+              return (
               <div className="space-y-4 animate-in fade-in duration-200">
+                {hasLogic && (
+                  <section className="rounded-xl border border-white/10 bg-white/5 p-3 space-y-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-white/70">
+                        Logik & Hinweise
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {showPermitWarning && (
+                        <div className="bg-amber-50 rounded-xl border border-amber-200 p-3 text-sm text-amber-800 flex items-start gap-2">
+                          <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                          <span>Aufenthaltsstatus «{residencePermit}» – Quellensteuer wäre nötig, ist aber aktuell <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase bg-gray-200 text-gray-500 mx-0.5">Out of Scope</span>. Lohnabrechnung nur für Schweizer/innen und C-Bewilligung möglich.</span>
+                        </div>
+                      )}
+                      {showAgeWarning && (
+                        <div className="bg-red-50 rounded-xl border border-red-200 p-3 text-sm text-red-800 flex items-start gap-2">
+                          <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                          <span>Alter {ageForLogic} Jahre – Lohnabrechnung nur für Personen im Alter von 18–65 Jahren möglich.</span>
+                        </div>
+                      )}
+                    </div>
+                  </section>
+                )}
                 <h4 className="text-sm font-bold">Assistenzperson</h4>
-                
-                <div className="grid grid-cols-4 gap-3">
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   <MiniField title="Vorname" {...fieldProps('firstName')} hasValue={!!firstName}>
                     <input type="text" placeholder="Bitte ergänzen..." value={firstName} onChange={e => setFirstName(e.target.value)} className={inputStyle} />
                   </MiniField>
@@ -2100,7 +2136,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                   </MiniField>
                 </div>
 
-                <div className="grid grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   <MiniField title="PLZ" {...fieldProps('plz')} hasValue={!!plz} error={validatePlz(plz)} hint="Gültige PLZ">
                     <input type="text" placeholder="z.B. 8000" maxLength={4} value={plz} onChange={e => { const v = e.target.value.replace(/\D/g, '').slice(0, 4); setPlz(v); }} className={inputStyle} />
                   </MiniField>
@@ -2115,7 +2151,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                   </MiniField>
                 </div>
 
-                <div className="grid grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   <MiniField title="Geschlecht" {...fieldProps('gender')} hasValue={!!gender}>
                     <select value={gender} onChange={e => setGender(e.target.value)} className={selectStyle}>
                       <option value="">Bitte wählen...</option>
@@ -2146,7 +2182,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                   </MiniField>
                 </div>
 
-                <div className="grid grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   <MiniField title="Zivilstand" {...fieldProps('civilStatus')} hasValue={!!civilStatus}>
                     <select value={civilStatus} onChange={e => setCivilStatus(e.target.value)} className={selectStyle}>
                       <option value="">Bitte wählen...</option>
@@ -2170,34 +2206,53 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                     </select>
                   </MiniField>
                 </div>
-                {/* Scope-Warnungen basierend auf Stammdaten */}
-                {residencePermit && residencePermit !== 'CH' && residencePermit !== 'C' && (
-                  <div className="bg-amber-50 rounded-xl border border-amber-200 p-3 text-sm text-amber-800 flex items-start gap-2">
-                    <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                    <span>Aufenthaltsstatus «{residencePermit}» – Quellensteuer wäre nötig, ist aber aktuell <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase bg-gray-200 text-gray-500 mx-0.5">Out of Scope</span>. Lohnabrechnung nur für Schweizer/innen und C-Bewilligung möglich.</span>
-                  </div>
-                )}
-                {birthDate && (() => {
-                  const bd = new Date(birthDate);
-                  if (isNaN(bd.getTime())) return null;
-                  const today = new Date();
-                  let age = today.getFullYear() - bd.getFullYear();
-                  if (today.getMonth() < bd.getMonth() || (today.getMonth() === bd.getMonth() && today.getDate() < bd.getDate())) age--;
-                  if (age < 18 || age > 65) return (
-                    <div className="bg-red-50 rounded-xl border border-red-200 p-3 text-sm text-red-800 flex items-start gap-2">
-                      <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                      <span>Alter {age} Jahre – Lohnabrechnung nur für Personen im Alter von 18–65 Jahren möglich.</span>
-                    </div>
-                  );
-                  return null;
-                })()}
               </div>
-            )}
+              );
+            })()}
 
-            {tab === 'abrechnungsdaten' && (
+            {tab === 'abrechnungsdaten' && (() => {
+              const hwForLogic = parseFloat(hoursPerWeek);
+              const hrForLogic = parseFloat(hourlyRate);
+              const monthlyForLogic = (Number.isFinite(hwForLogic) && Number.isFinite(hrForLogic) && hwForLogic > 0 && hrForLogic > 0)
+                ? hwForLogic * 4 * hrForLogic
+                : null;
+              const showBvgWarning = monthlyForLogic !== null && monthlyForLogic > 1890;
+              const showNbu8h = Number.isFinite(hwForLogic) && hwForLogic > 0;
+              const nbu8hUnder = showNbu8h && hwForLogic < 8;
+              return (
               <div className="space-y-4 animate-in fade-in duration-200">
+                <section className="rounded-xl border border-white/10 bg-white/5 p-3 space-y-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-white/70">
+                      Logik & Hinweise
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <div className="md:col-span-2 flex items-start gap-2.5 rounded-lg border border-blue-200 bg-blue-50/90 px-4 py-3 text-sm text-blue-800">
+                      <HelpCircle className="w-4 h-4 mt-0.5 shrink-0 text-blue-500" />
+                      <span>Der <strong>Nichtberufsunfallversicherungs-Gesamtprämiensatz (NBU)</strong> muss zwingend manuell eingegeben werden – entnehmen Sie ihn Ihrer Versicherungspolice (typischerweise 0.5–3&nbsp;%). Die Aufteilung in AG-/AN-Anteil kann aus dem Arbeitsvertrag übernommen werden.</span>
+                    </div>
+                    {showBvgWarning && (
+                      <div className="bg-amber-50 rounded-xl border border-amber-200 p-3 text-sm text-amber-800">
+                        Monatliches Einkommen ca. CHF {monthlyForLogic!.toFixed(0)} – liegt über CHF 1'890 (BVG-Schwelle von CHF 22'680/Jahr).
+                        <span className="inline-flex items-center ml-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase bg-gray-200 text-gray-500">BVG Out of Scope</span>
+                      </div>
+                    )}
+                    {showNbu8h && nbu8hUnder && (
+                      <div className="bg-blue-50 rounded-xl border border-blue-100 p-3 text-sm text-blue-700">
+                        Pensum unter 8h/Woche – Nichtberufsunfallversicherung ist nicht obligatorisch. Die NBU-Felder sind optional und können leer bleiben.
+                      </div>
+                    )}
+                    {showNbu8h && !nbu8hUnder && (
+                      <div className="bg-emerald-50 rounded-xl border border-emerald-200 p-3 text-sm text-emerald-700">
+                        Pensum ≥ 8h/Woche – Nichtberufsunfallversicherung pflichtig. Der Abzug wird auf der Lohnabrechnung ausgewiesen.
+                      </div>
+                    )}
+                  </div>
+                </section>
+
                 <h4 className="text-sm font-bold">Vertragsdetails & Pensum</h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   <MiniField title="Vertragsbeginn" {...fieldProps('contractStart')} hasValue={!!contractStart}>
                     <input type="date" value={contractStart} onChange={e => setContractStart(e.target.value)} className={inputStyle} />
                   </MiniField>
@@ -2238,22 +2293,8 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                   </MiniField>
                 </div>
 
-                {(() => {
-                  const hw = parseFloat(hoursPerWeek);
-                  const hr = parseFloat(hourlyRate);
-                  if (Number.isFinite(hw) && Number.isFinite(hr) && hw > 0 && hr > 0) {
-                    const monthly = hw * 4 * hr;
-                    if (monthly > 1890) return (
-                      <div className="bg-amber-50 rounded-xl border border-amber-200 p-3 text-sm text-amber-800">
-                        Monatliches Einkommen ca. CHF {monthly.toFixed(0)} – liegt über CHF 1'890 (BVG-Schwelle von CHF 22'680/Jahr).
-                        <span className="inline-flex items-center ml-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase bg-gray-200 text-gray-500">BVG Out of Scope</span>
-                      </div>
-                    );
-                  }
-                  return null;
-                })()}
                 <h4 className="text-sm font-bold">Lohn</h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   <MiniField title="Lohnart" {...fieldProps('wageType')} hasValue={!!wageType}>
                     <select value={wageType} onChange={e => setWageType(e.target.value)} className={selectStyle}>
                       <option value="hourly">Stundenlohn</option>
@@ -2284,7 +2325,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   <MiniField title="Ferienzuschlag %" {...fieldProps('vacationSurcharge')} hasValue={!!vacationSurcharge}>
                     <input
                       type="number"
@@ -2320,55 +2361,45 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                       ))}
                     </select>
                   </MiniField>
-                  <div className="col-span-2 md:col-span-4 flex items-start gap-2.5 rounded-lg border border-blue-200 bg-blue-50/60 px-4 py-3 text-sm text-blue-800">
-                    <HelpCircle className="w-4 h-4 mt-0.5 shrink-0 text-blue-500" />
-                    <span>Der <strong>Nichtberufsunfallversicherungs-Gesamtprämiensatz (NBU)</strong> muss zwingend manuell eingegeben werden – entnehmen Sie ihn Ihrer Versicherungspolice (typischerweise 0.5–3&nbsp;%). Die Aufteilung in AG-/AN-Anteil kann aus dem Arbeitsvertrag übernommen werden.</span>
                   </div>
-                  <MiniField title="AG übernimmt Nichtberufsunfallvers. (NBU) freiwillig" {...fieldProps('nbuEmployerVoluntary')} hasValue>
-                    <label className="flex items-center gap-2 cursor-pointer mt-1">
-                      <input type="checkbox" checked={nbuEmployerVoluntary}
-                        onChange={e => setNbuEmployerVoluntary(e.target.checked)}
-                        className="rounded border-gray-300 h-4 w-4" />
-                      <span className="text-sm text-muted-foreground">Auch bei Pensum unter 8h/Woche</span>
-                    </label>
-                  </MiniField>
-                  <MiniField title="Nichtberufsunfallvers. (NBU) Gesamtprämiensatz (%) – manuell" {...fieldProps('nbuTotal')} hasValue={!!nbuTotal}
-                    hint="Gesamtprämiensatz gemäss Ihrer Versicherungspolice (typ. 0.5–3%)"
-                    error={nbuTotal && parseFloat(nbuTotal) > 5 ? 'Unrealistisch hoch – Prämiensätze liegen typischerweise bei 0.5–3%' : undefined}>
-                    <input type="number" min={0} max={10} step="0.01" placeholder="z.B. 1.50"
-                      value={nbuTotal} onChange={e => setNbuTotal(e.target.value)} className={inputStyle} />
-                  </MiniField>
-                  <MiniField title="Nichtberufsunfallvers. (NBU) AG-Prämienanteil (%)" {...fieldProps('nbuEmployer')} hasValue={!!nbuEmployer}
-                    error={nbuEmployer && nbuEmployee && Math.abs(parseFloat(nbuEmployer || '0') + parseFloat(nbuEmployee || '0') - 100) > 0.1 ? 'AG-Anteil + AN-Anteil muss 100% ergeben' : undefined}>
-                    <input type="number" min={0} max={100} step="1" placeholder="z.B. 0"
-                      value={nbuEmployer} onChange={e => setNbuEmployer(e.target.value)}
-                      className={inputStyle} />
-                  </MiniField>
-                  <MiniField title="Nichtberufsunfallvers. (NBU) AN-Prämienanteil (%)" {...fieldProps('nbuEmployee')} hasValue={!!nbuEmployee}
-                    error={nbuEmployer && nbuEmployee && Math.abs(parseFloat(nbuEmployer || '0') + parseFloat(nbuEmployee || '0') - 100) > 0.1 ? 'AG-Anteil + AN-Anteil muss 100% ergeben' : undefined}>
-                    <input type="number" min={0} max={100} step="1" placeholder="z.B. 100"
-                      value={nbuEmployee} onChange={e => setNbuEmployee(e.target.value)}
-                      className={inputStyle} />
-                  </MiniField>
-                  {(() => {
-                    const hw = parseFloat(hoursPerWeek);
-                    if (!Number.isFinite(hw) || hw <= 0) return null;
-                    // Gesetzliche Grenze für die Nichtberufsunfallversicherung: 8h/Woche.
-                    if (hw < 8) return (
-                      <div className="col-span-2 md:col-span-4 bg-blue-50 rounded-xl border border-blue-100 p-3 text-sm text-blue-700">
-                        Pensum unter 8h/Woche – Nichtberufsunfallversicherung ist nicht obligatorisch. Die NBU-Felder sind optional und können leer bleiben.
-                      </div>
-                    );
-                    return (
-                      <div className="col-span-2 md:col-span-4 bg-emerald-50 rounded-xl border border-emerald-200 p-3 text-sm text-emerald-700">
-                        Pensum ≥ 8h/Woche – Nichtberufsunfallversicherung pflichtig. Der Abzug wird auf der Lohnabrechnung ausgewiesen.
-                      </div>
-                    );
-                  })()}
+
+                  <div className="mt-4 pt-3 border-t border-white/10 space-y-3">
+                    <h5 className="text-xs font-semibold text-white/80 uppercase tracking-wider">
+                      Nichtberufsunfallversicherung (NBU)
+                    </h5>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      <MiniField title="Nichtberufsunfallvers. (NBU) Gesamtprämiensatz (%) – manuell" {...fieldProps('nbuTotal')} hasValue={!!nbuTotal}
+                        hint="Gesamtprämiensatz gemäss Ihrer Versicherungspolice (typ. 0.5–3%)"
+                        error={nbuTotal && parseFloat(nbuTotal) > 5 ? 'Unrealistisch hoch – Prämiensätze liegen typischerweise bei 0.5–3%' : undefined}>
+                        <input type="number" min={0} max={10} step="0.01" placeholder="z.B. 1.50"
+                          value={nbuTotal} onChange={e => setNbuTotal(e.target.value)} className={inputStyle} />
+                      </MiniField>
+                      <MiniField title="Nichtberufsunfallvers. (NBU) AG-Prämienanteil (%)" {...fieldProps('nbuEmployer')} hasValue={!!nbuEmployer}
+                        error={nbuEmployer && nbuEmployee && Math.abs(parseFloat(nbuEmployer || '0') + parseFloat(nbuEmployee || '0') - 100) > 0.1 ? 'AG-Anteil + AN-Anteil muss 100% ergeben' : undefined}>
+                        <input type="number" min={0} max={100} step="1" placeholder="z.B. 0"
+                          value={nbuEmployer} onChange={e => setNbuEmployer(e.target.value)}
+                          className={inputStyle} />
+                      </MiniField>
+                      <MiniField title="Nichtberufsunfallvers. (NBU) AN-Prämienanteil (%)" {...fieldProps('nbuEmployee')} hasValue={!!nbuEmployee}
+                        error={nbuEmployer && nbuEmployee && Math.abs(parseFloat(nbuEmployer || '0') + parseFloat(nbuEmployee || '0') - 100) > 0.1 ? 'AG-Anteil + AN-Anteil muss 100% ergeben' : undefined}>
+                        <input type="number" min={0} max={100} step="1" placeholder="z.B. 100"
+                          value={nbuEmployee} onChange={e => setNbuEmployee(e.target.value)}
+                          className={inputStyle} />
+                      </MiniField>
+                    </div>
+                    <MiniField title="AG übernimmt Nichtberufsunfallvers. (NBU) freiwillig" {...fieldProps('nbuEmployerVoluntary')} hasValue>
+                      <label className="flex items-center gap-2 cursor-pointer mt-1">
+                        <input type="checkbox" checked={nbuEmployerVoluntary}
+                          onChange={e => setNbuEmployerVoluntary(e.target.checked)}
+                          className="rounded border-gray-300 h-4 w-4" />
+                        <span className="text-sm text-muted-foreground">Auch bei Pensum unter 8h/Woche</span>
+                      </label>
+                    </MiniField>
                   </div>
                 </div>
               </div>
-            )}
+              );
+            })()}
               </div>
             </div>
           </div>
