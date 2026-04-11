@@ -249,18 +249,6 @@ export function generateIvInvoicePdf(data: IvInvoicePdfData): jsPDF {
   doc.text(data.invoiceIssuer.name || '—', LM, y);
   y += 8;
 
-  // Hinweisbox (farbig hinterlegt)
-  const hintText = `Bitte überweisen Sie den Betrag von ${money(data.totalCHF)} an folgendes Konto:`;
-  const hintH = 10;
-  doc.setFillColor(37, 99, 235);
-  doc.roundedRect(LM, y - 2, TABLE_WIDTH_MM, hintH, 1.5, 1.5, 'F');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(255, 255, 255);
-  doc.text(hintText, LM + 4, y + 4.5);
-  doc.setTextColor(PDF_THEME.textDark);
-  y += hintH + 4;
-
   autoTable(doc, {
     startY: y,
     tableWidth: TABLE_WIDTH_MM,
