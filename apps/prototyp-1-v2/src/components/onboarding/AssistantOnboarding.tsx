@@ -1513,9 +1513,9 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
 
 
   return (
-    <div className="space-y-6">
+    <div className="h-full flex flex-col gap-6 p-4 md:p-6 lg:p-8 overflow-y-auto lg:overflow-hidden">
       {/* Header: nur Zurück-Link (Titel/Intro entfallen – Inhalt folgt im Workflow-Card bzw. Upload-Bereich) */}
-      <div className="rounded-2xl border bg-card px-5 py-3 sm:px-6 sm:py-3.5">
+      <div className="shrink-0 rounded-2xl border bg-card px-5 py-3 sm:px-6 sm:py-3.5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <button
             type="button"
@@ -1548,7 +1548,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
 
       {/* Upload */}
       {step === 'upload' && (
-        <div className="bg-card rounded-2xl border p-10">
+        <div className="lg:flex-1 lg:min-h-0 lg:overflow-y-auto bg-card rounded-2xl border p-10">
           <div className="text-center max-w-lg mx-auto">
             <div className="w-14 h-14 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-5">
               <UploadCloud className="w-7 h-7 text-primary" />
@@ -1585,20 +1585,22 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
 
       {/* Extracting */}
       {step === 'extracting' && (
-        <ExtractingScreen
-          onCancel={() => {
-            extractionRunIdRef.current++;
-            toast.dismiss(TOAST_EXTRACTION_LOADING);
-            setExtractionError(null);
-            setContractPreviewFromFile(null);
-            setStep('upload');
-          }}
-        />
+        <div className="lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
+          <ExtractingScreen
+            onCancel={() => {
+              extractionRunIdRef.current++;
+              toast.dismiss(TOAST_EXTRACTION_LOADING);
+              setExtractionError(null);
+              setContractPreviewFromFile(null);
+              setStep('upload');
+            }}
+          />
+        </div>
       )}
 
       {/* Rejected – kein Arbeitsvertrag */}
       {step === 'rejected' && (
-        <div className="bg-card rounded-2xl border overflow-hidden">
+        <div className="lg:flex-1 lg:min-h-0 lg:overflow-y-auto bg-card rounded-2xl border overflow-x-hidden">
           <div className="bg-gradient-to-r from-red-50 to-orange-50 px-8 py-6 border-b">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 rounded-xl bg-red-100 flex items-center justify-center">
@@ -1657,11 +1659,11 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
             // Enter/implicit submit soll niemals speichern.
             e.preventDefault();
           }}
-          className="space-y-3"
+          className="flex flex-col gap-3 lg:flex-1 lg:min-h-0"
         >
           {/* Binary Status Banner */}
           {Object.keys(confidenceMap).length > 0 && (
-            <div className={`border rounded-xl px-4 py-2.5 flex items-center gap-3 ${
+            <div className={`shrink-0 border rounded-xl px-4 py-2.5 flex items-center gap-3 ${
               popupAttentionFields.length > 0
                 ? 'bg-amber-50 border-amber-200'
                 : 'bg-emerald-50 border-emerald-200'
@@ -1690,8 +1692,8 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
             </div>
           )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,640px)] gap-4">
-            <div className="min-w-0 space-y-3">
+          <div className="lg:flex-1 lg:min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,640px)] gap-4">
+            <div className="min-w-0 lg:min-h-0 lg:overflow-y-auto lg:pr-2 space-y-3">
               <AttentionChecklist attentionFields={popupAttentionFields}>
             {(() => {
               const ageForLogic = (() => {
@@ -2012,8 +2014,8 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
               </AttentionChecklist>
             </div>
 
-            <aside className="lg:sticky lg:top-4 lg:self-start flex flex-col gap-3">
-              <div className="h-[calc(100vh-24rem)] min-h-[420px]">
+            <aside className="lg:min-h-0 lg:h-full flex flex-col gap-3 lg:overflow-hidden">
+              <div className="min-h-[420px] lg:min-h-0 lg:flex-[3]">
                 <ContractPreview
                   contractPreviewUrl={contractPreviewUrl}
                   contractFileName={contractFileName}
@@ -2021,14 +2023,16 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                   docxHtml={docxHtml}
                 />
               </div>
-              <ErgaenzenSourceGuide fields={popupAttentionFields} />
+              <div className="min-h-[260px] lg:min-h-0 lg:flex-[2]">
+                <ErgaenzenSourceGuide fields={popupAttentionFields} />
+              </div>
             </aside>
           </div>
         </form>
       )}
       {/* Success */}
       {step === 'success' && (
-        <div className="relative">
+        <div className="lg:flex-1 lg:min-h-0 lg:overflow-y-auto relative">
           {/* Confetti */}
           {showConfetti && (
             <div className="fixed inset-0 z-50 pointer-events-none overflow-hidden">

@@ -92,10 +92,12 @@ export function AssistantsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-[60vh]">
-        <div className="text-center space-y-3">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto" />
-          <p className="text-sm text-muted-foreground">Lade Assistenzpersonen...</p>
+      <div className="h-full overflow-y-auto p-4 md:p-6 lg:p-8">
+        <div className="flex items-center justify-center h-[60vh]">
+          <div className="text-center space-y-3">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto" />
+            <p className="text-sm text-muted-foreground">Lade Assistenzpersonen...</p>
+          </div>
         </div>
       </div>
     );
@@ -104,9 +106,11 @@ export function AssistantsPage() {
   // Onboarding overlay in AppShell handles this
   if (needsOnboarding) {
     return (
-      <div className="flex flex-col items-center justify-center h-[60vh] text-center space-y-4">
-        <Users className="w-12 h-12 text-muted-foreground/30" />
-        <p className="text-muted-foreground">Bitte schliessen Sie die Einrichtung ab.</p>
+      <div className="h-full overflow-y-auto p-4 md:p-6 lg:p-8">
+        <div className="flex flex-col items-center justify-center h-[60vh] text-center space-y-4">
+          <Users className="w-12 h-12 text-muted-foreground/30" />
+          <p className="text-muted-foreground">Bitte schliessen Sie die Einrichtung ab.</p>
+        </div>
       </div>
     );
   }
@@ -124,7 +128,7 @@ export function AssistantsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="h-full overflow-y-auto p-4 md:p-6 lg:p-8 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Assistenzpersonen</h1>
