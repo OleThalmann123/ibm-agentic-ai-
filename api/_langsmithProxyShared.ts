@@ -1,5 +1,5 @@
 /**
- * Gemeinsame Proxy-Logik für api/langsmith/* (mehrere Vercel-Routen).
+ * LangSmith-Proxy: gemeinsame Logik für api/[[...segments]].ts
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
@@ -9,33 +9,10 @@ export const LANGSMITH_ENDPOINT = (
 ).replace(/\/+$/, '');
 export const LANGSMITH_WORKSPACE_ID = process.env.LANGSMITH_WORKSPACE_ID;
 
-function buildDownstreamPath(pathParam: string | string[] | undefined): string {
-  if (Array.isArray(pathParam)) return pathParam.join('/');
-  return typeof pathParam === 'string' ? pathParam : '';
-}
-
-/** Rest-Pfad nach lokalem Prefix (z. B. /api/langsmith oder /api/langsmith/runs). */
-export function resolveDownstreamAfterPrefix(
-  req: VercelRequest,
-  apiPrefix: string,
-): string {
-  const fromQuery = buildDownstreamPath(req.query.path as string | string[] | undefined);
-  if (fromQuery) return fromQuery;
-
-  const pathname = (req.url || '').split('?')[0];
-  const normalized = pathname.startsWith('/') ? pathname : `/${pathname}`;
-  const p = apiPrefix.endsWith('/') ? apiPrefix.slice(0, -1) : apiPrefix;
-  if (normalized === p || normalized === `${p}/`) return '';
-  if (normalized.startsWith(`${p}/`)) {
-    return decodeURIComponent(normalized.slice(p.length + 1));
-  }
-  return '';
-}
-
 export function buildUpstreamQuery(req: VercelRequest): string {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(req.query)) {
-    if (key === 'path') continue;
+    if (key === 'path' || key === 'segments') continue;
     if (value === undefined) continue;
     const parts = Array.isArray(value) ? value : [value];
     for (const part of parts) {
@@ -46,7 +23,6 @@ export function buildUpstreamQuery(req: VercelRequest): string {
   return s ? `?${s}` : '';
 }
 
-/** downstream = Pfad relativ zu LANGSMITH_ENDPOINT (z. B. info, runs, runs/batch). */
 export async function proxyToLangSmith(
   req: VercelRequest,
   res: VercelResponse,

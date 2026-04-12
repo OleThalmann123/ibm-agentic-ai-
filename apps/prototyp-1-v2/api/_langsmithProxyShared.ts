@@ -1,6 +1,4 @@
-/**
- * Spiegel von ../../../../api/langsmith/_shared.ts — bei Änderungen synchron halten.
- */
+/** Spiegel von ../../../api/_langsmithProxyShared.ts — synchron halten. */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export const LANGSMITH_API_KEY = process.env.LANGSMITH_API_KEY;
@@ -9,32 +7,10 @@ export const LANGSMITH_ENDPOINT = (
 ).replace(/\/+$/, '');
 export const LANGSMITH_WORKSPACE_ID = process.env.LANGSMITH_WORKSPACE_ID;
 
-function buildDownstreamPath(pathParam: string | string[] | undefined): string {
-  if (Array.isArray(pathParam)) return pathParam.join('/');
-  return typeof pathParam === 'string' ? pathParam : '';
-}
-
-export function resolveDownstreamAfterPrefix(
-  req: VercelRequest,
-  apiPrefix: string,
-): string {
-  const fromQuery = buildDownstreamPath(req.query.path as string | string[] | undefined);
-  if (fromQuery) return fromQuery;
-
-  const pathname = (req.url || '').split('?')[0];
-  const normalized = pathname.startsWith('/') ? pathname : `/${pathname}`;
-  const p = apiPrefix.endsWith('/') ? apiPrefix.slice(0, -1) : apiPrefix;
-  if (normalized === p || normalized === `${p}/`) return '';
-  if (normalized.startsWith(`${p}/`)) {
-    return decodeURIComponent(normalized.slice(p.length + 1));
-  }
-  return '';
-}
-
 export function buildUpstreamQuery(req: VercelRequest): string {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(req.query)) {
-    if (key === 'path') continue;
+    if (key === 'path' || key === 'segments') continue;
     if (value === undefined) continue;
     const parts = Array.isArray(value) ? value : [value];
     for (const part of parts) {
