@@ -29,12 +29,23 @@ let _client: Client | null = null;
 /** Parent-Run der Pipeline — gesetzt in pipeline.ts, damit LLM-Calls darunter hängen (ohne Node-`traceable`). */
 let _pipelineLangSmithRoot: RunTree | null = null;
 
+/** Eine Session pro Pipeline-Lauf — gleiche ID auf Root + Kind-Runs (Filter/Threads in LangSmith). */
+let _pipelineLangSmithSessionId: string | null = null;
+
 export function setPipelineLangSmithRoot(run: RunTree | null): void {
   _pipelineLangSmithRoot = run;
 }
 
+export function setPipelineLangSmithSessionId(id: string | null): void {
+  _pipelineLangSmithSessionId = id;
+}
+
 function getPipelineLangSmithRoot(): RunTree | null {
   return _pipelineLangSmithRoot;
+}
+
+function getPipelineLangSmithSessionId(): string | null {
+  return _pipelineLangSmithSessionId;
 }
 
 /** Vercel/UI liefern oft "true", "1", "True" statt exakt "true". */
@@ -220,6 +231,7 @@ export function getLangSmithCallbacks(
   if (!tracer) return undefined;
 
   const label = AGENT_LABELS[agentName];
+  const sessionId = getPipelineLangSmithSessionId();
 
   return {
     callbacks: [tracer],
@@ -227,6 +239,7 @@ export function getLangSmithCallbacks(
     tags: label.tags,
     metadata: {
       ...metadata,
+      ...(sessionId ? { session_id: sessionId } : {}),
       agent: agentName,
       pipeline_step: label.pipeline_step,
       agent_role: label.agent_role,
@@ -243,8 +256,10 @@ export async function getLangSmithInvokeConfig(
   metadata?: Record<string, unknown>,
 ): Promise<Record<string, unknown> | undefined> {
   const label = AGENT_LABELS[agentName];
+  const sessionId = getPipelineLangSmithSessionId();
   const meta = {
     ...metadata,
+    ...(sessionId ? { session_id: sessionId } : {}),
     agent: agentName,
     pipeline_step: label.pipeline_step,
     agent_role: label.agent_role,

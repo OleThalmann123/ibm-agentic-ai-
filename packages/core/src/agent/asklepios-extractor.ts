@@ -374,7 +374,28 @@ async function runAgentWithTools(
       if (!selectedTool) {
         throw new Error(`Unknown tool: ${call.name}`);
       }
-      const toolResult = await (selectedTool as any).invoke(call.args);
+      const toolTraceConfig = await getLangSmithInvokeConfig('asklepios-extractor', {
+        mode: `${documentMode}-tool-exec`,
+        tool_name: call.name,
+        tool_round: round,
+      });
+      const toolRunnableConfig = toolTraceConfig
+        ? {
+            ...toolTraceConfig,
+            runName: `Tool: ${call.name}`,
+            tags: [
+              ...new Set([
+                ...((toolTraceConfig.tags as string[] | undefined) ?? []),
+                'tool',
+                call.name,
+              ]),
+            ],
+          }
+        : undefined;
+      const toolResult = await (selectedTool as { invoke: (a: unknown, c?: unknown) => Promise<unknown> }).invoke(
+        call.args,
+        toolRunnableConfig,
+      );
       const toolResultString = typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult);
 
       // Capture validated data from contract_data_submission tool

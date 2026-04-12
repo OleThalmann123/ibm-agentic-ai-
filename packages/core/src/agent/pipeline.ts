@@ -38,6 +38,7 @@ import {
   getLangSmithClient,
   isLangSmithEnabled,
   setPipelineLangSmithRoot,
+  setPipelineLangSmithSessionId,
 } from './langsmith';
 import { getExtractorModelName, getJudgeModelName, getClassifierModelName } from './model-config';
 
@@ -278,6 +279,10 @@ export async function runDocumentPipeline(
     );
   }
   let rootRun: RunTree | undefined;
+  const sessionId =
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `session-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
   if (client) {
     const project =
@@ -289,6 +294,7 @@ export async function runDocumentPipeline(
       run_type: 'chain',
       tracingEnabled: true,
       tags: ['asklepios', 'asklepios_extract', 'pipeline', 'idp'],
+      metadata: { session_id: sessionId },
       inputs: {
         fileName: file?.name ?? null,
         hasText: !!text,
@@ -296,6 +302,7 @@ export async function runDocumentPipeline(
     });
     await rootRun.postRun();
     setPipelineLangSmithRoot(rootRun);
+    setPipelineLangSmithSessionId(sessionId);
   }
 
   try {
@@ -318,6 +325,7 @@ export async function runDocumentPipeline(
     throw e;
   } finally {
     setPipelineLangSmithRoot(null);
+    setPipelineLangSmithSessionId(null);
     if (client && typeof (client as { awaitPendingTraceBatches?: () => Promise<void> }).awaitPendingTraceBatches === 'function') {
       await (client as { awaitPendingTraceBatches: () => Promise<void> })
         .awaitPendingTraceBatches()
