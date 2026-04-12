@@ -607,21 +607,12 @@ function ErgaenzenSourceGuide({ fields }: { fields: PopupAttentionField[] }) {
 
 function AttentionChecklist({
   attentionFields,
-  mode,
-  onModeChange,
   children,
 }: {
   attentionFields: PopupAttentionField[];
-  mode: 'pruefen' | 'ergaenzen';
-  onModeChange: (m: 'pruefen' | 'ergaenzen') => void;
   children: ReactNode;
 }) {
-  const reviewRowsAll = attentionFields.filter((r) => !r.missing && r.needsReview);
-  const missingRowsAll = attentionFields.filter((r) => r.missing);
-
-  const hasReview = reviewRowsAll.length > 0;
-  const hasMissing = missingRowsAll.length > 0;
-  const hasAnyAttention = hasReview || hasMissing;
+  const hasAnyAttention = attentionFields.length > 0;
 
   return (
     <div className="rounded-2xl p-[1px] bg-[linear-gradient(90deg,rgba(59,130,246,0.55),rgba(168,85,247,0.50),rgba(16,185,129,0.38))] shadow-[0_22px_80px_rgba(2,6,23,0.18)]">
@@ -637,51 +628,10 @@ function AttentionChecklist({
                 {hasAnyAttention ? 'Asklepios_extract braucht deine Hilfe' : 'Daten bestätigen'}
               </h3>
               <p className="text-xs sm:text-sm text-white/80 mt-0.5 leading-relaxed">
-                <span className="font-semibold text-white">Prüfen:</span> Unsichere Werte mit dem Vertrag rechts abgleichen.{' '}
-                <span className="font-semibold text-white">Ergänzen:</span> Werte, die nicht im Vertrag stehen, manuell eintragen.
+                Bitte prüfe die unten markierten Felder anhand des Arbeitsvertrags rechts und ergänze fehlende Werte.
               </p>
             </div>
           </div>
-          {hasAnyAttention && (
-            <div
-              role="tablist"
-              aria-label="Prüfen und Ergänzen umschalten"
-              className="relative mt-3 inline-flex rounded-full bg-white/10 p-0.5 border border-white/10"
-              onKeyDown={(e) => {
-                if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && hasReview && hasMissing) {
-                  e.preventDefault();
-                  onModeChange(mode === 'pruefen' ? 'ergaenzen' : 'pruefen');
-                }
-              }}
-            >
-              {hasReview ? (
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={mode === 'pruefen'}
-                  onClick={() => onModeChange('pruefen')}
-                  className={`px-3 py-1 rounded-full text-[11px] font-bold transition-all ${
-                    mode === 'pruefen' ? 'bg-white text-slate-900 shadow-sm' : 'text-white/80 hover:text-white'
-                  }`}
-                >
-                  Prüfen ({reviewRowsAll.length})
-                </button>
-              ) : null}
-              {hasMissing ? (
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={mode === 'ergaenzen'}
-                  onClick={() => onModeChange('ergaenzen')}
-                  className={`px-3 py-1 rounded-full text-[11px] font-bold transition-all ${
-                    mode === 'ergaenzen' ? 'bg-white text-slate-900 shadow-sm' : 'text-white/80 hover:text-white'
-                  }`}
-                >
-                  Ergänzen ({missingRowsAll.length})
-                </button>
-              ) : null}
-            </div>
-          )}
         </div>
 
         <div className="bg-white px-5 py-5 sm:px-6">
@@ -1742,11 +1692,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
 
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,640px)] gap-4">
             <div className="min-w-0 space-y-3">
-              <AttentionChecklist
-                attentionFields={popupAttentionFields}
-                mode={attentionMode}
-                onModeChange={setAttentionMode}
-              >
+              <AttentionChecklist attentionFields={popupAttentionFields}>
             {(() => {
               const ageForLogic = (() => {
                 if (!birthDate) return null;
@@ -1769,48 +1715,6 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
               const nbu8hUnder = showNbu8h && hwForLogic < 8;
               return (
               <div className="space-y-4 animate-in fade-in duration-200">
-                <section className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600">
-                      Logik & Hinweise
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    <div className="md:col-span-2 flex items-start gap-2.5 rounded-lg border border-blue-200 bg-blue-50/90 px-4 py-3 text-sm text-blue-800">
-                      <HelpCircle className="w-4 h-4 mt-0.5 shrink-0 text-blue-500" />
-                      <span>Der <strong>Nichtberufsunfallversicherungs-Gesamtprämiensatz (NBU)</strong> muss zwingend manuell eingegeben werden – entnehmen Sie ihn Ihrer Versicherungspolice (typischerweise 0.5–3&nbsp;%). Die Aufteilung in AG-/AN-Anteil kann aus dem Arbeitsvertrag übernommen werden.</span>
-                    </div>
-                    {showPermitWarning && (
-                      <div className="bg-amber-50 rounded-xl border border-amber-200 p-3 text-sm text-amber-800 flex items-start gap-2">
-                        <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                        <span>Aufenthaltsstatus «{residencePermit}» – Quellensteuer wäre nötig, ist aber aktuell <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase bg-gray-200 text-gray-500 mx-0.5">Out of Scope</span>. Lohnabrechnung nur für Schweizer/innen und C-Bewilligung möglich.</span>
-                      </div>
-                    )}
-                    {showAgeWarning && (
-                      <div className="bg-red-50 rounded-xl border border-red-200 p-3 text-sm text-red-800 flex items-start gap-2">
-                        <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                        <span>Alter {ageForLogic} Jahre – Lohnabrechnung nur für Personen im Alter von 18–65 Jahren möglich.</span>
-                      </div>
-                    )}
-                    {showBvgWarning && (
-                      <div className="bg-amber-50 rounded-xl border border-amber-200 p-3 text-sm text-amber-800">
-                        Monatliches Einkommen ca. CHF {monthlyForLogic!.toFixed(0)} – liegt über CHF 1'890 (BVG-Schwelle von CHF 22'680/Jahr).
-                        <span className="inline-flex items-center ml-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase bg-gray-200 text-gray-500">BVG Out of Scope</span>
-                      </div>
-                    )}
-                    {showNbu8h && nbu8hUnder && (
-                      <div className="bg-blue-50 rounded-xl border border-blue-100 p-3 text-sm text-blue-700">
-                        Pensum unter 8h/Woche – Nichtberufsunfallversicherung ist nicht obligatorisch. Die NBU-Felder sind optional und können leer bleiben.
-                      </div>
-                    )}
-                    {showNbu8h && !nbu8hUnder && (
-                      <div className="bg-emerald-50 rounded-xl border border-emerald-200 p-3 text-sm text-emerald-700">
-                        Pensum ≥ 8h/Woche – Nichtberufsunfallversicherung pflichtig. Der Abzug wird auf der Lohnabrechnung ausgewiesen.
-                      </div>
-                    )}
-                  </div>
-                </section>
-
                 <div className="flex items-center gap-2">
                   <User className="w-4 h-4 text-slate-500" />
                   <h4 className="text-sm font-bold text-slate-900">Stammdaten</h4>
@@ -1905,6 +1809,19 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                   </MiniField>
                 </div>
 
+                {showAgeWarning && (
+                  <div className="bg-red-50 rounded-xl border border-red-200 p-3 text-sm text-red-800 flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <span>Alter {ageForLogic} Jahre – Lohnabrechnung nur für Personen im Alter von 18–65 Jahren möglich.</span>
+                  </div>
+                )}
+                {showPermitWarning && (
+                  <div className="bg-amber-50 rounded-xl border border-amber-200 p-3 text-sm text-amber-800 flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <span>Aufenthaltsstatus «{residencePermit}» – Quellensteuer wäre nötig, ist aber aktuell <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase bg-gray-200 text-gray-500 mx-0.5">Out of Scope</span>. Lohnabrechnung nur für Schweizer/innen und C-Bewilligung möglich.</span>
+                  </div>
+                )}
+
                 {/* Dezente Trennlinie zwischen Stammdaten und Vertragsdaten */}
                 <div className="pt-4 mt-2 border-t border-slate-200" />
 
@@ -1973,6 +1890,13 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                   </MiniField>
                 </div>
 
+                {showBvgWarning && (
+                  <div className="bg-amber-50 rounded-xl border border-amber-200 p-3 text-sm text-amber-800">
+                    Monatliches Einkommen ca. CHF {monthlyForLogic!.toFixed(0)} – liegt über CHF 1'890 (BVG-Schwelle von CHF 22'680/Jahr).
+                    <span className="inline-flex items-center ml-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase bg-gray-200 text-gray-500">BVG Out of Scope</span>
+                  </div>
+                )}
+
                 <div className="mt-2">
                   <div className="flex items-baseline justify-between gap-3 mb-2">
                     <h4 className="text-sm font-bold text-slate-900">Versicherung & Konto</h4>
@@ -2027,6 +1951,16 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                     <h5 className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
                       Nichtberufsunfallversicherung (NBU)
                     </h5>
+                    {showNbu8h && nbu8hUnder && (
+                      <div className="bg-blue-50 rounded-xl border border-blue-100 p-3 text-sm text-blue-700">
+                        Pensum unter 8h/Woche – Nichtberufsunfallversicherung ist nicht obligatorisch. Die NBU-Felder sind optional und können leer bleiben.
+                      </div>
+                    )}
+                    {showNbu8h && !nbu8hUnder && (
+                      <div className="bg-emerald-50 rounded-xl border border-emerald-200 p-3 text-sm text-emerald-700">
+                        Pensum ≥ 8h/Woche – Nichtberufsunfallversicherung pflichtig. Der Abzug wird auf der Lohnabrechnung ausgewiesen.
+                      </div>
+                    )}
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                       <MiniField title="Nichtberufsunfallvers. (NBU) Gesamtprämiensatz (%) – manuell" {...fieldProps('nbuTotal')} hasValue={!!nbuTotal}
                         hint="Gesamtprämiensatz gemäss Ihrer Versicherungspolice (typ. 0.5–3%)"
@@ -2074,15 +2008,19 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
               </AttentionChecklist>
             </div>
 
-            <aside className="lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)]">
-              <ContextPane
-                mode={attentionMode}
-                ergaenzenFields={popupAttentionFields}
-                contractPreviewUrl={contractPreviewUrl}
-                contractFileName={contractFileName}
-                contractMimeType={contractMimeType}
-                docxHtml={docxHtml}
-              />
+            <aside className="lg:sticky lg:top-4 lg:self-start flex flex-col gap-3">
+              <div className="h-[calc(100vh-12rem)] min-h-[560px]">
+                <ContractPreview
+                  contractPreviewUrl={contractPreviewUrl}
+                  contractFileName={contractFileName}
+                  contractMimeType={contractMimeType}
+                  docxHtml={docxHtml}
+                />
+              </div>
+              <div className="flex items-start gap-2.5 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+                <HelpCircle className="w-4 h-4 mt-0.5 shrink-0 text-blue-500" />
+                <span>Der <strong>Nichtberufsunfallversicherungs-Gesamtprämiensatz (NBU)</strong> muss zwingend manuell eingegeben werden – entnehmen Sie ihn Ihrer Versicherungspolice (typischerweise 0.5–3&nbsp;%). Die Aufteilung in AG-/AN-Anteil kann aus dem Arbeitsvertrag übernommen werden.</span>
+              </div>
             </aside>
           </div>
         </form>
