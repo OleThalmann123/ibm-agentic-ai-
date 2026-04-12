@@ -120,7 +120,7 @@ function getJudgeModel(apiKey: string): ChatOpenAI {
       dangerouslyAllowBrowser: true,
       defaultHeaders: {
         'HTTP-Referer': window.location.origin,
-        'X-Title': 'Asklepios Control – Qualitätsprüfung',
+        'X-Title': 'Asklepios Control',
       },
     },
     model: getJudgeModelName(),
