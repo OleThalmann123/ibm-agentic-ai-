@@ -267,16 +267,6 @@ export const contractDataSubmissionTool = tool(
       });
     }
 
-    // ── DEBUG: Log normalized data to browser console ──
-    console.log('[contract_data_submission] Normalized tool input:', JSON.stringify({
-      employer_keys: Object.keys(employerData),
-      assistant_keys: Object.keys(assistantData),
-      assistant_first_name: assistantData.first_name,
-      assistant_last_name: assistantData.last_name,
-      assistant_zip: assistantData.zip,
-      employer_first_name: employerData.first_name,
-    }, null, 2));
-
     // Map country names / ISO-3 codes to ISO-2. Must stay in sync with the
     // COUNTRY_OPTIONS list in AssistantOnboarding.tsx, otherwise the frontend
     // dropdown falls back to "OTHER" and the user loses the value.
