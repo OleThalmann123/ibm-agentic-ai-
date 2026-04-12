@@ -12,6 +12,10 @@
  * Server-side env vars (set in Vercel dashboard / .env, never VITE_-prefixed):
  *   LANGSMITH_API_KEY           – LangSmith API key
  *   LANGSMITH_ENDPOINT          – API endpoint (default: https://eu.api.smith.langchain.com)
+ *   LANGSMITH_WORKSPACE_ID      – optional x-tenant-id (mehrere Workspaces am Key)
+ *
+ * Optional im Browser (nur wenn Workspace im Client gesetzt werden soll):
+ *   VITE_LANGSMITH_WORKSPACE_ID – gleiche ID, sonst reicht LANGSMITH_WORKSPACE_ID am Proxy
  */
 
 import { CallbackManager } from '@langchain/core/callbacks/manager';
@@ -124,9 +128,14 @@ export function getLangSmithClient(): Client | null {
   const config = getLangSmithConfig();
   if (!config.apiKey) return null;
 
+  const workspaceId =
+    (import.meta.env.VITE_LANGSMITH_WORKSPACE_ID as string | undefined) ||
+    undefined;
+
   _client = new Client({
     apiKey: config.apiKey,
     apiUrl: config.endpoint,
+    ...(workspaceId ? { workspaceId } : {}),
   });
 
   return _client;

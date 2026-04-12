@@ -313,5 +313,10 @@ export async function runDocumentPipeline(
     throw e;
   } finally {
     setPipelineLangSmithRoot(null);
+    if (client && typeof (client as { awaitPendingTraceBatches?: () => Promise<void> }).awaitPendingTraceBatches === 'function') {
+      await (client as { awaitPendingTraceBatches: () => Promise<void> })
+        .awaitPendingTraceBatches()
+        .catch(() => {});
+    }
   }
 }

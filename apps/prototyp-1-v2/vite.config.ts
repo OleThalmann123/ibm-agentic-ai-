@@ -20,7 +20,10 @@ export default defineConfig(({ mode }) => {
     server: {
       proxy: {
         '/api/langsmith': {
-          target: env.LANGSMITH_ENDPOINT || 'https://eu.api.smith.langchain.com',
+          target: (env.LANGSMITH_ENDPOINT || 'https://eu.api.smith.langchain.com').replace(
+            /\/+$/,
+            '',
+          ),
           changeOrigin: true,
           rewrite: (p) => p.replace(/^\/api\/langsmith/, ''),
           configure: (proxy) => {
@@ -28,6 +31,10 @@ export default defineConfig(({ mode }) => {
               const key = env.LANGSMITH_API_KEY;
               if (key) {
                 proxyReq.setHeader('x-api-key', key);
+              }
+              const ws = env.LANGSMITH_WORKSPACE_ID;
+              if (ws) {
+                proxyReq.setHeader('x-tenant-id', ws);
               }
             });
           },
