@@ -119,7 +119,7 @@ export function AssistantsPage() {
   if (showAssistantOnboarding) {
     return (
       <AssistantOnboarding 
-        onComplete={() => { setShowAssistantOnboarding(false); setInitialUploadFile(null); setAssistantToEdit(null); loadAssistants(); }} 
+        onComplete={() => { setShowAssistantOnboarding(false); setInitialUploadFile(null); setAssistantToEdit(null); setTimeout(() => loadAssistants(), 300); }}
         onClose={() => { setShowAssistantOnboarding(false); setInitialUploadFile(null); setAssistantToEdit(null); }} 
         initialUploadFile={initialUploadFile || undefined}
         editAssistant={assistantToEdit || undefined}
