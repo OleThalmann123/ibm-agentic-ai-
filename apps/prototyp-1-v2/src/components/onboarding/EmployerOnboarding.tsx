@@ -28,7 +28,7 @@ function isValidAhvNumber(v: string): boolean {
 function isValidIban(v: string): boolean {
   if (!v.trim()) return true;
   const clean = v.replace(/\s/g, '');
-  return /^CH\d{2}[A-Z0-9]{17}$/i.test(clean);
+  return /^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/i.test(clean);
 }
 
 function isValidPhone(v: string): boolean {
@@ -174,8 +174,8 @@ export function EmployerOnboarding({ onComplete }: Props) {
   };
 
   const canNext = () => {
-    if (step === 1) return cFirst.trim().length >= 2 && cLast.trim().length >= 2 && cZip.length === 4 && isPlzInAllowedCanton(cZip) && isValidAhvNumber(insuredAhvNumber) && isValidIban(billingIban) && isValidPhone(cPhone);
-    if (step === 2) return aFirst.trim().length >= 2 && aLast.trim().length >= 2;
+    if (step === 1) return cFirst.trim().length >= 1 && cLast.trim().length >= 1 && cZip.length === 4 && isPlzInAllowedCanton(cZip) && isValidAhvNumber(insuredAhvNumber) && isValidIban(billingIban) && isValidPhone(cPhone);
+    if (step === 2) return aFirst.trim().length >= 1 && aLast.trim().length >= 1;
     if (step === 3) return tracker !== '' && (tracker === 'employer' || (approvalNeeded !== '' && activitiesInDayShifts !== ''));
     return false;
   };
@@ -316,15 +316,9 @@ export function EmployerOnboarding({ onComplete }: Props) {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <Field label="Vorname" value={cFirst} onChange={setCFirst} />
-            {cFirst.trim().length > 0 && cFirst.trim().length < 2 && (
-              <p className="text-xs text-red-600 mt-1">Mindestens 2 Zeichen erforderlich.</p>
-            )}
           </div>
           <div>
             <Field label="Nachname" value={cLast} onChange={setCLast} />
-            {cLast.trim().length > 0 && cLast.trim().length < 2 && (
-              <p className="text-xs text-red-600 mt-1">Mindestens 2 Zeichen erforderlich.</p>
-            )}
           </div>
         </div>
         <Field label="Strasse & Nr." value={cStreet} onChange={setCStreet} />
@@ -383,7 +377,7 @@ export function EmployerOnboarding({ onComplete }: Props) {
           <div>
             <Field label="IBAN (Auszahlung IV Rechnung für Assistenzbeitrag)" value={billingIban} onChange={setBillingIban} placeholder="CH.." />
             {!isValidIban(billingIban) && (
-              <p className="text-xs text-red-600 mt-1">Ungültiges IBAN-Format. Erwartet: CH + 19 Zeichen.</p>
+              <p className="text-xs text-red-600 mt-1">Ungültiges IBAN-Format. Erwartet: Ländercode + 2 Prüfziffern + 11–30 Zeichen.</p>
             )}
           </div>
           <Field label="Mitteilungs-/Verfügungsnummer (optional)" value={billingReferenceNumber} onChange={setBillingReferenceNumber} placeholder="…" />
@@ -445,15 +439,9 @@ export function EmployerOnboarding({ onComplete }: Props) {
         <div className="grid grid-cols-2 gap-4">
           <div>
             <Field label="Vorname" value={aFirst} onChange={setAFirst} />
-            {aFirst.trim().length > 0 && aFirst.trim().length < 2 && (
-              <p className="text-xs text-red-600 mt-1">Mindestens 2 Zeichen erforderlich.</p>
-            )}
           </div>
           <div>
             <Field label="Nachname" value={aLast} onChange={setALast} />
-            {aLast.trim().length > 0 && aLast.trim().length < 2 && (
-              <p className="text-xs text-red-600 mt-1">Mindestens 2 Zeichen erforderlich.</p>
-            )}
           </div>
         </div>
         <Field label="Strasse & Nr." value={aStreet} onChange={setAStreet} />
