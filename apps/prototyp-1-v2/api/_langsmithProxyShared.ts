@@ -1,4 +1,4 @@
-/** Spiegel von ../../../api/_langsmithProxyShared.ts — synchron halten. */
+/** Spiegel von ../../../api/_langsmithProxyShared.ts — api/langsmith/[...path].ts */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export const LANGSMITH_API_KEY = process.env.LANGSMITH_API_KEY;

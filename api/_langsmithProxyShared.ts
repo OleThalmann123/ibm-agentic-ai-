@@ -1,5 +1,5 @@
 /**
- * LangSmith-Proxy: gemeinsame Logik für api/[[...segments]].ts
+ * LangSmith-Proxy: gemeinsame Logik für api/langsmith/[...path].ts
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
