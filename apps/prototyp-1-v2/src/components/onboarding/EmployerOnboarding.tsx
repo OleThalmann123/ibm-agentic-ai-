@@ -248,33 +248,6 @@ export function EmployerOnboarding({ onComplete }: Props) {
 
     if (e2) { toast.error('Fehler: ' + e2.message); setLoading(false); return; }
 
-    await supabase.from('assistant').insert([
-      {
-        employer_id: emp.id,
-        name: 'Max Mustermann (Demo)',
-        email: 'max@example.com',
-        date_of_birth: '1990-01-15',
-        hourly_rate: 35.3,
-        vacation_weeks: 4,
-        has_bvg: false,
-        is_active: true,
-        time_entry_mode: tracker === 'employer' ? 'manual' : 'self',
-        contract_data: { time_entry_requires_activity_breakdown: timeEntryRequiresActivityBreakdown },
-      },
-      {
-        employer_id: emp.id,
-        name: 'Anna Schmidt (Demo)',
-        email: 'anna@example.com',
-        date_of_birth: '1985-06-20',
-        hourly_rate: 42.00,
-        vacation_weeks: 5,
-        has_bvg: true,
-        is_active: true,
-        time_entry_mode: tracker === 'employer' ? 'manual' : 'self',
-        contract_data: { time_entry_requires_activity_breakdown: timeEntryRequiresActivityBreakdown },
-      },
-    ]);
-
     toast.success('Einrichtung abgeschlossen!');
     await refreshProfile();
     setLoading(false);
@@ -298,12 +271,12 @@ export function EmployerOnboarding({ onComplete }: Props) {
           {/* Unterstützende Person – out of scope */}
           <div className="relative p-6 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50/60 text-center opacity-60 cursor-not-allowed select-none">
             <span className="absolute top-2 right-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-gray-200 text-gray-500">
-              Demo
+              Bald verfügbar
             </span>
             <HeartHandshake className="w-8 h-8 text-gray-400 mx-auto mb-2" />
             <p className="text-base font-semibold text-gray-400">Unterstützende Person</p>
             <p className="text-sm text-gray-400">Für jemand anderen</p>
-            <p className="text-[10px] text-gray-400 mt-2">Für die Demo deaktiviert</p>
+            <p className="text-[10px] text-gray-400 mt-2">Noch nicht verfügbar</p>
           </div>
         </div>
       </div>
