@@ -281,12 +281,12 @@ export function EmployerOnboarding({ onComplete }: Props) {
           {/* Unterstützende Person – out of scope */}
           <div className="relative p-6 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50/60 text-center opacity-60 cursor-not-allowed select-none">
             <span className="absolute top-2 right-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-gray-200 text-gray-500">
-              Out of Scope
+              Demo
             </span>
             <HeartHandshake className="w-8 h-8 text-gray-400 mx-auto mb-2" />
             <p className="text-base font-semibold text-gray-400">Unterstützende Person</p>
             <p className="text-sm text-gray-400">Für jemand anderen</p>
-            <p className="text-[10px] text-gray-400 mt-2">Wird in einer späteren Version unterstützt</p>
+            <p className="text-[10px] text-gray-400 mt-2">Für die Demo deaktiviert</p>
           </div>
         </div>
       </div>
