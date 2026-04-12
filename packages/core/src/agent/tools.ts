@@ -267,6 +267,134 @@ export const contractDataSubmissionTool = tool(
       });
     }
 
+    // ═══════════════════════════════════════════════════════════
+    // Ebene 1: Basis-Normalisierung für ALLE Text-Felder
+    //   - Trim (Leerzeichen vorne/hinten)
+    //   - Doppelte Leerzeichen entfernen
+    //   - ß → ss (Schweiz verwendet kein Eszett)
+    // ═══════════════════════════════════════════════════════════
+    const cleanText = (val: unknown): string | null => {
+      if (val == null) return null;
+      const s = String(val);
+      if (!s.trim()) return null;
+      return s
+        .trim()
+        .replace(/\s{2,}/g, ' ')   // Doppelte Leerzeichen
+        .replace(/ß/g, 'ss');       // Eszett → ss (Schweiz)
+    };
+
+    for (const section of [employerData, assistantData, contractData, wageData, insuranceData]) {
+      for (const [key, field] of Object.entries(section)) {
+        if (field?.value != null && typeof field.value === 'string') {
+          const cleaned = cleanText(field.value);
+          if (cleaned !== null && cleaned !== field.value) {
+            field.value = cleaned;
+          }
+        }
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Ebene 2: Namen & Orte – Erster Buchstabe gross
+    //   Respektiert: Bindestriche (Meier-Müller), Partikel (von, de)
+    // ═══════════════════════════════════════════════════════════
+    const LOWERCASE_PARTICLES = new Set(['von', 'van', 'de', 'del', 'di', 'da', 'le', 'la', 'el', 'al']);
+
+    const capitalizeWord = (word: string): string => {
+      if (word.length === 0) return word;
+      // Bindestriche: "meier-müller" → "Meier-Müller"
+      if (word.includes('-')) {
+        return word.split('-').map(capitalizeWord).join('-');
+      }
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    };
+
+    const capitalizeName = (val: unknown): string | null => {
+      if (val == null) return null;
+      const s = String(val).trim();
+      if (!s) return null;
+      const words = s.split(' ');
+      return words.map((w, i) => {
+        // Partikel (von, de, etc.) bleiben klein, ausser am Anfang
+        if (i > 0 && LOWERCASE_PARTICLES.has(w.toLowerCase())) {
+          return w.toLowerCase();
+        }
+        return capitalizeWord(w);
+      }).join(' ');
+    };
+
+    const nameFields: Array<[Record<string, any>, string]> = [
+      [employerData, 'first_name'],
+      [employerData, 'last_name'],
+      [employerData, 'city'],
+      [assistantData, 'first_name'],
+      [assistantData, 'last_name'],
+      [assistantData, 'city'],
+    ];
+
+    for (const [section, field] of nameFields) {
+      if (section[field]?.value) {
+        const capitalized = capitalizeName(section[field].value);
+        if (capitalized && capitalized !== section[field].value) {
+          corrections.push(`${field} Gross-/Kleinschreibung: ${section[field].value} → ${capitalized}`);
+          section[field].value = capitalized;
+        }
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Ebene 3: Feld-spezifische Normalisierungen
+    // ═══════════════════════════════════════════════════════════
+
+    // ── Street: "Str." → "Strasse", Leerzeichen vor Hausnummer ──
+    for (const section of [employerData, assistantData]) {
+      if (section.street?.value) {
+        let street = String(section.street.value);
+        const original = street;
+
+        // "Str." / "str." → "Strasse" / "strasse"
+        street = street.replace(/\bStr\.\s*/gi, 'Strasse ');
+        street = street.replace(/\bstrasse\b/gi, 'strasse');
+        // Capitalize: "strasse" → "Strasse" (nur wenn es am Wortende steht)
+        street = street.replace(/strasse\b/g, 'strasse');
+        street = street.replace(/(?:^|\s)([a-zäöü])/g, (_m, c) => _m.replace(c, c.toUpperCase()));
+
+        // Leerzeichen vor Hausnummer sicherstellen: "Lindenweg5" → "Lindenweg 5"
+        street = street.replace(/([a-zäöüA-ZÄÖÜ])(\d)/, '$1 $2');
+
+        // Doppelte Leerzeichen aufräumen
+        street = street.replace(/\s{2,}/g, ' ').trim();
+
+        if (street !== original) {
+          corrections.push(`Strasse normalisiert: ${original} → ${street}`);
+          section.street.value = street;
+        }
+      }
+    }
+
+    // ── Email: lowercase ──
+    if (assistantData.email?.value) {
+      const lower = String(assistantData.email.value).trim().toLowerCase();
+      if (lower !== assistantData.email.value) {
+        corrections.push(`E-Mail lowercase: ${assistantData.email.value} → ${lower}`);
+        assistantData.email.value = lower;
+      }
+    }
+
+    // ── Phone: Leerzeichen normalisieren ──
+    if (assistantData.phone?.value) {
+      let phone = String(assistantData.phone.value).trim();
+      // Mehrfache Leerzeichen/Trennzeichen vereinheitlichen
+      phone = phone.replace(/[\s.-]+/g, ' ').trim();
+      if (phone !== assistantData.phone.value) {
+        corrections.push(`Telefon normalisiert: ${assistantData.phone.value} → ${phone}`);
+        assistantData.phone.value = phone;
+      }
+    }
+
+    // ── NBU insurer name & policy number: Trim (Ebene 1 hat es schon gemacht, hier Sicherheit) ──
+    // (already handled by Ebene 1 cleanText)
+
     // Map country names / ISO-3 codes to ISO-2. Must stay in sync with the
     // COUNTRY_OPTIONS list in AssistantOnboarding.tsx, otherwise the frontend
     // dropdown falls back to "OTHER" and the user loses the value.
