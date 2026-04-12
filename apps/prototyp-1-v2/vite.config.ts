@@ -16,6 +16,12 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, monorepoRoot, '')
 
   const langSmithTracing = envTruthy(env.LANGSMITH_TRACING)
+  /** LangChain/LangSmith-JS prüfen u.a. LANGSMITH_TRACING_V2 / LANGCHAIN_TRACING_V2 (nicht nur LANGSMITH_TRACING). */
+  const tracingActive =
+    langSmithTracing ||
+    envTruthy(env.VITE_LANGSMITH_PROXY) ||
+    envTruthy(env.LANGSMITH_TRACING_V2) ||
+    envTruthy(env.LANGCHAIN_TRACING_V2)
   const langSmithProject =
     (env.LANGSMITH_PROJECT || env.VITE_LANGSMITH_PROJECT || 'HSG Agentic').trim() ||
     'HSG Agentic'
@@ -26,9 +32,11 @@ export default defineConfig(({ mode }) => {
 
   return {
     envDir: monorepoRoot,
-    // Wie LangSmith-Doku: LANGSMITH_TRACING / LANGSMITH_PROJECT im Client lesbar (ohne API-Keys).
+    // Wie LangSmith-Doku + kompatible LangChain-Flags im Client (ohne API-Keys).
     define: {
-      'process.env.LANGSMITH_TRACING': JSON.stringify(langSmithTracing ? 'true' : ''),
+      'process.env.LANGSMITH_TRACING': JSON.stringify(tracingActive ? 'true' : ''),
+      'process.env.LANGSMITH_TRACING_V2': JSON.stringify(tracingActive ? 'true' : ''),
+      'process.env.LANGCHAIN_TRACING_V2': JSON.stringify(tracingActive ? 'true' : ''),
       'process.env.LANGSMITH_PROJECT': JSON.stringify(langSmithProject),
       'process.env.LANGSMITH_ENDPOINT': JSON.stringify(langSmithEndpoint),
     },
