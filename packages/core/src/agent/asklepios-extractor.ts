@@ -103,8 +103,8 @@ Schritte:
 1. Rufe document_classification auf – prüfe ob es ein Schweizer Arbeitsvertrag ist.
 2. Wenn kein Arbeitsvertrag: gib ein leeres JSON mit warnings=["KEIN_ARBEITSVERTRAG"] zurück.
 3. Lies den gesamten Vertrag durch und extrahiere alle unten gelisteten Felder.
-4. Rufe contract_data_submission auf – validiert AHV-Nummer, IBAN und leitet Kanton aus PLZ ab.
-5. Markiere fehlende oder nicht auffindbare Felder mit value: null und einer note.
+4. Rufe contract_data_submission auf mit ALLEN extrahierten Feldern. WICHTIG: Übergib JEDE Sektion als JSON-String wobei jedes Feld als Object {"value": ..., "source_text": "wörtliches Zitat", "note": ""} formatiert sein MUSS. Übergib auch Felder mit value=null. Das Tool validiert AHV-Nummer, IBAN, leitet Kanton aus PLZ ab und normalisiert Enum-Werte. Das Tool-Ergebnis ist das finale Resultat.
+5. Gib nach dem Tool-Aufruf dein finales JSON aus – es MUSS identisch mit den Daten sein die du dem Tool übergeben hast.
 
 Regeln:
 - NUR extrahieren was im Vertrag steht. Niemals erfinden.
@@ -441,10 +441,14 @@ async function runAgentWithTools(
 }
 
 /**
- * Merge tool corrections into LLM-extracted data.
- * LLM data = base (all fields, correct {value, source_text, note} format).
- * Tool data = overlay (only fields the tool validated/modified).
- * Tool corrections are authoritative and override LLM values.
+ * Merge tool-validated data with LLM extraction.
+ *
+ * Priority: TOOL output is authoritative (validated, normalized).
+ * Fallback: LLM data fills gaps for fields the tool didn't receive.
+ *
+ * Special case: if the tool set a field to null (hallucination guard)
+ * but the LLM has a non-null value WITH source_text, keep the LLM value.
+ * The Judge (Asklepios Control) will verify it separately.
  */
 function mergeToolCorrections(
   llmContracts: RawExtractionResult['contracts'],
@@ -472,24 +476,23 @@ function mergeToolCorrections(
       const toolField = toolSection[field];
       const llmField = llmSection[field];
 
-      // Tool field with {value} structure → tool is authoritative
-      if (toolField && typeof toolField === 'object' && 'value' in toolField) {
+      const toolHasValue = toolField && typeof toolField === 'object' && 'value' in toolField;
+      const llmHasValue = llmField && typeof llmField === 'object' && 'value' in llmField;
+
+      if (toolHasValue && toolField.value !== null) {
+        // Tool has a non-null value → authoritative (validated/normalized)
         result[section][field] = toolField;
-      }
-      // LLM field exists → use as base
-      else if (llmField && typeof llmField === 'object' && 'value' in llmField) {
+      } else if (toolHasValue && toolField.value === null && llmHasValue && llmField.value !== null && llmField.source_text) {
+        // Tool nulled the field (hallucination guard) but LLM has value WITH source_text
+        // → keep LLM value, let the Judge verify it
         result[section][field] = llmField;
-      }
-      // Flat tool value → wrap and use
-      else if (toolField !== undefined && toolField !== null) {
-        result[section][field] = { value: toolField, source_text: '', note: '' };
-      }
-      // Flat LLM value → wrap and use
-      else if (llmField !== undefined && llmField !== null) {
-        result[section][field] = { value: llmField, source_text: '', note: '' };
-      }
-      // Neither → null
-      else {
+      } else if (toolHasValue) {
+        // Tool explicitly set null (no LLM alternative) → use tool's null
+        result[section][field] = toolField;
+      } else if (llmHasValue) {
+        // Tool didn't receive this field → use LLM extraction
+        result[section][field] = llmField;
+      } else {
         result[section][field] = { value: null, source_text: '', note: '' };
       }
     }
