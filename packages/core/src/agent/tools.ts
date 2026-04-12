@@ -385,14 +385,28 @@ export const contractDataSubmissionTool = tool(
       }
     }
 
-    // Validate AHV number
+    // Validate AHV number (format + EAN-13 check digit per AHVG Art. 50c)
     if (assistantData.ahv_number?.value) {
-      const { formatted } = normalizeAhv(assistantData.ahv_number.value);
+      const { digits, formatted } = normalizeAhv(assistantData.ahv_number.value);
       if (!formatted) {
         validationErrors.push('AHV-Nummer ungültig (erwartet 13 Ziffern, beginnt mit 756; z.B. 756.XXXX.XXXX.XX)');
-      } else if (assistantData.ahv_number.value !== formatted) {
-        corrections.push(`AHV-Nummer normalisiert: ${assistantData.ahv_number.value} → ${formatted}`);
-        assistantData.ahv_number.value = formatted;
+      } else {
+        if (assistantData.ahv_number.value !== formatted) {
+          corrections.push(`AHV-Nummer normalisiert: ${assistantData.ahv_number.value} → ${formatted}`);
+          assistantData.ahv_number.value = formatted;
+        }
+        // EAN-13 / GS1 check digit validation (weighting 1-3-1-3-…, mod 10)
+        let ean13sum = 0;
+        for (let i = 0; i < 12; i++) {
+          ean13sum += parseInt(digits[i]) * (i % 2 === 0 ? 1 : 3);
+        }
+        const expectedCheck = (10 - (ean13sum % 10)) % 10;
+        const actualCheck = parseInt(digits[12]);
+        if (expectedCheck !== actualCheck) {
+          validationErrors.push(
+            `AHV-Prüfziffer ungültig (EAN-13): erwartet ${expectedCheck}, gefunden ${actualCheck} – möglicherweise Tipp-/OCR-Fehler`,
+          );
+        }
       }
     }
 
@@ -457,10 +471,17 @@ export const contractDataSubmissionTool = tool(
       const prefix1 = zip.substring(0, 1);
       const derivedCanton = ZIP_TO_CANTON[prefix2] || ZIP_TO_CANTON[prefix1];
       if (derivedCanton) {
-        corrections.push(`Canton derived from ZIP ${zip}: ${derivedCanton} (${SWISS_CANTONS[derivedCanton]})`);
+        corrections.push(
+          `Wohnsitzkanton abgeleitet aus PLZ ${zip} → ${derivedCanton} (${SWISS_CANTONS[derivedCanton]}). ` +
+          `Hinweis: Ableitung basiert auf PLZ-Prefix – bitte prüfen, ob Kanton korrekt ist.`,
+        );
         if (!insuranceData.canton) insuranceData.canton = {};
         insuranceData.canton.value = derivedCanton;
-        insuranceData.canton.note = `Abgeleitet aus PLZ ${zip}`;
+        insuranceData.canton.note = `Abgeleitet aus PLZ ${zip} (Prefix-basiert, bitte prüfen)`;
+      } else {
+        validationErrors.push(
+          `Kanton konnte nicht aus PLZ ${zip} abgeleitet werden – bitte manuell eingeben.`,
+        );
       }
     }
 
@@ -520,7 +541,61 @@ export const contractDataSubmissionTool = tool(
       }
     }
 
-    // ── Date normalization: CH (DD.MM.YYYY) → ISO (YYYY-MM-DD) ──
+    // ── Date normalization: CH (DD.MM.YYYY) → ISO 8601 (YYYY-MM-DD) ──
+    const normalizeDateToISO = (val: unknown): string | null => {
+      if (val == null) return null;
+      const s = String(val).trim();
+      // Already ISO 8601?
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+      // Swiss format DD.MM.YYYY
+      const match = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+      if (match) {
+        const [, dd, mm, yyyy] = match;
+        return `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+      }
+      return null;
+    };
+
+    for (const [label, section, field] of [
+      ['Geburtsdatum', assistantData, 'birth_date'],
+      ['Vertragsbeginn', contractData, 'start_date'],
+      ['Vertragsende', contractData, 'end_date'],
+    ] as const) {
+      if (section[field]?.value) {
+        const iso = normalizeDateToISO(section[field].value);
+        if (iso && section[field].value !== iso) {
+          corrections.push(`${label} normalisiert (ISO 8601): ${section[field].value} → ${iso}`);
+          section[field].value = iso;
+        } else if (!iso) {
+          validationErrors.push(`${label}: Datumsformat nicht erkannt: ${section[field].value} (erwartet: DD.MM.YYYY oder YYYY-MM-DD)`);
+        }
+      }
+    }
+
+    // ── Birth date plausibility ──
+    if (assistantData.birth_date?.value) {
+      const bd = new Date(assistantData.birth_date.value);
+      const now = new Date();
+      if (!isNaN(bd.getTime())) {
+        if (bd > now) {
+          validationErrors.push(`Geburtsdatum liegt in der Zukunft: ${assistantData.birth_date.value}`);
+        } else if (bd.getFullYear() < 1900) {
+          validationErrors.push(`Geburtsdatum vor 1900 – wahrscheinlich fehlerhaft: ${assistantData.birth_date.value}`);
+        }
+      }
+    }
+
+    // ── Cross-check: end_date > start_date ──
+    if (contractData.start_date?.value && contractData.end_date?.value) {
+      const start = new Date(contractData.start_date.value);
+      const end = new Date(contractData.end_date.value);
+      if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && end <= start) {
+        validationErrors.push(
+          `Vertragsende (${contractData.end_date.value}) liegt vor oder auf dem Vertragsbeginn (${contractData.start_date.value})`,
+        );
+      }
+    }
+
     // ── Value range checks ──
     if (contractData.hours_per_week?.value != null) {
       const hours = Number(contractData.hours_per_week.value);
