@@ -15,6 +15,21 @@ function buildDownstreamPath(pathParam: string | string[] | undefined): string {
   return typeof pathParam === 'string' ? pathParam : '';
 }
 
+/** Vercel setzt req.query.path oft nicht; Rest-Pfad steht in req.url. */
+function resolveDownstreamPath(req: VercelRequest): string {
+  const fromQuery = buildDownstreamPath(req.query.path as string | string[] | undefined);
+  if (fromQuery) return fromQuery;
+
+  const pathname = (req.url || '').split('?')[0];
+  const normalized = pathname.startsWith('/') ? pathname : `/${pathname}`;
+  const prefix = '/api/langsmith';
+  if (normalized === prefix || normalized === `${prefix}/`) return '';
+  if (normalized.startsWith(`${prefix}/`)) {
+    return decodeURIComponent(normalized.slice(prefix.length + 1));
+  }
+  return '';
+}
+
 function buildUpstreamQuery(req: VercelRequest): string {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(req.query)) {
@@ -49,7 +64,7 @@ export default async function handler(
     return;
   }
 
-  const downstream = buildDownstreamPath(req.query.path as string | string[] | undefined);
+  const downstream = resolveDownstreamPath(req);
   const queryString = buildUpstreamQuery(req);
   const targetUrl = `${LANGSMITH_ENDPOINT}/${downstream}${queryString}`;
 
