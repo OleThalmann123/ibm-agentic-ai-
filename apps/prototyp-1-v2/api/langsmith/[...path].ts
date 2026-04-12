@@ -1,10 +1,6 @@
 /**
- * Vercel mit Monorepo-Root = ibm-agentic-ai-: diese Datei reicht.
- * Wenn Vercel „Root Directory“ nur apps/prototyp-1-v2 ist: identische Route unter
- * apps/prototyp-1-v2/api/langsmith/[...path].ts (Spiegel, synchron halten).
- *
- * Env: LANGSMITH_API_KEY (required), LANGSMITH_ENDPOINT (default US),
- * optional LANGSMITH_WORKSPACE_ID. Frontend: VITE_LANGSMITH_PROXY=true, VITE_LANGSMITH_PROJECT.
+ * Spiegel von ../../../api/langsmith/[...path].ts — bitte bei Änderungen synchron halten.
+ * Wird benötigt, wenn Vercel „Root Directory“ = apps/prototyp-1-v2 (ohne Monorepo-Root).
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
@@ -19,7 +15,6 @@ function buildDownstreamPath(pathParam: string | string[] | undefined): string {
   return typeof pathParam === 'string' ? pathParam : '';
 }
 
-/** Query an LangSmith weiterreichen (ohne Vercel-internes `path`). */
 function buildUpstreamQuery(req: VercelRequest): string {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(req.query)) {
