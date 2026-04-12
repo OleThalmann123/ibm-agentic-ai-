@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Eye, EyeOff, LogIn } from 'lucide-react';
+import { Eye, EyeOff, LogIn, Rocket } from 'lucide-react';
 import { AsklepiosLogo } from '@/components/brand/AsklepiosLogo';
 
 export function LoginPage() {
@@ -113,9 +113,23 @@ export function LoginPage() {
           <div className="mt-6 text-center text-sm text-muted-foreground">
             Noch kein Konto?{' '}
             <Link to="/register" className="text-primary hover:underline font-medium">
-              Jetzt registrieren
+              Registrieren
             </Link>
           </div>
+        </div>
+
+        {/* Demo CTA */}
+        <div className="mt-8 bg-primary/5 border border-primary/20 rounded-xl p-6 text-center">
+          <p className="text-sm text-muted-foreground mb-3">
+            Noch kein Konto? Testen Sie Asklepios kostenlos.
+          </p>
+          <Link
+            to="/register"
+            className="inline-flex items-center justify-center gap-2 w-full py-3 rounded-lg bg-primary text-primary-foreground font-semibold text-base hover:bg-primary/90 transition-colors shadow-md"
+          >
+            <Rocket className="w-5 h-5" />
+            Demo beginnen
+          </Link>
         </div>
 
         <p className="text-center text-xs text-muted-foreground mt-6">
