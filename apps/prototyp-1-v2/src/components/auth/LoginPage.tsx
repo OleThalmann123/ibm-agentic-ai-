@@ -12,6 +12,7 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,6 +23,18 @@ export function LoginPage() {
       toast.error('Anmeldung fehlgeschlagen. Bitte prüfen Sie E-Mail und Passwort.');
     } else {
       toast.success('Willkommen zurück!');
+      navigate('/assistants');
+    }
+  };
+
+  const handleDemoLogin = async () => {
+    setDemoLoading(true);
+    const { error } = await signIn('demo@asklepios.ch', 'demoasklepios');
+    setDemoLoading(false);
+    if (error) {
+      toast.error('Demo-Anmeldung fehlgeschlagen. Bitte versuchen Sie es erneut.');
+    } else {
+      toast.success('Willkommen zur Demo!');
       navigate('/assistants');
     }
   };
@@ -96,7 +109,7 @@ export function LoginPage() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || demoLoading}
               className="w-full py-2.5 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:bg-primary/90 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
             >
               {loading ? (
@@ -123,13 +136,20 @@ export function LoginPage() {
           <p className="text-sm text-muted-foreground mb-3">
             Noch kein Konto? Testen Sie Asklepios kostenlos.
           </p>
-          <Link
-            to="/register"
-            className="inline-flex items-center justify-center gap-2 w-full py-3 rounded-lg bg-primary text-primary-foreground font-semibold text-base hover:bg-primary/90 transition-colors shadow-md"
+          <button
+            onClick={handleDemoLogin}
+            disabled={demoLoading || loading}
+            className="inline-flex items-center justify-center gap-2 w-full py-3 rounded-lg bg-primary text-primary-foreground font-semibold text-base hover:bg-primary/90 disabled:opacity-50 transition-colors shadow-md"
           >
-            <Rocket className="w-5 h-5" />
-            Demo beginnen
-          </Link>
+            {demoLoading ? (
+              <div className="animate-spin rounded-full h-5 w-5 border-2 border-primary-foreground/30 border-t-primary-foreground" />
+            ) : (
+              <>
+                <Rocket className="w-5 h-5" />
+                Demo beginnen
+              </>
+            )}
+          </button>
         </div>
 
         <p className="text-center text-xs text-muted-foreground mt-6">
