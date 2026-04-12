@@ -13,7 +13,7 @@ const navItems = [
 ];
 
 export function AppShell() {
-  const { user, employer, signOut, refreshProfile } = useAuth();
+  const { user, employer, loading, signOut, refreshProfile } = useAuth();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -127,8 +127,8 @@ export function AppShell() {
         </main>
       </div>
 
-      {/* First-use onboarding overlay */}
-      {!employer && (
+      {/* First-use onboarding overlay (wait for auth check before showing) */}
+      {!loading && !employer && (
         <div className="fixed inset-0 z-[100] overflow-y-auto bg-background/80 backdrop-blur-sm">
           <div className="min-h-full flex items-center justify-center p-4 py-8">
             <div className="w-full max-w-xl animate-in fade-in slide-in-from-bottom-4 duration-500">
