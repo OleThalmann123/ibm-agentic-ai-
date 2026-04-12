@@ -23,7 +23,7 @@ Die Assistenzpersonen erhalten einen passwortfreien Zugangslink und tragen ihre 
 ├── apps/
 │   └── prototyp-1-v2/     # Frontend (React, TypeScript, Vite)
 ├── packages/
-│   └── shared-backend/    # Gemeinsame Logik: Agent, Payroll, PDF, Types, Supabase-Client
+│   └── core/              # Kernlogik: Agent, Payroll, PDF, Types, Supabase-Client
 └── supabase/              # SQL Migration(en) fuer DB-Schema
 ```
 
@@ -170,7 +170,7 @@ Der Agent laeuft vollstaendig im Browser (clientseitig, kein separates Backend).
 
 ### Skill 1: Document Ingestion (PDF-Extraktion)
 
-Datei: `packages/shared-backend/src/agent/pdf-extractor.ts`
+Datei: `packages/core/src/agent/pdf-extractor.ts`
 
 Liest hochgeladene Dateien und extrahiert deren Inhalt:
 
@@ -180,7 +180,7 @@ Liest hochgeladene Dateien und extrahiert deren Inhalt:
 
 ### Skill 2: Structured Data Extraction (Vertragsanalyse)
 
-Datei: `packages/shared-backend/src/agent/openrouter.ts`
+Datei: `packages/core/src/agent/openrouter.ts`
 
 Ein spezialisierter Prompt weist das Sprachmodell an, aus einem Schweizer Assistenzbeitrag-Arbeitsvertrag alle relevanten Felder zu extrahieren. Das Ergebnis ist ein streng typisiertes JSON-Objekt mit fuenf Abschnitten:
 
@@ -203,7 +203,7 @@ Das Modell leitet fehlende Werte regelbasiert ab (z.B. Kanton aus PLZ, Ferienzus
 
 ### Skill 3: Document Classification
 
-Datei: `packages/shared-backend/src/agent/pipeline.ts`
+Datei: `packages/core/src/agent/pipeline.ts`
 
 Die Pipeline klassifiziert das Dokument als `contract`, `invoice` oder `other`. Nur bei `contract` wird die Extraktion ausgefuehrt. Die Pipeline prueft ausserdem, ob ein manuelles Review noetig ist (Konfidenz unter 0.85 oder fehlende Pflichtfelder wie AHV-Nummer oder Vorname).
 
@@ -264,7 +264,7 @@ Der End-to-End-Ablauf von der Registrierung bis zur Lohnabrechnung:
 
 ## Payroll-Engine
 
-Datei: `packages/shared-backend/src/backend/payroll.ts`
+Datei: `packages/core/src/services/payroll.ts`
 
 Die Lohnberechnung folgt den Bundesvorgaben fuer das Schweizer Sozialversicherungsrecht:
 

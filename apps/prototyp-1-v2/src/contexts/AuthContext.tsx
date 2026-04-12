@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
-import { supabase } from '@asklepios/backend';
-import type { Employer, EmployerAccess } from '@asklepios/backend';
+import { supabase } from '@asklepios/core';
+import type { Employer, EmployerAccess } from '@asklepios/core';
 
 /** employer_access-Zeile inkl. Namen des Arbeitgebers (Join). */
 export type EmployerAccessRow = EmployerAccess & {
@@ -48,7 +48,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return null;
     }
 
-    const list = data as EmployerAccessRow[];
+    // Filter out orphaned accesses (employer was deleted but access remains)
+    const list = (data as EmployerAccessRow[]).filter(a => a.employer != null);
+    if (!list.length) {
+      setEmployerAccessList([]);
+      setEmployerAccess(null);
+      setEmployer(null);
+      return null;
+    }
     setEmployerAccessList(list);
 
     const storedId = localStorage.getItem(ACTIVE_EMPLOYER_ACCESS_KEY);
@@ -100,7 +107,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (session?.user) {
         fetchEmployerAccesses(session.user.id)
           .then((access) => {
-            if (access) fetchEmployer(access.employer_id);
+            if (access) return fetchEmployer(access.employer_id);
           })
           .catch((err) => console.error('Error fetching employer info:', err))
           .finally(() => setLoading(false));

@@ -4,7 +4,7 @@ import {
   supabase,
   getIvStelleRecordForCanton,
   getIvStelleInvoiceRecipientSuggestion,
-} from '@asklepios/backend';
+} from '@asklepios/core';
 import { toast } from 'sonner';
 import {
   Settings as SettingsIcon, User, Save, MapPin, CreditCard,
@@ -13,7 +13,7 @@ import {
 import { getCantonFromPLZ } from '@/utils/chPlz';
 
 export function SettingsPage() {
-  const { user, employer, employerAccess, refreshProfile } = useAuth();
+  const { user, employer, employerAccess, refreshProfile, signOut } = useAuth();
   const [insuredName, setInsuredName] = useState(employer?.name ?? '');
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
@@ -106,9 +106,9 @@ export function SettingsPage() {
       const { error: empErr } = await supabase.from('employer').delete().eq('id', employer.id).select();
       if (empErr) console.error("employer del err", empErr);
 
-      // SIGN OUT IMMEDIATELY to invalidate session, then redirect
+      // SIGN OUT via context (clears localStorage + session), then redirect
       toast.success('Onboarding zurückgesetzt – Sie werden abgemeldet...');
-      await supabase.auth.signOut();
+      await signOut();
       
       // Force reload the app so the auth state clears reliably
       setTimeout(() => { window.location.replace('/login'); }, 500);

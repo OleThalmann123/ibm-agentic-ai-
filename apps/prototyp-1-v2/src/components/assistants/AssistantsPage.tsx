@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@asklepios/backend';
-import { formatCHF } from '@asklepios/backend';
-import type { Assistant } from '@asklepios/backend';
+import { supabase } from '@asklepios/core';
+import { formatCHF } from '@asklepios/core';
+import type { Assistant } from '@asklepios/core';
 import { toast } from 'sonner';
 import { Users, Pencil, X, UserPlus, Share2, Copy, Check, UploadCloud, Trash2 } from 'lucide-react';
 import { AsklepiosExtractLogo } from '@/components/brand/AsklepiosExtractLogo';

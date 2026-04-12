@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@asklepios/backend';
-import { formatCHF } from '@asklepios/backend';
-import type { Assistant } from '@asklepios/backend';
+import { supabase } from '@asklepios/core';
+import { formatCHF } from '@asklepios/core';
+import type { Assistant } from '@asklepios/core';
 import { Users, Clock } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { LohnbudgetRechner } from './LohnbudgetRechner';

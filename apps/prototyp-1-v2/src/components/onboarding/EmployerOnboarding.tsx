@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { supabase } from '@asklepios/backend';
+import { supabase } from '@asklepios/core';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import {
@@ -281,12 +281,12 @@ export function EmployerOnboarding({ onComplete }: Props) {
           {/* Unterstützende Person – out of scope */}
           <div className="relative p-6 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50/60 text-center opacity-60 cursor-not-allowed select-none">
             <span className="absolute top-2 right-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-gray-200 text-gray-500">
-              Out of Scope
+              Demo
             </span>
             <HeartHandshake className="w-8 h-8 text-gray-400 mx-auto mb-2" />
             <p className="text-base font-semibold text-gray-400">Unterstützende Person</p>
             <p className="text-sm text-gray-400">Für jemand anderen</p>
-            <p className="text-[10px] text-gray-400 mt-2">Wird in einer späteren Version unterstützt</p>
+            <p className="text-[10px] text-gray-400 mt-2">Für die Demo deaktiviert</p>
           </div>
         </div>
       </div>
@@ -335,7 +335,7 @@ export function EmployerOnboarding({ onComplete }: Props) {
         )}
         <div className="grid grid-cols-2 gap-4">
           <Field label="E-Mail" value={user?.email ?? ''} disabled />
-          <Field label="Telefon (für Rückfragen)" value={cPhone} onChange={setCPhone} placeholder="+41 ..." />
+          <Field label="Telefon (optional)" value={cPhone} onChange={setCPhone} placeholder="+41 ..." />
         </div>
 
         <Field label="AHV-Nummer (versicherte Person)" value={insuredAhvNumber} onChange={setInsuredAhvNumber} placeholder="756.xxxx.xxxx.xx" />
@@ -343,7 +343,7 @@ export function EmployerOnboarding({ onComplete }: Props) {
         <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
           <p className="text-sm font-semibold">IV-Abrechnung (Ansatz & Auszahlung)</p>
           <Field label="IV-Ansatz (CHF/Std)" value="35.30" disabled />
-          <Field label="IBAN (Auszahlung)" value={billingIban} onChange={setBillingIban} placeholder="CH.." />
+          <Field label="IBAN (Auszahlung IV Rechnung für Assistenzbeitrag)" value={billingIban} onChange={setBillingIban} placeholder="CH.." />
           <Field label="Mitteilungs-/Verfügungsnummer (optional)" value={billingReferenceNumber} onChange={setBillingReferenceNumber} placeholder="…" />
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg border bg-background/70 px-3 py-2">
             <span className="text-sm font-medium">Kontoinhaber:in</span>

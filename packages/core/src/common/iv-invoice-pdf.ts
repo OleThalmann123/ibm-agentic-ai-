@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { fmt } from '../backend/payroll';
+import { fmt } from '../services/payroll';
 import { PDF_THEME, pdfValueColMm } from './pdf-theme';
 
 const TABLE_WIDTH_MM = PDF_THEME.INNER_W;
