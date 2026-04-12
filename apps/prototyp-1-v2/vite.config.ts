@@ -2,12 +2,15 @@ import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
+// Monorepo-Root: .env liegt typischerweise neben package.json, nicht unter apps/prototyp-1-v2.
+const monorepoRoot = path.resolve(__dirname, '../..')
+
 export default defineConfig(({ mode }) => {
-  // Load ALL env vars (including non-VITE_ prefixed) from the app directory
-  // so the dev proxy can read LANGSMITH_API_KEY without exposing it to the browser.
-  const env = loadEnv(mode, __dirname, '');
+  // Alle Variablen (inkl. LANGSMITH_API_KEY ohne VITE_) für den Dev-Proxy + import.meta.env
+  const env = loadEnv(mode, monorepoRoot, '')
 
   return {
+    envDir: monorepoRoot,
     plugins: [react()],
     resolve: {
       alias: {
