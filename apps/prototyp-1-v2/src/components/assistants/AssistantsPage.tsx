@@ -183,12 +183,6 @@ export function AssistantsPage() {
                 <td colSpan={2} className="text-center py-12">
                   <Users className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
                   <p className="text-muted-foreground">Noch keine Assistenzpersonen angelegt.</p>
-                  <button
-                    onClick={() => { setAssistantToEdit(null); setShowAssistantOnboarding(true); }}
-                    className="mt-3 text-primary text-sm font-medium hover:underline"
-                  >
-                    Jetzt erste Person anlegen
-                  </button>
                 </td>
               </tr>
             ) : (
