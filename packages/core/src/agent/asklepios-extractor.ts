@@ -192,7 +192,7 @@ function getModel(apiKey: string, modelId: string = DEFAULT_EXTRACTOR_MODEL): Ch
       dangerouslyAllowBrowser: true,
       defaultHeaders: {
         'HTTP-Referer': window.location.origin,
-        'X-Title': 'Asklepios Extractor – Vertragsextraktion',
+        'X-Title': 'Asklepios Extractor',
       },
     },
     model: modelId,
