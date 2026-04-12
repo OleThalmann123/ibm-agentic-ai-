@@ -4,7 +4,7 @@ import { supabase } from '@asklepios/core';
 import type { Assistant } from '@asklepios/core';
 import {
   Clock, XCircle, ChevronLeft, ChevronRight, ChevronUp, ChevronDown,
-  CheckCircle2, List, Pencil, Trash2, Moon, FileText, ShieldCheck, AlertCircle, Download,
+  CheckCircle2, List, Pencil, Trash2, Moon, FileText, ShieldCheck, AlertCircle, Download, Save, X,
 } from 'lucide-react';
 import {
   calculatePayslip,
@@ -131,6 +131,9 @@ export function TokenLoginPage() {
   // Protocol state
   const [entries, setEntries] = useState<TimeEntry[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
+  const [editStart, setEditStart] = useState('');
+  const [editEnd, setEditEnd] = useState('');
 
   // Payroll confirmation (locks edits once employer confirmed month)
   const [payrollConfirmed, setPayrollConfirmed] = useState(false);
@@ -388,15 +391,31 @@ export function TokenLoginPage() {
       toast.error(`Gesperrt: Die Lohnabrechnung für ${label} wurde bereits freigegeben. Stunden in diesem Zeitraum können nicht mehr bearbeitet werden.`);
       return;
     }
-    setDate(e.date);
-    const parts = e.start_time.split(':');
-    const endParts = e.end_time.split(':');
-    setStartH(Number(parts[0]) || 0); setStartM(Number(parts[1]) || 0);
-    setEndH(Number(endParts[0]) || 0); setEndM(Number(endParts[1]) || 0);
-    setIsNight(e.is_night);
-    setCategory(e.category || '');
-    setEditingId(e.id);
-    setTab('erfassen');
+    setEditingEntryId(e.id);
+    setEditStart(e.start_time.slice(0, 5));
+    setEditEnd(e.end_time.slice(0, 5));
+  };
+
+  const cancelInlineEdit = () => {
+    setEditingEntryId(null);
+    setEditStart('');
+    setEditEnd('');
+  };
+
+  const saveInlineEdit = async (entryId: string, entryDate: string) => {
+    if (!assistant) return;
+    const { error } = await supabase
+      .from('time_entry')
+      .update({ start_time: editStart, end_time: editEnd })
+      .eq('id', entryId);
+    if (error) {
+      toast.error('Fehler: ' + error.message);
+    } else {
+      toast.success('Eintrag aktualisiert');
+      cancelInlineEdit();
+      await loadEntries();
+      await resetPayrollConfirmationIfNeeded(assistant.id, entryDate);
+    }
   };
 
   // ─── Spinner for hours/minutes ───
@@ -715,23 +734,47 @@ export function TokenLoginPage() {
                         </div>
                       </div>
                       <div className="flex items-center justify-between">
-                        <div>
-                          <span className="text-lg font-bold tabular-nums">{e.start_time.slice(0,5)} – {e.end_time.slice(0,5)}</span>
-                          <span className="text-sm text-slate-400 ml-2">({hours}h)</span>
-                        </div>
-                        {!e.confirmed && (
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => startEdit(e)} disabled={payrollConfirmed}
-                              title={payrollConfirmed ? `Gesperrt: Lohnabrechnung für ${formatMonthLabel(e.date)} wurde bereits freigegeben.` : undefined}
-                              className="p-2 rounded-lg hover:bg-blue-50 text-blue-500 transition disabled:cursor-not-allowed">
-                              <Pencil className="w-4 h-4" />
-                            </button>
-                            <button onClick={() => handleDelete(e.id)} disabled={payrollConfirmed}
-                              title={payrollConfirmed ? `Gesperrt: Lohnabrechnung für ${formatMonthLabel(e.date)} wurde bereits freigegeben.` : undefined}
-                              className="p-2 rounded-lg hover:bg-red-50 text-red-400 transition disabled:cursor-not-allowed">
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
+                        {editingEntryId === e.id ? (
+                          <>
+                            <div className="flex items-center gap-2">
+                              <input type="time" value={editStart} onChange={ev => setEditStart(ev.target.value)}
+                                className="px-2 py-1 border border-slate-300 rounded-lg text-sm w-24" />
+                              <span className="text-slate-400">–</span>
+                              <input type="time" value={editEnd} onChange={ev => setEditEnd(ev.target.value)}
+                                className="px-2 py-1 border border-slate-300 rounded-lg text-sm w-24" />
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => saveInlineEdit(e.id, e.date)}
+                                className="p-2 rounded-lg hover:bg-emerald-50 text-emerald-600 transition">
+                                <Save className="w-4 h-4" />
+                              </button>
+                              <button onClick={cancelInlineEdit}
+                                className="p-2 rounded-lg hover:bg-slate-100 text-slate-400 transition">
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div>
+                              <span className="text-lg font-bold tabular-nums">{e.start_time.slice(0,5)} – {e.end_time.slice(0,5)}</span>
+                              <span className="text-sm text-slate-400 ml-2">({hours}h)</span>
+                            </div>
+                            {!e.confirmed && (
+                              <div className="flex items-center gap-1">
+                                <button onClick={() => startEdit(e)} disabled={payrollConfirmed}
+                                  title={payrollConfirmed ? `Gesperrt: Lohnabrechnung für ${formatMonthLabel(e.date)} wurde bereits freigegeben.` : undefined}
+                                  className="p-2 rounded-lg hover:bg-blue-50 text-blue-500 transition disabled:cursor-not-allowed">
+                                  <Pencil className="w-4 h-4" />
+                                </button>
+                                <button onClick={() => handleDelete(e.id)} disabled={payrollConfirmed}
+                                  title={payrollConfirmed ? `Gesperrt: Lohnabrechnung für ${formatMonthLabel(e.date)} wurde bereits freigegeben.` : undefined}
+                                  className="p-2 rounded-lg hover:bg-red-50 text-red-400 transition disabled:cursor-not-allowed">
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>
