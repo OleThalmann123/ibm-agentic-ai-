@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { supabase } from '@asklepios/backend';
+import { supabase } from '@asklepios/core';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   calculatePayroll, FAK_RATES, fmt, fmtPct, type PayrollResult,
   getFerienzuschlagRate, getFerienzuschlagLabel,
-} from '@asklepios/backend';
-import { calculatePayslip, generatePayslipPdf, type PayslipAccountingMethod } from '@asklepios/backend';
-import { generateTimesheetPdf } from '@asklepios/backend';
+} from '@asklepios/core';
+import { calculatePayslip, generatePayslipPdf, type PayslipAccountingMethod } from '@asklepios/core';
+import { generateTimesheetPdf } from '@asklepios/core';
 import {
   generateIvInvoicePdf,
   type IvInvoiceLine,
@@ -14,7 +14,7 @@ import {
   formatIvCategoryForInlineDisplay,
   IV_INVOICE_DEFAULT_RATE_CHF,
   getIvStelleInvoiceRecipientSuggestion,
-} from '@asklepios/backend';
+} from '@asklepios/core';
 import { PDFDocument } from 'pdf-lib';
 import {
   Calculator, FileText, ChevronLeft, ChevronRight, Users,
@@ -22,7 +22,7 @@ import {
   ChevronDown, TrendingUp, Banknote, ArrowRight, ArrowLeft, Sparkles, Package, ClipboardList,
 } from 'lucide-react';
 import { toast } from 'sonner';
-import type { Assistant } from '@asklepios/backend';
+import type { Assistant } from '@asklepios/core';
 import { Badge, badgeVariants } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { sanitizeFilenamePart } from '@/utils/filename';

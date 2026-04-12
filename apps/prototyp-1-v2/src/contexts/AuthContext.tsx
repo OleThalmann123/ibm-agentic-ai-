@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
-import { supabase } from '@asklepios/backend';
-import type { Employer, EmployerAccess } from '@asklepios/backend';
+import { supabase } from '@asklepios/core';
+import type { Employer, EmployerAccess } from '@asklepios/core';
 
 /** employer_access-Zeile inkl. Namen des Arbeitgebers (Join). */
 export type EmployerAccessRow = EmployerAccess & {

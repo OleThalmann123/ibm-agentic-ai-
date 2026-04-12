@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from 'react';
 import { Calculator, ChevronDown, ChevronUp, RotateCcw, Info, Building2, User } from 'lucide-react';
-import { formatCHF } from '@asklepios/backend';
+import { formatCHF } from '@asklepios/core';
 import { cn } from '@/lib/utils';
 
 // ─── FAK-Sätze nach Kanton ────────────────────────────────────────────

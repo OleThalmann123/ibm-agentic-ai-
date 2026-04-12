@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { supabase } from '@asklepios/backend';
+import { supabase } from '@asklepios/core';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import {

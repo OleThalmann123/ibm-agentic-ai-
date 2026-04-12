@@ -9,7 +9,7 @@
  * UVG monthly salary cap for NBU premium calculation.
  */
 
-import type { NbuStatus, TimeEntry } from '../shared/types';
+import type { NbuStatus, TimeEntry } from '../common/types';
 
 export const MONTHLY_UVG_CAP = 12_350; // CHF 148'200 / 12
 

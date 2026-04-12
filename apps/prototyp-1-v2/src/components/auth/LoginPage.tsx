@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@asklepios/backend';
+import { supabase } from '@asklepios/core';
 import { toast } from 'sonner';
 import { Eye, EyeOff, LogIn, User } from 'lucide-react';
 import { AsklepiosLogo } from '@/components/brand/AsklepiosLogo';
