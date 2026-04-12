@@ -1951,6 +1951,10 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                     <h5 className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
                       Nichtberufsunfallversicherung (NBU)
                     </h5>
+                    <div className="flex items-start gap-2.5 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+                      <HelpCircle className="w-4 h-4 mt-0.5 shrink-0 text-blue-500" />
+                      <span>Der <strong>Nichtberufsunfallversicherungs-Gesamtprämiensatz (NBU)</strong> muss zwingend manuell eingegeben werden – entnehmen Sie ihn Ihrer Versicherungspolice (typischerweise 0.5–3&nbsp;%). Die Aufteilung in AG-/AN-Anteil kann aus dem Arbeitsvertrag übernommen werden.</span>
+                    </div>
                     {showNbu8h && nbu8hUnder && (
                       <div className="bg-blue-50 rounded-xl border border-blue-100 p-3 text-sm text-blue-700">
                         Pensum unter 8h/Woche – Nichtberufsunfallversicherung ist nicht obligatorisch. Die NBU-Felder sind optional und können leer bleiben.
@@ -2009,7 +2013,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
             </div>
 
             <aside className="lg:sticky lg:top-4 lg:self-start flex flex-col gap-3">
-              <div className="h-[calc(100vh-12rem)] min-h-[560px]">
+              <div className="h-[calc(100vh-24rem)] min-h-[420px]">
                 <ContractPreview
                   contractPreviewUrl={contractPreviewUrl}
                   contractFileName={contractFileName}
@@ -2017,10 +2021,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                   docxHtml={docxHtml}
                 />
               </div>
-              <div className="flex items-start gap-2.5 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-                <HelpCircle className="w-4 h-4 mt-0.5 shrink-0 text-blue-500" />
-                <span>Der <strong>Nichtberufsunfallversicherungs-Gesamtprämiensatz (NBU)</strong> muss zwingend manuell eingegeben werden – entnehmen Sie ihn Ihrer Versicherungspolice (typischerweise 0.5–3&nbsp;%). Die Aufteilung in AG-/AN-Anteil kann aus dem Arbeitsvertrag übernommen werden.</span>
-              </div>
+              <ErgaenzenSourceGuide fields={popupAttentionFields} />
             </aside>
           </div>
         </form>
