@@ -20,6 +20,23 @@ function isPlzInAllowedCanton(plz: string): boolean {
   return !!canton && (ALLOWED_CANTONS as readonly string[]).includes(canton.code);
 }
 
+function isValidAhvNumber(v: string): boolean {
+  if (!v.trim()) return true;
+  return /^756\.\d{4}\.\d{4}\.\d{2}$/.test(v.trim());
+}
+
+function isValidIban(v: string): boolean {
+  if (!v.trim()) return true;
+  const clean = v.replace(/\s/g, '');
+  return /^CH\d{2}[A-Z0-9]{17}$/i.test(clean);
+}
+
+function isValidPhone(v: string): boolean {
+  if (!v.trim()) return true;
+  const digits = v.replace(/[\s\-\(\)\.]/g, '');
+  return /^\+?\d{10,15}$/.test(digits);
+}
+
 // ─── Stable sub-components ───
 
 const inputCls = "w-full px-4 py-3 rounded-lg border bg-background text-base focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary";
@@ -157,8 +174,8 @@ export function EmployerOnboarding({ onComplete }: Props) {
   };
 
   const canNext = () => {
-    if (step === 1) return cFirst.trim() !== '' && cLast.trim() !== '' && cZip.length === 4 && isPlzInAllowedCanton(cZip);
-    if (step === 2) return aFirst.trim() !== '' && aLast.trim() !== '';
+    if (step === 1) return cFirst.trim().length >= 2 && cLast.trim().length >= 2 && cZip.length === 4 && isPlzInAllowedCanton(cZip) && isValidAhvNumber(insuredAhvNumber) && isValidIban(billingIban) && isValidPhone(cPhone);
+    if (step === 2) return aFirst.trim().length >= 2 && aLast.trim().length >= 2;
     if (step === 3) return tracker !== '' && (tracker === 'employer' || (approvalNeeded !== '' && activitiesInDayShifts !== ''));
     return false;
   };
@@ -297,8 +314,18 @@ export function EmployerOnboarding({ onComplete }: Props) {
       <div className="space-y-4">
         <h3 className="text-xl font-bold flex items-center gap-2"><MapPin className="w-6 h-6 text-primary" />{role === 'affected' ? 'Ihre Angaben' : 'Ihre Kontaktdaten'}</h3>
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Vorname" value={cFirst} onChange={setCFirst} />
-          <Field label="Nachname" value={cLast} onChange={setCLast} />
+          <div>
+            <Field label="Vorname" value={cFirst} onChange={setCFirst} />
+            {cFirst.trim().length > 0 && cFirst.trim().length < 2 && (
+              <p className="text-xs text-red-600 mt-1">Mindestens 2 Zeichen erforderlich.</p>
+            )}
+          </div>
+          <div>
+            <Field label="Nachname" value={cLast} onChange={setCLast} />
+            {cLast.trim().length > 0 && cLast.trim().length < 2 && (
+              <p className="text-xs text-red-600 mt-1">Mindestens 2 Zeichen erforderlich.</p>
+            )}
+          </div>
         </div>
         <Field label="Strasse & Nr." value={cStreet} onChange={setCStreet} />
         <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-4 py-3 text-sm text-amber-900 flex items-start gap-2.5">
@@ -335,15 +362,30 @@ export function EmployerOnboarding({ onComplete }: Props) {
         )}
         <div className="grid grid-cols-2 gap-4">
           <Field label="E-Mail" value={user?.email ?? ''} disabled />
-          <Field label="Telefon (optional)" value={cPhone} onChange={setCPhone} placeholder="+41 ..." />
+          <div>
+            <Field label="Telefon (optional)" value={cPhone} onChange={setCPhone} placeholder="+41 ..." />
+            {!isValidPhone(cPhone) && (
+              <p className="text-xs text-red-600 mt-1">Ungültiges Telefonformat.</p>
+            )}
+          </div>
         </div>
 
-        <Field label="AHV-Nummer (versicherte Person)" value={insuredAhvNumber} onChange={setInsuredAhvNumber} placeholder="756.xxxx.xxxx.xx" />
+        <div>
+          <Field label="AHV-Nummer (versicherte Person)" value={insuredAhvNumber} onChange={setInsuredAhvNumber} placeholder="756.xxxx.xxxx.xx" />
+          {!isValidAhvNumber(insuredAhvNumber) && (
+            <p className="text-xs text-red-600 mt-1">Format: 756.xxxx.xxxx.xx</p>
+          )}
+        </div>
 
         <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
           <p className="text-sm font-semibold">IV-Abrechnung (Ansatz & Auszahlung)</p>
           <Field label="IV-Ansatz (CHF/Std)" value="35.30" disabled />
-          <Field label="IBAN (Auszahlung IV Rechnung für Assistenzbeitrag)" value={billingIban} onChange={setBillingIban} placeholder="CH.." />
+          <div>
+            <Field label="IBAN (Auszahlung IV Rechnung für Assistenzbeitrag)" value={billingIban} onChange={setBillingIban} placeholder="CH.." />
+            {!isValidIban(billingIban) && (
+              <p className="text-xs text-red-600 mt-1">Ungültiges IBAN-Format. Erwartet: CH + 19 Zeichen.</p>
+            )}
+          </div>
           <Field label="Mitteilungs-/Verfügungsnummer (optional)" value={billingReferenceNumber} onChange={setBillingReferenceNumber} placeholder="…" />
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg border bg-background/70 px-3 py-2">
             <span className="text-sm font-medium">Kontoinhaber:in</span>
@@ -401,8 +443,18 @@ export function EmployerOnboarding({ onComplete }: Props) {
       <div className="space-y-4">
         <h3 className="text-xl font-bold flex items-center gap-2"><User className="w-6 h-6 text-primary" />Betroffene Person</h3>
         <div className="grid grid-cols-2 gap-4">
-          <Field label="Vorname" value={aFirst} onChange={setAFirst} />
-          <Field label="Nachname" value={aLast} onChange={setALast} />
+          <div>
+            <Field label="Vorname" value={aFirst} onChange={setAFirst} />
+            {aFirst.trim().length > 0 && aFirst.trim().length < 2 && (
+              <p className="text-xs text-red-600 mt-1">Mindestens 2 Zeichen erforderlich.</p>
+            )}
+          </div>
+          <div>
+            <Field label="Nachname" value={aLast} onChange={setALast} />
+            {aLast.trim().length > 0 && aLast.trim().length < 2 && (
+              <p className="text-xs text-red-600 mt-1">Mindestens 2 Zeichen erforderlich.</p>
+            )}
+          </div>
         </div>
         <Field label="Strasse & Nr." value={aStreet} onChange={setAStreet} />
         <div className="grid grid-cols-[120px_1fr] gap-4">
@@ -444,7 +496,7 @@ export function EmployerOnboarding({ onComplete }: Props) {
             <p className="text-base font-medium flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-primary" />Müssen die Stunden genehmigt werden?</p>
             <div className="grid grid-cols-2 gap-3">
               <Radio active={approvalNeeded === 'yes'} onClick={() => setApprovalNeeded('yes')} label="Ja, ich genehmige" />
-              <Radio active={approvalNeeded === 'no'} onClick={() => setApprovalNeeded('no')} label="Nein, direkt übernehmen" />
+              <Radio active={approvalNeeded === 'no'} onClick={() => setApprovalNeeded('no')} label="Nein, direkt übernehmen – out of scope" disabled />
             </div>
 
             <div className="pt-3">
