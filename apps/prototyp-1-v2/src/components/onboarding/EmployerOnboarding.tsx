@@ -335,7 +335,7 @@ export function EmployerOnboarding({ onComplete }: Props) {
         )}
         <div className="grid grid-cols-2 gap-4">
           <Field label="E-Mail" value={user?.email ?? ''} disabled />
-          <Field label="Telefon (für Rückfragen)" value={cPhone} onChange={setCPhone} placeholder="+41 ..." />
+          <Field label="Telefon (optional)" value={cPhone} onChange={setCPhone} placeholder="+41 ..." />
         </div>
 
         <Field label="AHV-Nummer (versicherte Person)" value={insuredAhvNumber} onChange={setInsuredAhvNumber} placeholder="756.xxxx.xxxx.xx" />
@@ -343,7 +343,7 @@ export function EmployerOnboarding({ onComplete }: Props) {
         <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
           <p className="text-sm font-semibold">IV-Abrechnung (Ansatz & Auszahlung)</p>
           <Field label="IV-Ansatz (CHF/Std)" value="35.30" disabled />
-          <Field label="IBAN (Auszahlung)" value={billingIban} onChange={setBillingIban} placeholder="CH.." />
+          <Field label="IBAN (Auszahlung IV Rechnung für Assistenzbeitrag)" value={billingIban} onChange={setBillingIban} placeholder="CH.." />
           <Field label="Mitteilungs-/Verfügungsnummer (optional)" value={billingReferenceNumber} onChange={setBillingReferenceNumber} placeholder="…" />
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg border bg-background/70 px-3 py-2">
             <span className="text-sm font-medium">Kontoinhaber:in</span>
