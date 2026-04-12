@@ -122,7 +122,7 @@ export function AppShell() {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
+        <main className="flex-1 min-h-0 overflow-hidden flex flex-col">
           <Outlet />
         </main>
       </div>

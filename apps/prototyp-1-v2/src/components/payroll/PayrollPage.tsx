@@ -940,7 +940,8 @@ export function PayrollPage() {
   const monthlyPackageReady = canGenerateMonthlyPackage();
 
   return (
-    <div style={{ maxWidth: 1120, margin: '0 auto' }}>
+    <div className="h-full overflow-y-auto p-4 md:p-6 lg:p-8">
+      <div style={{ maxWidth: 1120, margin: '0 auto' }}>
       {/* ── HERO HEADER ── */}
       <div style={{
         background: 'linear-gradient(135deg, #1e293b 0%, #334155 50%, #475569 100%)',
@@ -1791,6 +1792,7 @@ export function PayrollPage() {
           to { transform: rotate(360deg); }
         }
       `}</style>
+      </div>
     </div>
   );
 }

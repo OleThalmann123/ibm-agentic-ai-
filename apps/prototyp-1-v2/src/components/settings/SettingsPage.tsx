@@ -401,8 +401,10 @@ export function SettingsPage() {
   // Guard: don't render if employer was deleted (e.g. after reset)
   if (!employer || !employerAccess) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: '#94a3b8' }}>
-        <p>Lade...</p>
+      <div className="h-full overflow-y-auto p-4 md:p-6 lg:p-8">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', color: '#94a3b8' }}>
+          <p>Lade...</p>
+        </div>
       </div>
     );
   }
@@ -411,6 +413,7 @@ export function SettingsPage() {
   const ivStelleRecord = getIvStelleRecordForCanton(ivCantonCode);
 
   return (
+    <div className="h-full overflow-y-auto p-4 md:p-6 lg:p-8">
     <div className="space-y-6 w-full max-w-7xl mx-auto pb-24">
       {/* Header */}
       <div className="rounded-3xl border bg-[radial-gradient(900px_520px_at_15%_0%,rgba(59,130,246,0.10),transparent_60%),radial-gradient(780px_520px_at_85%_10%,rgba(168,85,247,0.10),transparent_55%),linear-gradient(to_bottom,rgba(255,255,255,0.92),rgba(255,255,255,0.86))] p-6 shadow-sm">
@@ -729,6 +732,7 @@ export function SettingsPage() {
         </div>
       </div>
       </div>
+    </div>
     </div>
   );
 }
