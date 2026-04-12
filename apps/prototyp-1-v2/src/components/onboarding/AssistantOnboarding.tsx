@@ -119,8 +119,6 @@ const FIELD_LABELS: Record<string, string> = {
   'social_insurance.nbu_employer_pct': 'Nichtberufsunfallversicherung (NBU) AG-Prämienanteil (%) – aus Vertrag',
   'social_insurance.nbu_employee_pct': 'Nichtberufsunfallversicherung (NBU) AN-Prämienanteil (%) – aus Vertrag',
   'social_insurance.nbu_employer_voluntary': 'AG übernimmt Nichtberufsunfallversicherung (NBU) freiwillig',
-  'social_insurance.nbu_insurer_name': 'Nichtberufsunfallversicherung (NBU) Versicherer',
-  'social_insurance.nbu_policy_number': 'Nichtberufsunfallversicherung (NBU) Policennummer',
 };
 
 /** UI-Feld-Schlüssel → Extraktions-Pfad (für Status, Review, Popup) */
@@ -154,8 +152,6 @@ const FIELD_KEY_TO_PATH: Record<string, string> = {
   nbuEmployer: 'social_insurance.nbu_employer_pct',
   nbuEmployee: 'social_insurance.nbu_employee_pct',
   nbuEmployerVoluntary: 'social_insurance.nbu_employer_voluntary',
-  nbuInsurerName: 'social_insurance.nbu_insurer_name',
-  nbuPolicyNumber: 'social_insurance.nbu_policy_number',
 };
 
 const PATH_TO_FIELD_KEY: Record<string, string> = Object.fromEntries(
@@ -193,8 +189,6 @@ const REVIEW_POPUP_PATH_ORDER: readonly string[] = [
   'social_insurance.nbu_employer_pct',
   'social_insurance.nbu_employee_pct',
   'social_insurance.nbu_employer_voluntary',
-  'social_insurance.nbu_insurer_name',
-  'social_insurance.nbu_policy_number',
 ];
 
 function popupAttentionPathOrderIndex(path: string): number {
@@ -302,8 +296,6 @@ const ERGAENZEN_SOURCE_BY_PATH: Record<string, ErgaenzenSource> = {
   'social_insurance.nbu_total_rate_pct': 'insurance_policy',
   'social_insurance.nbu_employer_pct': 'insurance_policy',
   'social_insurance.nbu_employee_pct': 'insurance_policy',
-  'social_insurance.nbu_insurer_name': 'insurance_policy',
-  'social_insurance.nbu_policy_number': 'insurance_policy',
   'wage.payment_iban': 'bank_statement',
   'assistant.phone': 'personal',
   'assistant.email': 'personal',
@@ -913,11 +905,9 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
   const [billingMethod, setBillingMethod] = useState('');
   const [canton, setCanton] = useState('');
   const [nbuTotal, setNbuTotal] = useState('');
-  const [nbuEmployer, setNbuEmployer] = useState('');
-  const [nbuEmployee, setNbuEmployee] = useState('');
+  const [nbuEmployer, setNbuEmployer] = useState('0');
+  const [nbuEmployee, setNbuEmployee] = useState('100');
   const [nbuEmployerVoluntary, setNbuEmployerVoluntary] = useState(false);
-  const [nbuInsurerName, setNbuInsurerName] = useState('');
-  const [nbuPolicyNumber, setNbuPolicyNumber] = useState('');
 
   const [saving, setSaving] = useState(false);
   // Binary review state
@@ -1185,8 +1175,6 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
       setNbuEmployer(shareFieldToUiString(si.nbu_employer_pct?.value));
       setNbuEmployee(shareFieldToUiString(si.nbu_employee_pct?.value));
       if (si.nbu_employer_voluntary?.value === true) setNbuEmployerVoluntary(true);
-      if (si.nbu_insurer_name?.value) setNbuInsurerName(String(si.nbu_insurer_name.value));
-      if (si.nbu_policy_number?.value) setNbuPolicyNumber(String(si.nbu_policy_number.value));
     }
 
     // UX: Wenn der Judge bereits ein konkretes ISO-Land vorschlägt, vorbefüllen,
@@ -1368,7 +1356,9 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
     const nbuTotalTrim = nbuTotal.trim();
     const nbuEmployerOut = nbuEmployer.trim();
     const nbuEmployeeOut = nbuEmployee.trim();
-    const anyNbuFieldEntered = !!(nbuTotalTrim || nbuEmployerOut || nbuEmployeeOut);
+    // Ob NBU-Daten aktiv eingegeben wurden, hängt am Gesamtprämiensatz –
+    // AG-/AN-Anteil haben immer Defaults (0%/100%) und zählen nicht als Eingabe.
+    const anyNbuFieldEntered = !!nbuTotalTrim;
     const hwNum = parseFloat(hoursPerWeek);
     const nbuMandatory = Number.isFinite(hwNum) && hwNum >= 8;
 
@@ -1453,8 +1443,6 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
         nbu_employer: nbuEmployerOut,
         nbu_employee: nbuEmployeeOut,
         nbu_employer_voluntary: nbuEmployerVoluntary,
-        nbu_insurer_name: nbuInsurerName.trim() || null,
-        nbu_policy_number: nbuPolicyNumber.trim() || null,
         extraction_metadata: extraction?.extraction_metadata ?? null,
       }
     };
@@ -1981,6 +1969,14 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                         Pensum ≥ 8h/Woche – Nichtberufsunfallversicherung pflichtig. Der Abzug wird auf der Lohnabrechnung ausgewiesen.
                       </div>
                     )}
+                    <MiniField title="AG übernimmt Nichtberufsunfallvers. (NBU) freiwillig" {...fieldProps('nbuEmployerVoluntary')} hasValue>
+                      <label className="flex items-center gap-2 cursor-pointer mt-1">
+                        <input type="checkbox" checked={nbuEmployerVoluntary}
+                          onChange={e => setNbuEmployerVoluntary(e.target.checked)}
+                          className="rounded border-gray-300 h-4 w-4" />
+                        <span className="text-sm text-muted-foreground">Auch bei Pensum unter 8h/Woche</span>
+                      </label>
+                    </MiniField>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                       <MiniField title="Nichtberufsunfallvers. (NBU) Gesamtprämiensatz (%) – manuell" {...fieldProps('nbuTotal')} hasValue={!!nbuTotal}
                         hint="Gesamtprämiensatz gemäss Ihrer Versicherungspolice (typ. 0.5–3%)"
@@ -1999,24 +1995,6 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                         <input type="number" min={0} max={100} step="1" placeholder="z.B. 100"
                           value={nbuEmployee} onChange={e => setNbuEmployee(e.target.value)}
                           className={inputStyle} />
-                      </MiniField>
-                    </div>
-                    <MiniField title="AG übernimmt Nichtberufsunfallvers. (NBU) freiwillig" {...fieldProps('nbuEmployerVoluntary')} hasValue>
-                      <label className="flex items-center gap-2 cursor-pointer mt-1">
-                        <input type="checkbox" checked={nbuEmployerVoluntary}
-                          onChange={e => setNbuEmployerVoluntary(e.target.checked)}
-                          className="rounded border-gray-300 h-4 w-4" />
-                        <span className="text-sm text-muted-foreground">Auch bei Pensum unter 8h/Woche</span>
-                      </label>
-                    </MiniField>
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                      <MiniField title="NBU-Versicherer" {...fieldProps('nbuInsurerName')} hasValue={!!nbuInsurerName}>
-                        <input type="text" placeholder="z.B. SUVA, Helvetia" value={nbuInsurerName}
-                          onChange={e => setNbuInsurerName(e.target.value)} className={inputStyle} />
-                      </MiniField>
-                      <MiniField title="NBU-Policennummer" {...fieldProps('nbuPolicyNumber')} hasValue={!!nbuPolicyNumber}>
-                        <input type="text" placeholder="Policennummer" value={nbuPolicyNumber}
-                          onChange={e => setNbuPolicyNumber(e.target.value)} className={inputStyle} />
                       </MiniField>
                     </div>
                   </div>

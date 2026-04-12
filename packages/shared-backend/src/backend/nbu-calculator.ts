@@ -251,15 +251,15 @@ export function calculateNbuDeduction(input: NbuDeductionInput): NbuDeductionRes
     };
   }
 
-  const employeeDeduction = Math.round(massgebenderLohn * (input.nbuEmployeePct / 100) * 100) / 100;
-  const employerCost = Math.round(massgebenderLohn * (input.nbuEmployerPct / 100) * 100) / 100;
+  const employeeDeduction = Math.round(totalPremium * (input.nbuEmployeePct / 100) * 100) / 100;
+  const employerCost = Math.round(totalPremium * (input.nbuEmployerPct / 100) * 100) / 100;
 
   return {
     massgebenderLohn,
     employeeDeduction,
     employerCost,
     displayCase: 'A',
-    displayLabel: `Nichtberufsunfallversicherung (NBU) ${input.nbuEmployeePct}%`,
+    displayLabel: `Nichtberufsunfallversicherung (NBU) ${input.nbuTotalRatePct}% – AN-Anteil ${input.nbuEmployeePct}%`,
     blocked: false,
   };
 }
