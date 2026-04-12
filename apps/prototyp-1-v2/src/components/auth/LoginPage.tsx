@@ -29,7 +29,7 @@ export function LoginPage() {
 
   const handleDemoLogin = async () => {
     setDemoLoading(true);
-    const { error } = await signIn('demo@asklepios.ch', 'demoasklepios');
+    const { error } = await signIn('demo@asklepios.demo', 'demoasklepios');
     setDemoLoading(false);
     if (error) {
       toast.error('Demo-Anmeldung fehlgeschlagen. Bitte versuchen Sie es erneut.');
