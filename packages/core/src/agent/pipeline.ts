@@ -154,18 +154,11 @@ async function runDocumentPipelineImpl(
       toolsUsed: toolCalls,
     });
 
-    // Enforce tool usage: both tools MUST have been called.
-    // document_classification ensures the document was properly classified.
-    // contract_data_submission ensures Swiss-specific validation (IBAN, AHV,
-    // canton, enums, hallucination guards) actually ran.
-    // Without these tools, the extraction is untrusted and we refuse to accept it.
-    const classificationCalled = toolCalls.includes('document_classification');
-    if (!classificationCalled) {
-      throw new Error(
-        'Asklepios Extractor hat document_classification nicht aufgerufen – Dokumentklassifizierung fehlt, Ergebnis nicht akzeptiert.',
-      );
-    }
-
+    // Enforce tool usage: contract_data_submission MUST have been called.
+    // It ensures Swiss-specific validation (IBAN, AHV, canton, enums,
+    // hallucination guards) actually ran.
+    // Note: document_classification is no longer needed here –
+    // Asklepios Classifier (Agent 1) handles classification before extraction.
     const hadContracts =
       rawResult.contracts &&
       (rawResult.contracts.employer ||

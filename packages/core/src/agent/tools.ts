@@ -828,4 +828,6 @@ export const contractDataSubmissionTool = tool(
 
 // ─── Export ──────────────────────────────────────────────
 
-export const agentTools = [documentClassificationTool, contractDataSubmissionTool];
+// Asklepios Classifier (Agent 1) handles document classification via LLM now.
+// The Extractor (Agent 2) only needs the data submission tool for validation/normalization.
+export const agentTools = [contractDataSubmissionTool];
