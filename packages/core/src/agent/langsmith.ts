@@ -37,6 +37,20 @@ function getPipelineLangSmithRoot(): RunTree | null {
   return _pipelineLangSmithRoot;
 }
 
+/** Vercel/UI liefern oft "true", "1", "True" statt exakt "true". */
+function isTruthyEnv(v: string | undefined): boolean {
+  if (v === undefined || v === '') return false;
+  const s = String(v).trim().toLowerCase();
+  return s === 'true' || s === '1' || s === 'yes' || s === 'on';
+}
+
+function proxyBaseUrl(): string {
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return `${window.location.origin}/api/langsmith`;
+  }
+  return '/api/langsmith';
+}
+
 /**
  * Entspricht langsmith/langchain getLangchainCallbacks(runTree), ohne Import von
  * langsmith/langchain (das zieht traceable/node:async_hooks ins Browser-Bundle).
@@ -52,7 +66,12 @@ async function getLangchainCallbacksForParentRun(
     (h: { name?: string }) => h?.name === 'langchain_tracer',
   ) as LangChainTracer | undefined;
   if (!langChainTracer && runTree.tracingEnabled !== false) {
-    langChainTracer = new LangChainTracer();
+    // Immer denselben Client wie der Pipeline-Root — sonst nutzt LangChainTracer()
+    // kurz den Default-Singleton (US-Endpoint, kein Browser-Key) → stille Fehler.
+    langChainTracer = new LangChainTracer({
+      client: runTree.client,
+      projectName: runTree.project_name ?? undefined,
+    });
     callbacks?.addHandler(langChainTracer);
   }
 
@@ -102,14 +121,14 @@ async function getLangchainCallbacksForParentRun(
 }
 
 function getLangSmithConfig() {
-  const proxyEnabled = import.meta.env.VITE_LANGSMITH_PROXY === 'true';
+  const proxyEnabled = isTruthyEnv(import.meta.env.VITE_LANGSMITH_PROXY as string | undefined);
 
   const apiKey = proxyEnabled
     ? 'proxy' // placeholder – the serverless function injects the real key
     : import.meta.env.VITE_LANGSMITH_API_KEY;
 
   const endpoint = proxyEnabled
-    ? '/api/langsmith'
+    ? proxyBaseUrl()
     : (import.meta.env.VITE_LANGSMITH_ENDPOINT || 'https://eu.api.smith.langchain.com');
 
   const project = import.meta.env.VITE_LANGSMITH_PROJECT || 'Asklepios_agent';
@@ -118,7 +137,7 @@ function getLangSmithConfig() {
 }
 
 export function isLangSmithEnabled(): boolean {
-  return import.meta.env.VITE_LANGSMITH_PROXY === 'true'
+  return isTruthyEnv(import.meta.env.VITE_LANGSMITH_PROXY as string | undefined)
     || !!import.meta.env.VITE_LANGSMITH_API_KEY;
 }
 
