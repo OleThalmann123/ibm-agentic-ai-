@@ -115,7 +115,7 @@ const FIELD_LABELS: Record<string, string> = {
   'wage.payment_iban': 'Lohnkonto (IBAN)',
   'social_insurance.canton': 'Wohnsitzkanton',
   'social_insurance.accounting_method': 'Abrechnungsverfahren',
-  'social_insurance.nbu_total_rate_pct': 'Nichtberufsunfallversicherung (NBU) Gesamtprämiensatz (%) – manuell eingeben',
+  'social_insurance.nbu_total_rate_pct': 'Nichtberufsunfallversicherung (NBU) Gesamtprämiensatz (%) – aus Arbeitsvertrag',
   'social_insurance.nbu_employer_pct': 'Nichtberufsunfallversicherung (NBU) AG-Prämienanteil (%) – aus Vertrag',
   'social_insurance.nbu_employee_pct': 'Nichtberufsunfallversicherung (NBU) AN-Prämienanteil (%) – aus Vertrag',
   'social_insurance.nbu_employer_voluntary': 'AG übernimmt Nichtberufsunfallversicherung (NBU) freiwillig',
@@ -285,7 +285,6 @@ function shareFieldToUiString(value: unknown): string {
 }
 
 export type ErgaenzenSource =
-  | 'insurance_policy'
   | 'bank_statement'
   | 'personal'
   | 'id_document'
@@ -293,9 +292,11 @@ export type ErgaenzenSource =
   | 'contract';
 
 const ERGAENZEN_SOURCE_BY_PATH: Record<string, ErgaenzenSource> = {
-  'social_insurance.nbu_total_rate_pct': 'insurance_policy',
-  'social_insurance.nbu_employer_share_pct': 'insurance_policy',
-  'social_insurance.nbu_employee_share_pct': 'insurance_policy',
+  // NBU-Prämiensätze stehen in der Regel im Arbeitsvertrag, werden aber aktuell
+  // nicht automatisch extrahiert – daher unter "Im Vertrag (nicht extrahierbar)".
+  'social_insurance.nbu_total_rate_pct': 'contract',
+  'social_insurance.nbu_employer_share_pct': 'contract',
+  'social_insurance.nbu_employee_share_pct': 'contract',
   'wage.iban': 'bank_statement',
   'assistant.phone': 'personal',
   'assistant.email': 'personal',
@@ -312,10 +313,6 @@ const ERGAENZEN_SOURCE_BY_PATH: Record<string, ErgaenzenSource> = {
 };
 
 const SOURCE_LABELS: Record<ErgaenzenSource, { label: string; description: string }> = {
-  insurance_policy: {
-    label: 'Versicherungspolice',
-    description: 'Aus der Unfallversicherungs-Police (NBU-Prämiensätze).',
-  },
   bank_statement: {
     label: 'Kontoauszug / E-Banking',
     description: 'IBAN des Lohnkontos.',
@@ -1166,9 +1163,9 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
         }
       }
       setField('canton', si.canton, setCanton);
-      // Nichtberufsunfallversicherungs-Gesamtprämiensatz wird NICHT aus der KI-Extraktion übernommen –
-      // muss zwingend manuell gemäss Versicherungspolice eingegeben werden.
-      // Die AG/AN-Aufteilung KANN hingegen aus dem Arbeitsvertrag extrahiert werden.
+      // Nichtberufsunfallversicherungs-Werte (Gesamtprämiensatz + AG/AN-Aufteilung) stehen in
+      // der Regel im Arbeitsvertrag, werden aktuell aber NICHT aus der KI-Extraktion übernommen
+      // und müssen daher manuell aus dem Vertrag nachgetragen werden.
       if (si.nbu_employer_pct) cMap.nbuEmployer = si.nbu_employer_pct;
       if (si.nbu_employee_pct) cMap.nbuEmployee = si.nbu_employee_pct;
       if (si.nbu_employer_voluntary) cMap.nbuEmployerVoluntary = si.nbu_employer_voluntary;
@@ -1962,8 +1959,8 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                       </div>
                     )}
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                      <MiniField title="Nichtberufsunfallvers. (NBU) Gesamtprämiensatz (%) – manuell" {...fieldProps('nbuTotal')} hasValue={!!nbuTotal}
-                        hint="Gesamtprämiensatz gemäss Ihrer Versicherungspolice (typ. 0.5–3%)"
+                      <MiniField title="Nichtberufsunfallvers. (NBU) Gesamtprämiensatz (%) – aus Vertrag" {...fieldProps('nbuTotal')} hasValue={!!nbuTotal}
+                        hint="Gesamtprämiensatz in der Regel im Arbeitsvertrag (typ. 0.5–3%)"
                         error={nbuTotal && parseFloat(nbuTotal) > 5 ? 'Unrealistisch hoch – Prämiensätze liegen typischerweise bei 0.5–3%' : undefined}>
                         <input type="number" min={0} max={10} step="0.01" placeholder="z.B. 1.50"
                           value={nbuTotal} onChange={e => setNbuTotal(e.target.value)} className={inputStyle} />
@@ -2019,7 +2016,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
               </div>
               <div className="flex items-start gap-2.5 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
                 <HelpCircle className="w-4 h-4 mt-0.5 shrink-0 text-blue-500" />
-                <span>Der <strong>Nichtberufsunfallversicherungs-Gesamtprämiensatz (NBU)</strong> muss zwingend manuell eingegeben werden – entnehmen Sie ihn Ihrer Versicherungspolice (typischerweise 0.5–3&nbsp;%). Die Aufteilung in AG-/AN-Anteil kann aus dem Arbeitsvertrag übernommen werden.</span>
+                <span>Der <strong>Nichtberufsunfallversicherungs-Gesamtprämiensatz (NBU)</strong> steht in der Regel im Arbeitsvertrag (typischerweise 0.5–3&nbsp;%) und wird dort auch in AG-/AN-Anteil aufgeteilt. Er wird aktuell nicht automatisch extrahiert – bitte aus dem Vertrag übernehmen und manuell eintragen.</span>
               </div>
             </aside>
           </div>
