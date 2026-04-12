@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useId, type ReactNode } from 'react';
-import { FileText, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { FileText, ShieldCheck, CheckCircle2, ScanSearch } from 'lucide-react';
 import { AsklepiosExtractLogo } from '@/components/brand/AsklepiosExtractLogo';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -112,24 +112,30 @@ export function ExtractingScreen({ onCancel }: Props) {
           </div>
         </div>
 
-        {/* 3 compact steps */}
-        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+        {/* 4 compact steps */}
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-4">
+          <StepItem
+            icon={<ScanSearch className="h-4 w-4 text-emerald-200" />}
+            iconBg="bg-emerald-500/15 border-emerald-300/25"
+            title="Agent 1 · Klassifizierung"
+            description="Dokumenttyp wird erkannt."
+          />
           <StepItem
             icon={<FileText className="h-4 w-4 text-blue-200" />}
             iconBg="bg-blue-500/15 border-blue-300/25"
-            title="Agent 1 · Datenextraktion"
+            title="Agent 2 · Datenextraktion"
             description="Stammdaten & Vertragswerte erkannt."
           />
           <StepItem
             icon={<ShieldCheck className="h-4 w-4 text-purple-200" />}
             iconBg="bg-purple-500/15 border-purple-300/25"
-            title="Agent 2 · Qualitätscheck"
+            title="Agent 3 · Qualitätscheck"
             description="Unsichere Felder werden markiert."
           />
           <StepItem
             icon={<CheckCircle2 className="h-4 w-4 text-white/55" />}
             iconBg="bg-white/10 border-white/15"
-            title="Schritt 3 · Manuelle Prüfung"
+            title="Schritt 4 · Manuelle Prüfung"
             description="Markierte Felder anpassen."
           />
         </div>
