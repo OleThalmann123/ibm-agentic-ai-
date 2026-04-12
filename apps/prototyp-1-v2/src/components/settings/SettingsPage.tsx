@@ -439,14 +439,13 @@ export function SettingsPage() {
         </div>
       </div>
 
-      {/* Developer Options (moved to top for demo) */}
+      {/* Developer Options */}
       <SettingsCard
         icon={RotateCcw}
         iconColor="text-red-600"
         iconBg="bg-red-500/10"
         title="Entwickler-Optionen"
         description="Onboarding erneut durchlaufen (löscht aktuelle Daten)"
-        badge="Demo only"
       >
         <button
           onClick={resetOnboarding}
@@ -465,10 +464,10 @@ export function SettingsPage() {
         </button>
       </SettingsCard>
 
-      {/* Demo-only notice for the disabled section below */}
+      {/* Notice for disabled section below */}
       <div className="rounded-2xl border border-dashed border-amber-300/60 bg-amber-50/60 px-4 py-2.5 text-sm font-medium text-amber-800 flex items-center gap-2">
         <Lock className="w-4 h-4" />
-        Nicht verfügbar (Demo) – weitere Einstellungen sind in dieser Vorschau deaktiviert.
+        Noch nicht verfügbar – weitere Einstellungen werden bald freigeschaltet.
       </div>
 
       <div
