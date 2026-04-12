@@ -272,11 +272,16 @@ export async function runDocumentPipeline(
   text?: string | null,
 ): Promise<PipelineResult> {
   const client = isLangSmithEnabled() ? getLangSmithClient() : null;
+  if (import.meta.env.DEV && !client) {
+    console.warn(
+      '[LangSmith] Aus — es werden keine Runs gesendet. Setze VITE_LANGSMITH_PROXY=true und LANGSMITH_API_KEY in ibm-agentic-ai-/.env, dann Dev-Server neu starten. Hinweis: npm run preview hat keinen Proxy; Production braucht VITE_* beim Build + /api/langsmith (Vercel).',
+    );
+  }
   let rootRun: RunTree | undefined;
 
   if (client) {
     const project =
-      import.meta.env.VITE_LANGSMITH_PROJECT || 'Asklepios_agent';
+      import.meta.env.VITE_LANGSMITH_PROJECT || 'HSG Agentic';
     rootRun = new RunTree({
       name: 'Asklepios_extract: Dokument-Pipeline',
       client,

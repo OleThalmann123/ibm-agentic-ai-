@@ -7,11 +7,11 @@
  *
  * Configure via Vite env vars (safe to expose – no secrets):
  *   VITE_LANGSMITH_PROXY       – "true" to enable proxy mode (recommended)
- *   VITE_LANGSMITH_PROJECT     – Project name (default: "Asklepios_agent")
+ *   VITE_LANGSMITH_PROJECT     – Project name (default: "HSG Agentic")
  *
  * Server-side env vars (set in Vercel dashboard / .env, never VITE_-prefixed):
  *   LANGSMITH_API_KEY           – LangSmith API key
- *   LANGSMITH_ENDPOINT          – API endpoint (default: https://eu.api.smith.langchain.com)
+ *   LANGSMITH_ENDPOINT          – API endpoint (default: https://api.smith.langchain.com, US)
  *   LANGSMITH_WORKSPACE_ID      – optional x-tenant-id (mehrere Workspaces am Key)
  *
  * Optional im Browser (nur wenn Workspace im Client gesetzt werden soll):
@@ -129,9 +129,9 @@ function getLangSmithConfig() {
 
   const endpoint = proxyEnabled
     ? proxyBaseUrl()
-    : (import.meta.env.VITE_LANGSMITH_ENDPOINT || 'https://eu.api.smith.langchain.com');
+    : (import.meta.env.VITE_LANGSMITH_ENDPOINT || 'https://api.smith.langchain.com');
 
-  const project = import.meta.env.VITE_LANGSMITH_PROJECT || 'Asklepios_agent';
+  const project = import.meta.env.VITE_LANGSMITH_PROJECT || 'HSG Agentic';
 
   return { apiKey, endpoint, project };
 }

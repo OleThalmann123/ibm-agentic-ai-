@@ -20,7 +20,7 @@ export default defineConfig(({ mode }) => {
     server: {
       proxy: {
         '/api/langsmith': {
-          target: (env.LANGSMITH_ENDPOINT || 'https://eu.api.smith.langchain.com').replace(
+          target: (env.LANGSMITH_ENDPOINT || 'https://api.smith.langchain.com').replace(
             /\/+$/,
             '',
           ),

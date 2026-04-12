@@ -2,13 +2,13 @@
  * Vercel: Projekt-Root muss das Monorepo sein (nicht apps/prototyp-1-v2), sonst
  * wird diese Route nicht deployed. Env: LANGSMITH_API_KEY (required),
  * LANGSMITH_ENDPOINT (default EU), optional LANGSMITH_WORKSPACE_ID (x-tenant-id).
- * Frontend: VITE_LANGSMITH_PROXY=true, VITE_LANGSMITH_PROJECT=Asklepios_agent.
+ * Frontend: VITE_LANGSMITH_PROXY=true, VITE_LANGSMITH_PROJECT=HSG Agentic (or override).
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 const LANGSMITH_API_KEY = process.env.LANGSMITH_API_KEY;
 const LANGSMITH_ENDPOINT = (
-  process.env.LANGSMITH_ENDPOINT || 'https://eu.api.smith.langchain.com'
+  process.env.LANGSMITH_ENDPOINT || 'https://api.smith.langchain.com'
 ).replace(/\/+$/, '');
 const LANGSMITH_WORKSPACE_ID = process.env.LANGSMITH_WORKSPACE_ID;
 
