@@ -609,21 +609,19 @@ function AttentionChecklist({
   attentionFields,
   mode,
   onModeChange,
-  renderFieldEditor,
+  children,
 }: {
   attentionFields: PopupAttentionField[];
   mode: 'pruefen' | 'ergaenzen';
   onModeChange: (m: 'pruefen' | 'ergaenzen') => void;
-  renderFieldEditor: (path: string) => ReactNode;
+  children: ReactNode;
 }) {
   const reviewRowsAll = attentionFields.filter((r) => !r.missing && r.needsReview);
   const missingRowsAll = attentionFields.filter((r) => r.missing);
 
   const hasReview = reviewRowsAll.length > 0;
   const hasMissing = missingRowsAll.length > 0;
-
-  const visibleRows = mode === 'pruefen' ? reviewRowsAll : missingRowsAll;
-  const emptyForMode = visibleRows.length === 0;
+  const hasAnyAttention = hasReview || hasMissing;
 
   return (
     <div className="rounded-2xl p-[1px] bg-[linear-gradient(90deg,rgba(59,130,246,0.55),rgba(168,85,247,0.50),rgba(16,185,129,0.38))] shadow-[0_22px_80px_rgba(2,6,23,0.18)]">
@@ -636,7 +634,7 @@ function AttentionChecklist({
             </div>
             <div className="flex-1 min-w-0">
               <h3 className="text-base sm:text-lg font-bold leading-tight">
-                Asklepios_extract braucht deine Hilfe
+                {hasAnyAttention ? 'Asklepios_extract braucht deine Hilfe' : 'Daten bestätigen'}
               </h3>
               <p className="text-xs sm:text-sm text-white/80 mt-0.5 leading-relaxed">
                 <span className="font-semibold text-white">Prüfen:</span> Unsichere Werte mit dem Vertrag rechts abgleichen.{' '}
@@ -644,101 +642,50 @@ function AttentionChecklist({
               </p>
             </div>
           </div>
-          <div
-            role="tablist"
-            aria-label="Prüfen und Ergänzen umschalten"
-            className="relative mt-3 inline-flex rounded-full bg-white/10 p-0.5 border border-white/10"
-            onKeyDown={(e) => {
-              if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && hasReview && hasMissing) {
-                e.preventDefault();
-                onModeChange(mode === 'pruefen' ? 'ergaenzen' : 'pruefen');
-              }
-            }}
-          >
-            {hasReview ? (
-              <button
-                type="button"
-                role="tab"
-                aria-selected={mode === 'pruefen'}
-                onClick={() => onModeChange('pruefen')}
-                className={`px-3 py-1 rounded-full text-[11px] font-bold transition-all ${
-                  mode === 'pruefen' ? 'bg-white text-slate-900 shadow-sm' : 'text-white/80 hover:text-white'
-                }`}
-              >
-                Prüfen ({reviewRowsAll.length})
-              </button>
-            ) : null}
-            {hasMissing ? (
-              <button
-                type="button"
-                role="tab"
-                aria-selected={mode === 'ergaenzen'}
-                onClick={() => onModeChange('ergaenzen')}
-                className={`px-3 py-1 rounded-full text-[11px] font-bold transition-all ${
-                  mode === 'ergaenzen' ? 'bg-white text-slate-900 shadow-sm' : 'text-white/80 hover:text-white'
-                }`}
-              >
-                Ergänzen ({missingRowsAll.length})
-              </button>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="px-5 py-4 sm:px-6 space-y-3">
-          {emptyForMode ? (
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-sm font-semibold text-slate-800">
-                {mode === 'pruefen' ? 'Keine Unsicherheiten zum Prüfen.' : 'Keine fehlenden Angaben zum Ergänzen.'}
-              </p>
-              <p className="text-xs text-slate-600 mt-1">
-                {mode === 'pruefen'
-                  ? hasMissing
-                    ? 'Wenn du trotzdem etwas ergänzen möchtest, wechsle zu «Ergänzen».'
-                    : 'Alles klar – keine weiteren Aktionen nötig.'
-                  : hasReview
-                    ? 'Wenn du unsichere Felder abgleichen möchtest, wechsle zu «Prüfen».'
-                    : 'Alles klar – keine weiteren Aktionen nötig.'}
-              </p>
-            </div>
-          ) : (
-            visibleRows.map((row) => {
-              const sourceMeta = row.source ? SOURCE_LABELS[row.source] : null;
-              return (
-                <div
-                  key={row.path}
-                  className={`rounded-xl border px-3 py-2.5 shadow-sm bg-white ${
-                    mode === 'pruefen' ? 'border-orange-200' : 'border-amber-200'
+          {hasAnyAttention && (
+            <div
+              role="tablist"
+              aria-label="Prüfen und Ergänzen umschalten"
+              className="relative mt-3 inline-flex rounded-full bg-white/10 p-0.5 border border-white/10"
+              onKeyDown={(e) => {
+                if ((e.key === 'ArrowRight' || e.key === 'ArrowLeft') && hasReview && hasMissing) {
+                  e.preventDefault();
+                  onModeChange(mode === 'pruefen' ? 'ergaenzen' : 'pruefen');
+                }
+              }}
+            >
+              {hasReview ? (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={mode === 'pruefen'}
+                  onClick={() => onModeChange('pruefen')}
+                  className={`px-3 py-1 rounded-full text-[11px] font-bold transition-all ${
+                    mode === 'pruefen' ? 'bg-white text-slate-900 shadow-sm' : 'text-white/80 hover:text-white'
                   }`}
                 >
-                  <div className="flex flex-wrap items-center gap-1.5 gap-y-1">
-                    <span className="text-sm font-semibold text-slate-800">{row.label}</span>
-                    {mode === 'ergaenzen' ? (
-                      <>
-                        <span className="text-[9px] font-semibold leading-tight px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-900 border border-amber-200">
-                          Ergänzen
-                        </span>
-                        {sourceMeta ? (
-                          <span className="text-[9px] font-semibold leading-tight px-1.5 py-0.5 rounded-md bg-white text-slate-700 border border-slate-200">
-                            Quelle: {sourceMeta.label}
-                          </span>
-                        ) : null}
-                      </>
-                    ) : (
-                      <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-orange-50 text-orange-900 border border-orange-200 flex items-center gap-0.5">
-                        <AlertTriangle className="w-3 h-3" /> Prüfen
-                      </span>
-                    )}
-                  </div>
-                  {row.hint ? (
-                    <p className="text-xs text-slate-500 mt-1.5 leading-snug">{row.hint}</p>
-                  ) : null}
-                  <div className="mt-2.5 pt-2.5 border-t border-slate-100 space-y-2">
-                    {renderFieldEditor(row.path)}
-                  </div>
-                </div>
-              );
-            })
+                  Prüfen ({reviewRowsAll.length})
+                </button>
+              ) : null}
+              {hasMissing ? (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={mode === 'ergaenzen'}
+                  onClick={() => onModeChange('ergaenzen')}
+                  className={`px-3 py-1 rounded-full text-[11px] font-bold transition-all ${
+                    mode === 'ergaenzen' ? 'bg-white text-slate-900 shadow-sm' : 'text-white/80 hover:text-white'
+                  }`}
+                >
+                  Ergänzen ({missingRowsAll.length})
+                </button>
+              ) : null}
+            </div>
           )}
+        </div>
+
+        <div className="bg-white px-5 py-5 sm:px-6">
+          {children}
         </div>
       </div>
     </div>
@@ -1614,239 +1561,6 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
     required: isRequired(key),
   });
 
-  const renderPopupFieldEditor = (path: string): ReactNode => {
-    const fk = PATH_TO_FIELD_KEY[path];
-    const pIn = `${inputStyle} mt-1`;
-    const pSel = `${selectStyle} mt-1`;
-    if (!fk) {
-      return (
-        <p className="text-[11px] text-slate-500 leading-snug">
-          Kein passendes Formularfeld – bitte nach dem Dialog im Formular ergänzen (sofern zutreffend).
-        </p>
-      );
-    }
-    switch (fk) {
-      case 'firstName':
-        return <input type="text" className={pIn} placeholder="Ergänzen…" value={firstName} onChange={(e) => setFirstName(e.target.value)} />;
-      case 'lastName':
-        return <input type="text" className={pIn} placeholder="Ergänzen…" value={lastName} onChange={(e) => setLastName(e.target.value)} />;
-      case 'street':
-        return (
-          <input
-            type="text"
-            className={pIn}
-            placeholder="z.B. Musterstrasse 12"
-            value={street}
-            onChange={(e) => setStreet(e.target.value)}
-          />
-        );
-      case 'plz':
-        return (
-          <input
-            type="text"
-            className={pIn}
-            placeholder="z. B. 8000"
-            maxLength={4}
-            value={plz}
-            onChange={(e) => setPlz(e.target.value.replace(/\D/g, '').slice(0, 4))}
-          />
-        );
-      case 'city':
-        return <input type="text" className={pIn} placeholder="Ergänzen…" value={city} onChange={(e) => setCity(e.target.value)} />;
-      case 'birthDate':
-        return <input type="date" className={pIn} value={birthDate} onChange={(e) => setBirthDate(e.target.value)} />;
-      case 'gender':
-        return (
-          <select value={gender} onChange={(e) => setGender(e.target.value)} className={`${selectStyle} mt-1`}>
-            <option value="">Bitte wählen…</option>
-            <option value="male">Männlich</option>
-            <option value="female">Weiblich</option>
-            <option value="diverse">Divers</option>
-          </select>
-        );
-      case 'ahvNumber':
-        return (
-          <input
-            type="text"
-            className={pIn}
-            placeholder="756.xxxx.xxxx.xx"
-            value={ahvNumber}
-            onChange={(e) => setAhvNumber(formatAhvNumber(e.target.value))}
-          />
-        );
-      case 'phone':
-        return <input type="text" className={pIn} placeholder="+41 …" value={phone} onChange={(e) => setPhone(e.target.value)} />;
-      case 'email':
-        return <input type="email" className={pIn} placeholder="name@domain.ch" value={email} onChange={(e) => setEmail(e.target.value)} />;
-      case 'country':
-        return (
-          <select
-            className={pSel}
-            value={country && COUNTRY_OPTIONS.some(o => o.value === country) ? country : 'OTHER'}
-            onChange={(e) => {
-              const v = e.target.value;
-              setCountry(v === 'OTHER' ? '' : v);
-            }}
-          >
-            {COUNTRY_OPTIONS.map(o => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
-        );
-      case 'civilStatus':
-        return (
-          <select value={civilStatus} onChange={(e) => setCivilStatus(e.target.value)} className={`${selectStyle} mt-1`}>
-            <option value="">Bitte wählen…</option>
-            <option value="ledig">Ledig</option>
-            <option value="verheiratet">Verheiratet</option>
-            <option value="geschieden">Geschieden</option>
-            <option value="verwitwet">Verwitwet</option>
-            <option value="eingetragene Partnerschaft">Eingetragene Partnerschaft</option>
-          </select>
-        );
-      case 'residencePermit':
-        return (
-          <select value={residencePermit} onChange={(e) => setResidencePermit(e.target.value)} className={`${selectStyle} mt-1`}>
-            <option value="">Bitte wählen…</option>
-            <option value="CH">Schweizer/in</option>
-            <option value="C">Ausweis C (Niederlassung)</option>
-            <option value="B">Ausweis B (Aufenthalt)</option>
-            <option value="G">Ausweis G (Grenzgänger)</option>
-            <option value="L">Ausweis L (Kurzaufenthalt)</option>
-            <option value="N">Ausweis N (Asylsuchende)</option>
-            <option value="F">Ausweis F (vorläufig Aufgenommene)</option>
-          </select>
-        );
-      case 'contractStart':
-        return <input type="date" className={pIn} value={contractStart} onChange={(e) => setContractStart(e.target.value)} />;
-      case 'contractUnbefristet':
-        return (
-          <label className="flex items-center gap-2 text-sm mt-1 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              className="w-5 h-5 rounded border-slate-300"
-              checked={contractUnbefristet}
-              onChange={(e) => {
-                const v = e.target.checked;
-                setContractUnbefristet(v);
-                if (v) setContractEnd('');
-              }}
-            />
-            <span>Unbefristet</span>
-          </label>
-        );
-      case 'contractEnd':
-        if (contractUnbefristet) {
-          return <p className="text-xs text-slate-500 mt-1">Entfällt bei unbefristetem Vertrag.</p>;
-        }
-        return <input type="date" className={pIn} value={contractEnd} onChange={(e) => setContractEnd(e.target.value)} />;
-      case 'noticePeriodDays':
-        return (
-          <input
-            type="number"
-            min={0}
-            className={pIn}
-            placeholder="z. B. 30"
-            value={noticePeriodDays}
-            onChange={(e) => setNoticePeriodDays(e.target.value)}
-          />
-        );
-      case 'hoursPerWeek':
-        return (
-          <input
-            type="number"
-            min={0}
-            max={168}
-            step={0.5}
-            className={pIn}
-            placeholder="z. B. 20"
-            value={hoursPerWeek}
-            onChange={(e) => setHoursPerWeek(e.target.value)}
-          />
-        );
-      case 'wageType':
-        return (
-          <select value={wageType} onChange={(e) => setWageType(e.target.value)} className={`${selectStyle} mt-1`}>
-            <option value="hourly">Stundenlohn</option>
-          </select>
-        );
-      case 'hourlyRate':
-        return (
-          <input type="number" step={0.05} min={0} className={pIn} placeholder="z. B. 30.00" value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} />
-        );
-      case 'vacationWeeks':
-        return (
-          <select value={vacationWeeks} onChange={(e) => setVacationWeeks(e.target.value)} className={`${selectStyle} mt-1`}>
-            <option value="4">4</option>
-            <option value="5">5</option>
-            <option value="6">6</option>
-            <option value="7">7</option>
-          </select>
-        );
-      case 'vacationSurcharge':
-        return (
-          <input
-            type="number"
-            min={0}
-            step={0.01}
-            className={pIn}
-            placeholder="z. B. 8.33"
-            value={vacationSurcharge}
-            onChange={(e) => setVacationSurcharge(e.target.value)}
-          />
-        );
-      case 'iban':
-        return (
-          <input type="text" className={pIn} placeholder="CH93 …" value={iban} onChange={(e) => setIban(formatIban(e.target.value))} />
-        );
-      case 'billingMethod':
-        return (
-          <select value={billingMethod} onChange={(e) => setBillingMethod(e.target.value)} className={`${selectStyle} mt-1`}>
-            <option value="">Bitte wählen…</option>
-            <option value="ordinary">Ordentlich</option>
-          </select>
-        );
-      case 'canton':
-        return (
-          <>
-            <select value={canton} onChange={(e) => setCanton(e.target.value)} className={`${selectStyle} mt-1`}>
-              <option value="">Bitte wählen…</option>
-              {SWISS_CANTON_OPTIONS.map(([code, name]) => (
-                <option key={code} value={code}>
-                  {name}
-                </option>
-              ))}
-            </select>
-          </>
-        );
-      case 'nbuTotal':
-        return (
-          <input type="number" min={0} max={100} step={0.01} className={pIn} placeholder="z. B. 1.50"
-            value={nbuTotal} onChange={(e) => setNbuTotal(e.target.value)} />
-        );
-      case 'nbuEmployer':
-        return (
-          <input type="number" min={0} max={100} step={1} className={pIn} placeholder="z.B. 0"
-            value={nbuEmployer} onChange={(e) => setNbuEmployer(e.target.value)} />
-        );
-      case 'nbuEmployee':
-        return (
-          <input type="number" min={0} max={100} step={1} className={pIn} placeholder="z.B. 100"
-            value={nbuEmployee} onChange={(e) => setNbuEmployee(e.target.value)} />
-        );
-      case 'nbuEmployerVoluntary':
-        return (
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={nbuEmployerVoluntary}
-              onChange={(e) => setNbuEmployerVoluntary(e.target.checked)}
-              className="rounded border-gray-300" />
-            <span className="text-sm">Arbeitgeber übernimmt Nichtberufsunfallversicherung freiwillig</span>
-          </label>
-        );
-      default:
-        return null;
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -2026,27 +1740,13 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
             </div>
           )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,460px)] gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,640px)] gap-4">
             <div className="min-w-0 space-y-3">
-              {popupAttentionFields.length > 0 && (
-                <AttentionChecklist
-                  attentionFields={popupAttentionFields}
-                  mode={attentionMode}
-                  onModeChange={setAttentionMode}
-                  renderFieldEditor={renderPopupFieldEditor}
-                />
-              )}
-
-          {/* Content (Teil des Agentic Workflows) */}
-          <div className="rounded-2xl p-[1px] bg-[linear-gradient(90deg,rgba(59,130,246,0.55),rgba(168,85,247,0.50),rgba(16,185,129,0.38))] shadow-[0_22px_80px_rgba(2,6,23,0.18)]">
-            <div className="relative rounded-2xl border border-transparent p-5">
-              <div className="absolute inset-0 bg-[radial-gradient(900px_520px_at_15%_0%,rgba(59,130,246,0.12),transparent_60%),radial-gradient(780px_520px_at_85%_10%,rgba(168,85,247,0.12),transparent_55%),radial-gradient(620px_520px_at_45%_120%,rgba(16,185,129,0.09),transparent_55%),linear-gradient(to_bottom,rgba(2,6,23,0.92),rgba(2,6,23,0.82))] rounded-2xl" />
-              <div className="relative text-white">
-              <div className="mb-3">
-                <span className="inline-flex items-center rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wide bg-white/10 text-white border border-white/15 shadow-sm">
-                  Agentic Workflow: Prüfen & Ergänzen
-                </span>
-              </div>
+              <AttentionChecklist
+                attentionFields={popupAttentionFields}
+                mode={attentionMode}
+                onModeChange={setAttentionMode}
+              >
             {(() => {
               const ageForLogic = (() => {
                 if (!birthDate) return null;
@@ -2069,9 +1769,9 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
               const nbu8hUnder = showNbu8h && hwForLogic < 8;
               return (
               <div className="space-y-4 animate-in fade-in duration-200">
-                <section className="rounded-xl border border-white/10 bg-white/5 p-3 space-y-2">
+                <section className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-white/70">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600">
                       Logik & Hinweise
                     </span>
                   </div>
@@ -2112,8 +1812,8 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                 </section>
 
                 <div className="flex items-center gap-2">
-                  <User className="w-4 h-4 opacity-60" />
-                  <h4 className="text-sm font-bold">Stammdaten</h4>
+                  <User className="w-4 h-4 text-slate-500" />
+                  <h4 className="text-sm font-bold text-slate-900">Stammdaten</h4>
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -2206,11 +1906,11 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                 </div>
 
                 {/* Dezente Trennlinie zwischen Stammdaten und Vertragsdaten */}
-                <div className="pt-4 mt-2 border-t border-white/10" />
+                <div className="pt-4 mt-2 border-t border-slate-200" />
 
                 <div className="flex items-center gap-2">
-                  <FileText className="w-4 h-4 opacity-60" />
-                  <h4 className="text-sm font-bold">Vertragsdetails & Pensum</h4>
+                  <FileText className="w-4 h-4 text-slate-500" />
+                  <h4 className="text-sm font-bold text-slate-900">Vertragsdetails & Pensum</h4>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   <MiniField title="Vertragsbeginn" {...fieldProps('contractStart')} hasValue={!!contractStart}>
@@ -2253,7 +1953,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                   </MiniField>
                 </div>
 
-                <h4 className="text-sm font-bold">Lohn</h4>
+                <h4 className="text-sm font-bold text-slate-900">Lohn</h4>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   <MiniField title="Lohnart" {...fieldProps('wageType')} hasValue={!!wageType}>
                     <select value={wageType} onChange={e => setWageType(e.target.value)} className={selectStyle}>
@@ -2275,7 +1975,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
 
                 <div className="mt-2">
                   <div className="flex items-baseline justify-between gap-3 mb-2">
-                    <h4 className="text-sm font-bold">Versicherung & Konto</h4>
+                    <h4 className="text-sm font-bold text-slate-900">Versicherung & Konto</h4>
                     <div className="flex gap-1.5">
                       {['BVG', 'Quellensteuer', 'Nachtdienst'].map(label => (
                         <span key={label} className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-gray-100 text-gray-400 border border-gray-200/60">
@@ -2323,8 +2023,8 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                   </MiniField>
                   </div>
 
-                  <div className="mt-4 pt-3 border-t border-white/10 space-y-3">
-                    <h5 className="text-xs font-semibold text-white/80 uppercase tracking-wider">
+                  <div className="mt-4 pt-3 border-t border-slate-200 space-y-3">
+                    <h5 className="text-xs font-semibold text-slate-700 uppercase tracking-wider">
                       Nichtberufsunfallversicherung (NBU)
                     </h5>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -2360,20 +2060,18 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
               </div>
               );
             })()}
-              </div>
-            </div>
-          </div>
 
-              {/* Footer */}
-              <div className="flex items-center justify-end">
-                <button
-                  type="button"
-                  onClick={doSave}
-                  disabled={saving || !firstName || !lastName}
-                  className="px-6 py-2.5 rounded-full bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 disabled:opacity-50 transition-colors flex items-center gap-2">
-                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><CheckCircle2 className="w-4 h-4" /> Speichern & Beenden</>}
-                </button>
-              </div>
+            {/* Footer innerhalb der weißen Karte */}
+            <div className="pt-4 mt-4 border-t border-slate-200 flex items-center justify-end">
+              <button
+                type="button"
+                onClick={doSave}
+                disabled={saving || !firstName || !lastName}
+                className="px-6 py-2.5 rounded-full bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 disabled:opacity-50 transition-colors flex items-center gap-2">
+                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><CheckCircle2 className="w-4 h-4" /> Speichern & Beenden</>}
+              </button>
+            </div>
+              </AttentionChecklist>
             </div>
 
             <aside className="lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)]">
