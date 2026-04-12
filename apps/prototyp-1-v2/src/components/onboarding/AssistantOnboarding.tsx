@@ -119,6 +119,8 @@ const FIELD_LABELS: Record<string, string> = {
   'social_insurance.nbu_employer_pct': 'Nichtberufsunfallversicherung (NBU) AG-Prämienanteil (%) – aus Vertrag',
   'social_insurance.nbu_employee_pct': 'Nichtberufsunfallversicherung (NBU) AN-Prämienanteil (%) – aus Vertrag',
   'social_insurance.nbu_employer_voluntary': 'AG übernimmt Nichtberufsunfallversicherung (NBU) freiwillig',
+  'social_insurance.nbu_insurer_name': 'Nichtberufsunfallversicherung (NBU) Versicherer',
+  'social_insurance.nbu_policy_number': 'Nichtberufsunfallversicherung (NBU) Policennummer',
 };
 
 /** UI-Feld-Schlüssel → Extraktions-Pfad (für Status, Review, Popup) */
@@ -152,6 +154,8 @@ const FIELD_KEY_TO_PATH: Record<string, string> = {
   nbuEmployer: 'social_insurance.nbu_employer_pct',
   nbuEmployee: 'social_insurance.nbu_employee_pct',
   nbuEmployerVoluntary: 'social_insurance.nbu_employer_voluntary',
+  nbuInsurerName: 'social_insurance.nbu_insurer_name',
+  nbuPolicyNumber: 'social_insurance.nbu_policy_number',
 };
 
 const PATH_TO_FIELD_KEY: Record<string, string> = Object.fromEntries(
@@ -189,6 +193,8 @@ const REVIEW_POPUP_PATH_ORDER: readonly string[] = [
   'social_insurance.nbu_employer_pct',
   'social_insurance.nbu_employee_pct',
   'social_insurance.nbu_employer_voluntary',
+  'social_insurance.nbu_insurer_name',
+  'social_insurance.nbu_policy_number',
 ];
 
 function popupAttentionPathOrderIndex(path: string): number {
@@ -294,16 +300,18 @@ export type ErgaenzenSource =
 
 const ERGAENZEN_SOURCE_BY_PATH: Record<string, ErgaenzenSource> = {
   'social_insurance.nbu_total_rate_pct': 'insurance_policy',
-  'social_insurance.nbu_employer_share_pct': 'insurance_policy',
-  'social_insurance.nbu_employee_share_pct': 'insurance_policy',
-  'wage.iban': 'bank_statement',
+  'social_insurance.nbu_employer_pct': 'insurance_policy',
+  'social_insurance.nbu_employee_pct': 'insurance_policy',
+  'social_insurance.nbu_insurer_name': 'insurance_policy',
+  'social_insurance.nbu_policy_number': 'insurance_policy',
+  'wage.payment_iban': 'bank_statement',
   'assistant.phone': 'personal',
   'assistant.email': 'personal',
   'assistant.gender': 'personal',
   'assistant.civil_status': 'personal',
   'assistant.ahv_number': 'id_document',
   'assistant.birth_date': 'id_document',
-  'assistant.nationality': 'id_document',
+  'assistant.country': 'id_document',
   'assistant.residence_permit': 'id_document',
   'assistant.street': 'address',
   'assistant.zip': 'address',
@@ -908,6 +916,8 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
   const [nbuEmployer, setNbuEmployer] = useState('');
   const [nbuEmployee, setNbuEmployee] = useState('');
   const [nbuEmployerVoluntary, setNbuEmployerVoluntary] = useState(false);
+  const [nbuInsurerName, setNbuInsurerName] = useState('');
+  const [nbuPolicyNumber, setNbuPolicyNumber] = useState('');
 
   const [saving, setSaving] = useState(false);
   // Binary review state
@@ -1175,6 +1185,8 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
       setNbuEmployer(shareFieldToUiString(si.nbu_employer_pct?.value));
       setNbuEmployee(shareFieldToUiString(si.nbu_employee_pct?.value));
       if (si.nbu_employer_voluntary?.value === true) setNbuEmployerVoluntary(true);
+      if (si.nbu_insurer_name?.value) setNbuInsurerName(String(si.nbu_insurer_name.value));
+      if (si.nbu_policy_number?.value) setNbuPolicyNumber(String(si.nbu_policy_number.value));
     }
 
     // UX: Wenn der Judge bereits ein konkretes ISO-Land vorschlägt, vorbefüllen,
@@ -1441,6 +1453,8 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
         nbu_employer: nbuEmployerOut,
         nbu_employee: nbuEmployeeOut,
         nbu_employer_voluntary: nbuEmployerVoluntary,
+        nbu_insurer_name: nbuInsurerName.trim() || null,
+        nbu_policy_number: nbuPolicyNumber.trim() || null,
         extraction_metadata: extraction?.extraction_metadata ?? null,
       }
     };
@@ -1513,7 +1527,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
 
 
   return (
-    <div className="h-full flex flex-col gap-6 p-4 md:p-6 lg:p-8 overflow-y-auto lg:overflow-hidden">
+    <div className="h-full flex flex-col gap-6 p-4 md:p-6 lg:p-8 overflow-y-auto xl:overflow-hidden">
       {/* Header: nur Zurück-Link (Titel/Intro entfallen – Inhalt folgt im Workflow-Card bzw. Upload-Bereich) */}
       <div className="shrink-0 rounded-2xl border bg-card px-5 py-3 sm:px-6 sm:py-3.5">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1659,7 +1673,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
             // Enter/implicit submit soll niemals speichern.
             e.preventDefault();
           }}
-          className="flex flex-col gap-3 lg:flex-1 lg:min-h-0"
+          className="flex flex-col gap-3 xl:flex-1 xl:min-h-0"
         >
           {/* Binary Status Banner */}
           {Object.keys(confidenceMap).length > 0 && (
@@ -1692,8 +1706,8 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
             </div>
           )}
 
-          <div className="lg:flex-1 lg:min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,640px)] gap-4">
-            <div className="min-w-0 lg:min-h-0 lg:overflow-y-auto lg:pr-2 space-y-3">
+          <div className="xl:flex-1 xl:min-h-0 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,480px)] gap-4">
+            <div className="min-w-0 xl:min-h-0 xl:overflow-y-auto xl:pr-2 space-y-3">
               <AttentionChecklist attentionFields={popupAttentionFields}>
             {(() => {
               const ageForLogic = (() => {
@@ -1995,6 +2009,16 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                         <span className="text-sm text-muted-foreground">Auch bei Pensum unter 8h/Woche</span>
                       </label>
                     </MiniField>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                      <MiniField title="NBU-Versicherer" {...fieldProps('nbuInsurerName')} hasValue={!!nbuInsurerName}>
+                        <input type="text" placeholder="z.B. SUVA, Helvetia" value={nbuInsurerName}
+                          onChange={e => setNbuInsurerName(e.target.value)} className={inputStyle} />
+                      </MiniField>
+                      <MiniField title="NBU-Policennummer" {...fieldProps('nbuPolicyNumber')} hasValue={!!nbuPolicyNumber}>
+                        <input type="text" placeholder="Policennummer" value={nbuPolicyNumber}
+                          onChange={e => setNbuPolicyNumber(e.target.value)} className={inputStyle} />
+                      </MiniField>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -2014,8 +2038,8 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
               </AttentionChecklist>
             </div>
 
-            <aside className="lg:min-h-0 lg:h-full flex flex-col gap-3 lg:overflow-hidden">
-              <div className="min-h-[420px] lg:min-h-0 lg:flex-[3]">
+            <aside className="xl:min-h-0 xl:h-full flex flex-col gap-3 xl:overflow-hidden">
+              <div className="min-h-[420px] xl:min-h-0 xl:flex-[3]">
                 <ContractPreview
                   contractPreviewUrl={contractPreviewUrl}
                   contractFileName={contractFileName}
@@ -2023,7 +2047,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                   docxHtml={docxHtml}
                 />
               </div>
-              <div className="min-h-[260px] lg:min-h-0 lg:flex-[2]">
+              <div className="min-h-[260px] xl:min-h-0 xl:flex-[2]">
                 <ErgaenzenSourceGuide fields={popupAttentionFields} />
               </div>
             </aside>
