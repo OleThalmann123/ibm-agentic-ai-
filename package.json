@@ -13,5 +13,8 @@
   },
   "dependencies": {
     "vercel": "^50.41.0"
+  },
+  "devDependencies": {
+    "@vercel/node": "^5.7.4"
   }
 }
