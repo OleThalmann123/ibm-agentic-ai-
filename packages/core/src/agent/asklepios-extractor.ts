@@ -418,6 +418,13 @@ async function runAgentWithTools(
   // extraction_metadata comes from LLM (not part of tool output)
   const llmParsed = parseResponse(response.content as string);
 
+  // ── DEBUG: Log what we captured from the tool ──
+  console.log('[Asklepios Extractor] toolValidatedData:', JSON.stringify(toolValidatedData, null, 2)?.slice(0, 2000));
+  console.log('[Asklepios Extractor] llmParsed contracts keys:', toolValidatedData ? Object.keys(toolValidatedData) : 'NULL');
+  if (toolValidatedData?.assistant) {
+    console.log('[Asklepios Extractor] assistant fields:', Object.entries(toolValidatedData.assistant).map(([k, v]: [string, any]) => `${k}: ${JSON.stringify(v?.value)}`).join(', '));
+  }
+
   // MANDATORY: Use tool-validated data. No fallback to LLM text.
   if (!toolValidatedData) {
     throw new Error(
