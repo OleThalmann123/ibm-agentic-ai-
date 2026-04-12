@@ -2,12 +2,10 @@
  * Asklepios Extractor – Contract Data Extraction Agent (with Tools)
  *
  * Extracts structured data from Swiss employment contracts using LangChain
- * with tool-calling capabilities. Uses two LangChain tools:
- *   1. document_classification – validates document type
- *   2. contract_data_submission – validates & normalizes extracted data
+ * with tool-calling. Single tool: contract_data_submission (validates & normalizes).
  *
- * The TOOL OUTPUT from contract_data_submission is the authoritative result.
- * The LLM's final text response is only used for extraction_metadata.
+ * Vertragsdaten (`contracts`) kommen ausschließlich aus dem Tool-Output — nicht aus dem
+ * LLM-JSON gemischt. Die letzte LLM-Antwort liefert nur extraction_metadata (Sprache, Zähler, Warnungen).
  *
  * Architecture:
  *   Asklepios Extractor (this) → extracts + validates via Tools
@@ -342,10 +340,9 @@ function extractFirstJsonObject(text: string): string | null {
 /**
  * Run tool calls if the model requests them, then return the TOOL-VALIDATED result.
  *
- * CRITICAL: The final extraction data comes from the contract_data_submission
- * tool output — NOT from the LLM's final text response. The LLM text is only
- * used for extraction_metadata (language, field counts, warnings).
- * If the tool was not called or returned no data → Error (no fallback).
+ * CRITICAL: `contracts` kommen nur aus contract_data_submission (`data`). Das finale
+ * LLM-JSON liefert ausschließlich extraction_metadata. Kein Merge mit LLM-Feldern.
+ * Tool nicht aufgerufen oder kein `data` bei success/warning → Error.
  */
 async function runAgentWithTools(
   model: ChatOpenAI,
@@ -434,83 +431,19 @@ async function runAgentWithTools(
     );
   }
 
-  // Merge: tool-validated data (authoritative) + LLM data (fallback for gaps)
-  const mergedContracts = mergeToolCorrections(llmParsed.contracts, toolValidatedData);
+  if (!toolValidatedData) {
+    throw new Error(
+      'Asklepios Extractor: contract_data_submission lieferte keine validierten Daten (data fehlt oder status weder success noch warning).',
+    );
+  }
 
   return {
     raw: {
       extraction_metadata: llmParsed.extraction_metadata,
-      contracts: mergedContracts,
+      contracts: toolValidatedData as RawExtractionResult['contracts'],
     },
     toolCalls,
   };
-}
-
-/**
- * Merge tool-validated data with LLM extraction.
- *
- * Priority: TOOL output is authoritative (validated, normalized by the tool).
- * Fallback: LLM data fills gaps for fields the tool didn't receive.
- *
- * Special case: if the tool set a field to null (hallucination guard)
- * but the LLM has a non-null value WITH source_text, keep the LLM value —
- * the Judge (Asklepios Control) will verify it visually.
- */
-function mergeToolCorrections(
-  llmContracts: RawExtractionResult['contracts'],
-  toolData: Record<string, any> | null,
-): RawExtractionResult['contracts'] {
-  if (!toolData) return llmContracts;
-
-  const result: any = {};
-  const allSections = new Set([
-    ...Object.keys(llmContracts),
-    ...Object.keys(toolData),
-  ]);
-
-  for (const section of allSections) {
-    const llmSection = (llmContracts as any)[section] || {};
-    const toolSection = toolData[section] || {};
-    result[section] = {};
-
-    const allFields = new Set([
-      ...Object.keys(llmSection),
-      ...Object.keys(toolSection),
-    ]);
-
-    for (const field of allFields) {
-      const toolField = toolSection[field];
-      const llmField = llmSection[field];
-
-      const toolIsObject = toolField && typeof toolField === 'object' && 'value' in toolField;
-      const llmIsObject = llmField && typeof llmField === 'object' && 'value' in llmField;
-
-      if (toolIsObject && toolField.value !== null) {
-        // Tool has non-null value → authoritative (validated/normalized)
-        result[section][field] = toolField;
-      } else if (toolIsObject && toolField.value === null && llmIsObject && llmField.value !== null && llmField.source_text) {
-        // Tool nulled it (hallucination guard) but LLM has value WITH source_text
-        // → keep LLM value, Judge will verify visually
-        result[section][field] = llmField;
-      } else if (toolIsObject) {
-        // Tool explicitly set null → use tool's null
-        result[section][field] = toolField;
-      } else if (llmIsObject) {
-        // Tool didn't receive this field → use LLM extraction
-        result[section][field] = llmField;
-      } else if (toolField !== undefined && toolField !== null) {
-        // Flat tool value → wrap
-        result[section][field] = { value: toolField, source_text: '', note: '' };
-      } else if (llmField !== undefined && llmField !== null) {
-        // Flat LLM value → wrap
-        result[section][field] = { value: llmField, source_text: '', note: '' };
-      } else {
-        result[section][field] = { value: null, source_text: '', note: '' };
-      }
-    }
-  }
-
-  return result as RawExtractionResult['contracts'];
 }
 
 /**
