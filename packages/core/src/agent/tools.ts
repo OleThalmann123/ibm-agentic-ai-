@@ -192,24 +192,6 @@ export const contractDataSubmissionTool = tool(
       return result;
     };
 
-    // ── Normalize dates: CH format (DD.MM.YYYY) → ISO (YYYY-MM-DD) ──
-    const normalizeDateField = (field: { value: any; source_text: string; note: string }): void => {
-      if (!field.value) return;
-      const raw = String(field.value).trim();
-      // DD.MM.YYYY → YYYY-MM-DD
-      const chMatch = raw.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
-      if (chMatch) {
-        const dd = chMatch[1]!;
-        const mm = chMatch[2]!;
-        const yyyy = chMatch[3]!;
-        const iso = `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
-        if (field.value !== iso) {
-          corrections.push(`Datum normalisiert: ${field.value} → ${iso}`);
-          field.value = iso;
-        }
-      }
-    };
-
     const ibanMod97 = (iban: string): number => {
       // ISO 13616: move first 4 chars to end, letters -> numbers (A=10..Z=35), mod 97 iteratively
       const rearranged = `${iban.slice(4)}${iban.slice(0, 4)}`;
@@ -284,6 +266,16 @@ export const contractDataSubmissionTool = tool(
         message: 'Invalid JSON in one or more data sections. All sections must be valid JSON strings.',
       });
     }
+
+    // ── DEBUG: Log normalized data to browser console ──
+    console.log('[contract_data_submission] Normalized tool input:', JSON.stringify({
+      employer_keys: Object.keys(employerData),
+      assistant_keys: Object.keys(assistantData),
+      assistant_first_name: assistantData.first_name,
+      assistant_last_name: assistantData.last_name,
+      assistant_zip: assistantData.zip,
+      employer_first_name: employerData.first_name,
+    }, null, 2));
 
     // Map country names / ISO-3 codes to ISO-2. Must stay in sync with the
     // COUNTRY_OPTIONS list in AssistantOnboarding.tsx, otherwise the frontend
@@ -539,10 +531,6 @@ export const contractDataSubmissionTool = tool(
     }
 
     // ── Date normalization: CH (DD.MM.YYYY) → ISO (YYYY-MM-DD) ──
-    if (assistantData.birth_date) normalizeDateField(assistantData.birth_date);
-    if (contractData.start_date) normalizeDateField(contractData.start_date);
-    if (contractData.end_date) normalizeDateField(contractData.end_date);
-
     // ── Value range checks ──
     if (contractData.hours_per_week?.value != null) {
       const hours = Number(contractData.hours_per_week.value);
