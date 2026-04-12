@@ -171,16 +171,15 @@ async function runDocumentPipelineImpl(
       delete ct.hours_per_month;
     }
 
-    // ── Step 4: Agent 2 – LLM-as-a-Judge ──
-    const step4 = addTraceStep('agent_judge', 'Agent 2: Qualitätsprüfung (LLM-as-a-Judge)', {
+    // ── Step 4: Asklepios Control – Qualitätsprüfung ──
+    const step4 = addTraceStep('agent_judge', 'Asklepios Control: Qualitätsprüfung', {
       inputFields: Object.keys(rawResult.contracts),
+      mode: images?.length ? 'vision' : 'text',
     });
 
-    const sourceText = images?.length
-      ? '[Vision-basierte Extraktion aus gescanntem Dokument]'
-      : documentText;
-
-    const judgeResult = await runJudge(sourceText, rawResult.contracts);
+    // Pass images to the Judge when available so it can visually verify
+    // the extraction against the original document.
+    const judgeResult = await runJudge(documentText, rawResult.contracts, images);
 
     completeTraceStep(step4, {
       overallConfidence: judgeResult.overall_confidence,
