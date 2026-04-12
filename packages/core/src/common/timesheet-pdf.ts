@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { fmt } from '../backend/payroll';
+import { fmt } from '../services/payroll';
 import { formatIvCategoryForInlineDisplay } from './iv-assistance-categories';
 import { PDF_THEME } from './pdf-theme';
 

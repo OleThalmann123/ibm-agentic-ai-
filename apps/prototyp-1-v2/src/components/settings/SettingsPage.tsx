@@ -4,7 +4,7 @@ import {
   supabase,
   getIvStelleRecordForCanton,
   getIvStelleInvoiceRecipientSuggestion,
-} from '@asklepios/backend';
+} from '@asklepios/core';
 import { toast } from 'sonner';
 import {
   Settings as SettingsIcon, User, Save, MapPin, CreditCard,

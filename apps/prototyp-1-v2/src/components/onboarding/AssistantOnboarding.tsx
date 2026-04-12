@@ -7,7 +7,7 @@ import {
   type ChangeEvent,
   type FormEvent,
 } from 'react';
-import { supabase } from '@asklepios/backend';
+import { supabase } from '@asklepios/core';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { getCityFromChPlz, isValidChPlz } from '@/utils/chPlz';
@@ -16,9 +16,9 @@ import { AsklepiosExtractLogo } from '@/components/brand/AsklepiosExtractLogo';
 import { UploadCloud, CheckCircle2, FileText, AlertCircle, HelpCircle, User, ArrowLeft, Loader2, Share2, Copy, Check, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { ExtractingScreen } from './ExtractingScreen';
-import { runDocumentPipeline } from '@asklepios/backend';
-import { ContractExtractionResult, IDPField, ConfidenceLevel, BinaryStatus } from '@asklepios/backend';
-import type { PipelineTrace } from '@asklepios/backend';
+import { runDocumentPipeline } from '@asklepios/core';
+import { ContractExtractionResult, IDPField, ConfidenceLevel, BinaryStatus } from '@asklepios/core';
+import type { PipelineTrace } from '@asklepios/core';
 
 const formatAIWarning = (code: string) => {
   const map: Record<string, string> = {

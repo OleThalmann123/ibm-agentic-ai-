@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import type { PayslipAccountingMethod, PayslipResult } from '../backend/payslip';
+import type { PayslipAccountingMethod, PayslipResult } from '../services/payslip';
 import { PDF_THEME, pdfValueColMm } from './pdf-theme';
 
 const TW = PDF_THEME.INNER_W;

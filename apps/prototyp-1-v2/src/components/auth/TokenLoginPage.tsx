@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { supabase } from '@asklepios/backend';
-import type { Assistant } from '@asklepios/backend';
+import { supabase } from '@asklepios/core';
+import type { Assistant } from '@asklepios/core';
 import {
   Clock, XCircle, ChevronLeft, ChevronRight, ChevronUp, ChevronDown,
   CheckCircle2, List, Pencil, Trash2, Moon, FileText, ShieldCheck, AlertCircle, Download,
@@ -15,7 +15,7 @@ import {
   getIvAssistanceActivityOptions,
   getFerienzuschlagRate,
   type PayslipAccountingMethod,
-} from '@asklepios/backend';
+} from '@asklepios/core';
 import { toast } from 'sonner';
 import { sanitizeFilenamePart } from '@/utils/filename';
 import { AsklepiosLogo } from '@/components/brand/AsklepiosLogo';
