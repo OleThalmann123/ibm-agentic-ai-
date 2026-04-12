@@ -8,7 +8,7 @@ import {
 import { toast } from 'sonner';
 import {
   Settings as SettingsIcon, User, Save, MapPin, CreditCard,
-  Users, Moon, Shield, RotateCcw, HeartHandshake, Mail, Home
+  Users, Moon, Shield, RotateCcw, HeartHandshake, Mail, Home, Lock
 } from 'lucide-react';
 import { getCantonFromPLZ } from '@/utils/chPlz';
 
@@ -436,6 +436,43 @@ export function SettingsPage() {
         </div>
       </div>
 
+      {/* Developer Options (moved to top for demo) */}
+      <SettingsCard
+        icon={RotateCcw}
+        iconColor="text-red-600"
+        iconBg="bg-red-500/10"
+        title="Entwickler-Optionen"
+        description="Onboarding erneut durchlaufen (löscht aktuelle Daten)"
+        badge="Demo only"
+      >
+        <button
+          onClick={resetOnboarding}
+          disabled={resetting}
+          className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 disabled:opacity-50
+            bg-red-500/10 text-red-600 hover:bg-red-500/20 border border-red-200"
+        >
+          {resetting ? (
+            <div className="animate-spin rounded-full h-4 w-4 border-2 border-red-400/30 border-t-red-500" />
+          ) : (
+            <>
+              <RotateCcw className="w-4 h-4" />
+              Onboarding zurücksetzen
+            </>
+          )}
+        </button>
+      </SettingsCard>
+
+      {/* Demo-only notice for the disabled section below */}
+      <div className="rounded-2xl border border-dashed border-amber-300/60 bg-amber-50/60 px-4 py-2.5 text-sm font-medium text-amber-800 flex items-center gap-2">
+        <Lock className="w-4 h-4" />
+        Nicht verfügbar (Demo) – weitere Einstellungen sind in dieser Vorschau deaktiviert.
+      </div>
+
+      <div
+        aria-disabled="true"
+        {...({ inert: '' } as Record<string, string>)}
+        className="opacity-50 pointer-events-none select-none"
+      >
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left Column */}
         <div className="lg:col-span-5 space-y-6">
@@ -452,32 +489,6 @@ export function SettingsPage() {
               label="Rolle"
               value={employerAccess?.role === 'admin_full' ? 'Administrator (Vollzugriff)' : 'Administrator (Eingeschränkt)'}
             />
-          </SettingsCard>
-
-          {/* Danger Zone */}
-          <SettingsCard
-            icon={RotateCcw}
-            iconColor="text-red-600"
-            iconBg="bg-red-500/10"
-            title="Entwickler-Optionen"
-            description="Onboarding erneut durchlaufen (löscht aktuelle Daten)"
-            badge="Demo only"
-          >
-            <button
-              onClick={resetOnboarding}
-              disabled={resetting}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 disabled:opacity-50
-                bg-red-500/10 text-red-600 hover:bg-red-500/20 border border-red-200"
-            >
-              {resetting ? (
-                <div className="animate-spin rounded-full h-4 w-4 border-2 border-red-400/30 border-t-red-500" />
-              ) : (
-                <>
-                  <RotateCcw className="w-4 h-4" />
-                  Onboarding zurücksetzen
-                </>
-              )}
-            </button>
           </SettingsCard>
         </div>
 
@@ -716,6 +727,7 @@ export function SettingsPage() {
             </SettingsCard>
           )}
         </div>
+      </div>
       </div>
     </div>
   );
