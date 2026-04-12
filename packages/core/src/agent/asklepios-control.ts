@@ -123,7 +123,7 @@ function getJudgeModel(apiKey: string): ChatOpenAI {
         'X-Title': 'Asklepios Control – Qualitätsprüfung',
       },
     },
-    modelName: getJudgeModelName(),
+    model: getJudgeModelName(),
     temperature: 0.0,
     maxRetries: 1,
     timeout: 300_000,

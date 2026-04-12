@@ -184,7 +184,7 @@ function getApiKey(): string | null {
   return import.meta.env.VITE_OPENROUTER_API_KEY || null;
 }
 
-function getModel(apiKey: string, modelName: string = DEFAULT_EXTRACTOR_MODEL): ChatOpenAI {
+function getModel(apiKey: string, modelId: string = DEFAULT_EXTRACTOR_MODEL): ChatOpenAI {
   return new ChatOpenAI({
     apiKey,
     configuration: {
@@ -195,7 +195,7 @@ function getModel(apiKey: string, modelName: string = DEFAULT_EXTRACTOR_MODEL): 
         'X-Title': 'Asklepios Extractor – Vertragsextraktion',
       },
     },
-    modelName,
+    model: modelId,
     temperature: 0.1,
     maxRetries: 1,
     timeout: 300_000,
