@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 import { getCityFromChPlz, isValidChPlz } from '@/utils/chPlz';
 import asklepiosMark from '@/assets/asklepios-mark.svg';
 import { AsklepiosExtractLogo } from '@/components/brand/AsklepiosExtractLogo';
-import { UploadCloud, CheckCircle2, FileText, ArrowRight, AlertCircle, HelpCircle, User, ArrowLeft, Loader2, Share2, Copy, Check, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { UploadCloud, CheckCircle2, FileText, AlertCircle, HelpCircle, User, ArrowLeft, Loader2, Share2, Copy, Check, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { ExtractingScreen } from './ExtractingScreen';
 import { runDocumentPipeline } from '@asklepios/backend';
@@ -960,7 +960,6 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
     hasWarnings: boolean;
   } | null>(null);
   const [rejectedFileName, setRejectedFileName] = useState<string>('');
-  const [tab, setTab] = useState<'stammdaten' | 'abrechnungsdaten'>('stammdaten');
   const [extraction, setExtraction] = useState<ContractExtractionResult | null>(null);
   const [extractionError, setExtractionError] = useState<string | null>(null);
   const [savedAssistantId, setSavedAssistantId] = useState<string | null>(null);
@@ -1397,7 +1396,6 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
         }
 
         setStep('review');
-        setTab('stammdaten');
 
         // Default-Modus festlegen: wenn es Prüf-Felder gibt → prüfen, sonst ergänzen.
         const hasReviewRows = attention.some((f) => !f.missing && f.needsReview);
@@ -1448,13 +1446,6 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
 
   const doSave = async () => {
     if (!employerAccess?.employer_id) return;
-
-    // Speichern darf nur im Schritt 2 passieren.
-    if (tab !== 'abrechnungsdaten') {
-      setTab('abrechnungsdaten');
-      toast.info('Bitte auch die Abrechnungsdaten prüfen.', { duration: 2500 });
-      return;
-    }
 
     // NBU-Validierung
     //
@@ -2001,8 +1992,6 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
           onSubmit={(e) => {
             // Enter/implicit submit soll niemals speichern.
             e.preventDefault();
-            setTab('abrechnungsdaten');
-            toast.info('Bitte auch die Abrechnungsdaten prüfen.', { duration: 2500 });
           }}
           className="space-y-3"
         >
@@ -2048,26 +2037,6 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                 />
               )}
 
-              {/* Tab switcher */}
-          <div className="flex justify-center">
-            <div className="inline-flex rounded-full bg-muted/50 p-1">
-              <button 
-                type="button"
-                onClick={() => setTab('stammdaten')}
-                className={`px-5 py-2 rounded-full text-sm font-bold transition-all flex items-center gap-2 ${tab === 'stammdaten' ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-              >
-                <User className="w-4 h-4 opacity-50" /> Stammdaten
-              </button>
-              <button 
-                type="button"
-                onClick={() => setTab('abrechnungsdaten')}
-                className={`px-5 py-2 rounded-full text-sm font-bold transition-all flex items-center gap-2 ${tab === 'abrechnungsdaten' ? 'bg-white shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-              >
-                <FileText className="w-4 h-4 opacity-50" /> Abrechnungsdaten
-              </button>
-            </div>
-          </div>
-
           {/* Content (Teil des Agentic Workflows) */}
           <div className="rounded-2xl p-[1px] bg-[linear-gradient(90deg,rgba(59,130,246,0.55),rgba(168,85,247,0.50),rgba(16,185,129,0.38))] shadow-[0_22px_80px_rgba(2,6,23,0.18)]">
             <div className="relative rounded-2xl border border-transparent p-5">
@@ -2078,7 +2047,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                   Agentic Workflow: Prüfen & Ergänzen
                 </span>
               </div>
-            {tab === 'stammdaten' && (() => {
+            {(() => {
               const ageForLogic = (() => {
                 if (!birthDate) return null;
                 const bd = new Date(birthDate);
@@ -2090,35 +2059,64 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
               })();
               const showPermitWarning = !!residencePermit && residencePermit !== 'CH' && residencePermit !== 'C';
               const showAgeWarning = ageForLogic !== null && (ageForLogic < 18 || ageForLogic > 65);
-              const hasLogic = showPermitWarning || showAgeWarning;
+              const hwForLogic = parseFloat(hoursPerWeek);
+              const hrForLogic = parseFloat(hourlyRate);
+              const monthlyForLogic = (Number.isFinite(hwForLogic) && Number.isFinite(hrForLogic) && hwForLogic > 0 && hrForLogic > 0)
+                ? hwForLogic * 4 * hrForLogic
+                : null;
+              const showBvgWarning = monthlyForLogic !== null && monthlyForLogic > 1890;
+              const showNbu8h = Number.isFinite(hwForLogic) && hwForLogic > 0;
+              const nbu8hUnder = showNbu8h && hwForLogic < 8;
               return (
               <div className="space-y-4 animate-in fade-in duration-200">
-                {hasLogic && (
-                  <section className="rounded-xl border border-white/10 bg-white/5 p-3 space-y-2">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-white/70">
-                        Logik & Hinweise
-                      </span>
+                <section className="rounded-xl border border-white/10 bg-white/5 p-3 space-y-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-white/70">
+                      Logik & Hinweise
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <div className="md:col-span-2 flex items-start gap-2.5 rounded-lg border border-blue-200 bg-blue-50/90 px-4 py-3 text-sm text-blue-800">
+                      <HelpCircle className="w-4 h-4 mt-0.5 shrink-0 text-blue-500" />
+                      <span>Der <strong>Nichtberufsunfallversicherungs-Gesamtprämiensatz (NBU)</strong> muss zwingend manuell eingegeben werden – entnehmen Sie ihn Ihrer Versicherungspolice (typischerweise 0.5–3&nbsp;%). Die Aufteilung in AG-/AN-Anteil kann aus dem Arbeitsvertrag übernommen werden.</span>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                      {showPermitWarning && (
-                        <div className="bg-amber-50 rounded-xl border border-amber-200 p-3 text-sm text-amber-800 flex items-start gap-2">
-                          <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                          <span>Aufenthaltsstatus «{residencePermit}» – Quellensteuer wäre nötig, ist aber aktuell <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase bg-gray-200 text-gray-500 mx-0.5">Out of Scope</span>. Lohnabrechnung nur für Schweizer/innen und C-Bewilligung möglich.</span>
-                        </div>
-                      )}
-                      {showAgeWarning && (
-                        <div className="bg-red-50 rounded-xl border border-red-200 p-3 text-sm text-red-800 flex items-start gap-2">
-                          <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                          <span>Alter {ageForLogic} Jahre – Lohnabrechnung nur für Personen im Alter von 18–65 Jahren möglich.</span>
-                        </div>
-                      )}
-                    </div>
-                  </section>
-                )}
-                <h4 className="text-sm font-bold">Assistenzperson</h4>
+                    {showPermitWarning && (
+                      <div className="bg-amber-50 rounded-xl border border-amber-200 p-3 text-sm text-amber-800 flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        <span>Aufenthaltsstatus «{residencePermit}» – Quellensteuer wäre nötig, ist aber aktuell <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase bg-gray-200 text-gray-500 mx-0.5">Out of Scope</span>. Lohnabrechnung nur für Schweizer/innen und C-Bewilligung möglich.</span>
+                      </div>
+                    )}
+                    {showAgeWarning && (
+                      <div className="bg-red-50 rounded-xl border border-red-200 p-3 text-sm text-red-800 flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        <span>Alter {ageForLogic} Jahre – Lohnabrechnung nur für Personen im Alter von 18–65 Jahren möglich.</span>
+                      </div>
+                    )}
+                    {showBvgWarning && (
+                      <div className="bg-amber-50 rounded-xl border border-amber-200 p-3 text-sm text-amber-800">
+                        Monatliches Einkommen ca. CHF {monthlyForLogic!.toFixed(0)} – liegt über CHF 1'890 (BVG-Schwelle von CHF 22'680/Jahr).
+                        <span className="inline-flex items-center ml-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase bg-gray-200 text-gray-500">BVG Out of Scope</span>
+                      </div>
+                    )}
+                    {showNbu8h && nbu8hUnder && (
+                      <div className="bg-blue-50 rounded-xl border border-blue-100 p-3 text-sm text-blue-700">
+                        Pensum unter 8h/Woche – Nichtberufsunfallversicherung ist nicht obligatorisch. Die NBU-Felder sind optional und können leer bleiben.
+                      </div>
+                    )}
+                    {showNbu8h && !nbu8hUnder && (
+                      <div className="bg-emerald-50 rounded-xl border border-emerald-200 p-3 text-sm text-emerald-700">
+                        Pensum ≥ 8h/Woche – Nichtberufsunfallversicherung pflichtig. Der Abzug wird auf der Lohnabrechnung ausgewiesen.
+                      </div>
+                    )}
+                  </div>
+                </section>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="flex items-center gap-2">
+                  <User className="w-4 h-4 opacity-60" />
+                  <h4 className="text-sm font-bold">Stammdaten</h4>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   <MiniField title="Vorname" {...fieldProps('firstName')} hasValue={!!firstName}>
                     <input type="text" placeholder="Bitte ergänzen..." value={firstName} onChange={e => setFirstName(e.target.value)} className={inputStyle} />
                   </MiniField>
@@ -2136,7 +2134,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                   </MiniField>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   <MiniField title="PLZ" {...fieldProps('plz')} hasValue={!!plz} error={validatePlz(plz)} hint="Gültige PLZ">
                     <input type="text" placeholder="z.B. 8000" maxLength={4} value={plz} onChange={e => { const v = e.target.value.replace(/\D/g, '').slice(0, 4); setPlz(v); }} className={inputStyle} />
                   </MiniField>
@@ -2151,7 +2149,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                   </MiniField>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   <MiniField title="Geschlecht" {...fieldProps('gender')} hasValue={!!gender}>
                     <select value={gender} onChange={e => setGender(e.target.value)} className={selectStyle}>
                       <option value="">Bitte wählen...</option>
@@ -2182,7 +2180,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                   </MiniField>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   <MiniField title="Zivilstand" {...fieldProps('civilStatus')} hasValue={!!civilStatus}>
                     <select value={civilStatus} onChange={e => setCivilStatus(e.target.value)} className={selectStyle}>
                       <option value="">Bitte wählen...</option>
@@ -2206,53 +2204,15 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                     </select>
                   </MiniField>
                 </div>
-              </div>
-              );
-            })()}
 
-            {tab === 'abrechnungsdaten' && (() => {
-              const hwForLogic = parseFloat(hoursPerWeek);
-              const hrForLogic = parseFloat(hourlyRate);
-              const monthlyForLogic = (Number.isFinite(hwForLogic) && Number.isFinite(hrForLogic) && hwForLogic > 0 && hrForLogic > 0)
-                ? hwForLogic * 4 * hrForLogic
-                : null;
-              const showBvgWarning = monthlyForLogic !== null && monthlyForLogic > 1890;
-              const showNbu8h = Number.isFinite(hwForLogic) && hwForLogic > 0;
-              const nbu8hUnder = showNbu8h && hwForLogic < 8;
-              return (
-              <div className="space-y-4 animate-in fade-in duration-200">
-                <section className="rounded-xl border border-white/10 bg-white/5 p-3 space-y-2">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-white/70">
-                      Logik & Hinweise
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    <div className="md:col-span-2 flex items-start gap-2.5 rounded-lg border border-blue-200 bg-blue-50/90 px-4 py-3 text-sm text-blue-800">
-                      <HelpCircle className="w-4 h-4 mt-0.5 shrink-0 text-blue-500" />
-                      <span>Der <strong>Nichtberufsunfallversicherungs-Gesamtprämiensatz (NBU)</strong> muss zwingend manuell eingegeben werden – entnehmen Sie ihn Ihrer Versicherungspolice (typischerweise 0.5–3&nbsp;%). Die Aufteilung in AG-/AN-Anteil kann aus dem Arbeitsvertrag übernommen werden.</span>
-                    </div>
-                    {showBvgWarning && (
-                      <div className="bg-amber-50 rounded-xl border border-amber-200 p-3 text-sm text-amber-800">
-                        Monatliches Einkommen ca. CHF {monthlyForLogic!.toFixed(0)} – liegt über CHF 1'890 (BVG-Schwelle von CHF 22'680/Jahr).
-                        <span className="inline-flex items-center ml-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase bg-gray-200 text-gray-500">BVG Out of Scope</span>
-                      </div>
-                    )}
-                    {showNbu8h && nbu8hUnder && (
-                      <div className="bg-blue-50 rounded-xl border border-blue-100 p-3 text-sm text-blue-700">
-                        Pensum unter 8h/Woche – Nichtberufsunfallversicherung ist nicht obligatorisch. Die NBU-Felder sind optional und können leer bleiben.
-                      </div>
-                    )}
-                    {showNbu8h && !nbu8hUnder && (
-                      <div className="bg-emerald-50 rounded-xl border border-emerald-200 p-3 text-sm text-emerald-700">
-                        Pensum ≥ 8h/Woche – Nichtberufsunfallversicherung pflichtig. Der Abzug wird auf der Lohnabrechnung ausgewiesen.
-                      </div>
-                    )}
-                  </div>
-                </section>
+                {/* Dezente Trennlinie zwischen Stammdaten und Vertragsdaten */}
+                <div className="pt-4 mt-2 border-t border-white/10" />
 
-                <h4 className="text-sm font-bold">Vertragsdetails & Pensum</h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 opacity-60" />
+                  <h4 className="text-sm font-bold">Vertragsdetails & Pensum</h4>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   <MiniField title="Vertragsbeginn" {...fieldProps('contractStart')} hasValue={!!contractStart}>
                     <input type="date" value={contractStart} onChange={e => setContractStart(e.target.value)} className={inputStyle} />
                   </MiniField>
@@ -2294,7 +2254,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                 </div>
 
                 <h4 className="text-sm font-bold">Lohn</h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   <MiniField title="Lohnart" {...fieldProps('wageType')} hasValue={!!wageType}>
                     <select value={wageType} onChange={e => setWageType(e.target.value)} className={selectStyle}>
                       <option value="hourly">Stundenlohn</option>
@@ -2325,7 +2285,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   <MiniField title="Ferienzuschlag %" {...fieldProps('vacationSurcharge')} hasValue={!!vacationSurcharge}>
                     <input
                       type="number"
@@ -2367,7 +2327,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                     <h5 className="text-xs font-semibold text-white/80 uppercase tracking-wider">
                       Nichtberufsunfallversicherung (NBU)
                     </h5>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                       <MiniField title="Nichtberufsunfallvers. (NBU) Gesamtprämiensatz (%) – manuell" {...fieldProps('nbuTotal')} hasValue={!!nbuTotal}
                         hint="Gesamtprämiensatz gemäss Ihrer Versicherungspolice (typ. 0.5–3%)"
                         error={nbuTotal && parseFloat(nbuTotal) > 5 ? 'Unrealistisch hoch – Prämiensätze liegen typischerweise bei 0.5–3%' : undefined}>
@@ -2405,32 +2365,14 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
           </div>
 
               {/* Footer */}
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">
-                  Schritt {tab === 'stammdaten' ? '1' : '2'} von 2
-                </span>
-                <div className="flex gap-3">
-                  {tab === 'abrechnungsdaten' && (
-                    <button type="button" onClick={() => setTab('stammdaten')}
-                      className="px-5 py-2.5 rounded-full border text-sm font-medium hover:bg-muted transition-colors flex items-center gap-2">
-                      <ArrowLeft className="w-4 h-4" /> Zurück
-                    </button>
-                  )}
-                  {tab === 'stammdaten' ? (
-                    <button type="button" onClick={() => setTab('abrechnungsdaten')}
-                      className="px-6 py-2.5 rounded-full bg-foreground text-background font-bold text-sm hover:bg-foreground/90 transition-colors flex items-center gap-2">
-                      Weiter zu Abrechnungsdaten <ArrowRight className="w-4 h-4" />
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={doSave}
-                      disabled={saving || !firstName || !lastName}
-                      className="px-6 py-2.5 rounded-full bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 disabled:opacity-50 transition-colors flex items-center gap-2">
-                      {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><CheckCircle2 className="w-4 h-4" /> Speichern & Beenden</>}
-                    </button>
-                  )}
-                </div>
+              <div className="flex items-center justify-end">
+                <button
+                  type="button"
+                  onClick={doSave}
+                  disabled={saving || !firstName || !lastName}
+                  className="px-6 py-2.5 rounded-full bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 disabled:opacity-50 transition-colors flex items-center gap-2">
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><CheckCircle2 className="w-4 h-4" /> Speichern & Beenden</>}
+                </button>
               </div>
             </div>
 
