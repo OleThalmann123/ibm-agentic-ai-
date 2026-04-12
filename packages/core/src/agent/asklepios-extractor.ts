@@ -100,15 +100,13 @@ Kontext: Im Vertrag gibt es ZWEI Parteien – verwechsle sie NICHT:
 Du extrahierst ausschliesslich die Daten der Arbeitnehmerin (Assistenzperson).
 
 Schritte:
-1. Rufe document_classification auf – prüfe ob es ein Schweizer Arbeitsvertrag ist.
-2. Wenn kein Arbeitsvertrag: gib ein leeres JSON mit warnings=["KEIN_ARBEITSVERTRAG"] zurück.
-3. Lies den gesamten Vertrag durch und extrahiere ALLE unten gelisteten Felder.
-4. Rufe contract_data_submission auf mit ALLEN extrahierten Feldern. WICHTIG:
+1. Lies den gesamten Vertrag durch und extrahiere ALLE unten gelisteten Felder.
+2. Rufe contract_data_submission auf mit ALLEN extrahierten Feldern. WICHTIG:
    - Übergib JEDE Sektion (employer, assistant, contract_terms, wage, social_insurance) als JSON-String.
    - JEDES Feld MUSS als Object formatiert sein: {"value": ..., "source_text": "wörtliches Zitat aus dem Vertrag", "note": ""}
    - Übergib auch Felder mit value=null (mit note warum null).
    - Das Tool validiert und normalisiert die Daten. Das Tool-Ergebnis ist das finale Resultat.
-5. Gib nach dem Tool-Aufruf dein finales JSON aus. Es MUSS die gleichen Daten enthalten die du dem Tool übergeben hast.
+3. Gib nach dem Tool-Aufruf dein finales JSON aus. Es MUSS die gleichen Daten enthalten die du dem Tool übergeben hast.
 
 Regeln:
 - NUR extrahieren was im Vertrag steht. Niemals erfinden.
