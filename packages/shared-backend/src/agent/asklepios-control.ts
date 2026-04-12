@@ -1,15 +1,19 @@
 /**
- * LLM-as-a-Judge (Agent 2)
- * 
- * A separate model that evaluates the output of Agent 1 (the extractor).
- * It reviews each extracted field against the original contract text and
+ * Asklepios Control – Quality Control Agent (LLM-as-a-Judge)
+ *
+ * Evaluates the TOOL-VALIDATED output of Asklepios Extractor.
+ * Reviews each extracted field against the original contract text and
  * assigns confidence scores with justification.
- * 
- * Architecture (from Meeting Decision #4):
- *   Agent 1 extracts data as JSON →
- *   Agent 2 reviews extraction against original contract →
- *   Agent 2 assigns confidence scores + justification per field →
+ *
+ * Architecture:
+ *   Asklepios Extractor extracts + validates data via Tools →
+ *   Asklepios Control reviews the Tool output against original contract →
+ *   Assigns confidence scores + justification per field →
  *   Binary mapping: score >= 0.8 → "ok" (HOOTL), < 0.8 → "review_required" (HOTL/HITL)
+ *
+ * Human-in-the-Loop:
+ *   "verify" (Prüfen) – value extracted but uncertain, human checks
+ *   "supplement" (Ergänzen) – value missing, human must add
  */
 
 import { ChatOpenAI } from '@langchain/openai';
@@ -273,7 +277,7 @@ export async function runJudge(
       new SystemMessage(JUDGE_SYSTEM_PROMPT),
       new HumanMessage(JUDGE_USER_PROMPT(originalText, extractedContracts)),
     ],
-    await getLangSmithInvokeConfig('agent-2-judge', {
+    await getLangSmithInvokeConfig('asklepios-control', {
       fieldsToReview: Object.keys(extractedContracts),
     }),
   );

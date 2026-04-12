@@ -146,19 +146,19 @@ export function getLangSmithTracer(): LangChainTracer | null {
  * Includes tracer + run metadata so Agent 1 and Agent 2 appear
  * as distinct, labeled runs in LangSmith.
  */
-export type LangSmithAgentLabel = 'agent-1-extractor' | 'agent-2-judge';
+export type LangSmithAgentLabel = 'asklepios-extractor' | 'asklepios-control';
 
 const AGENT_LABELS: Record<
   LangSmithAgentLabel,
   { name: string; tags: string[] }
 > = {
-  'agent-1-extractor': {
-    name: 'Agent 1: Datenextraktion',
-    tags: ['agent-1', 'extractor', 'tools'],
+  'asklepios-extractor': {
+    name: 'Asklepios Extractor: Datenextraktion',
+    tags: ['asklepios', 'extractor', 'tools'],
   },
-  'agent-2-judge': {
-    name: 'Agent 2: LLM-as-a-Judge',
-    tags: ['agent-2', 'judge', 'quality-check'],
+  'asklepios-control': {
+    name: 'Asklepios Control: Qualitätsprüfung',
+    tags: ['asklepios', 'control', 'judge', 'quality-check'],
   },
 };
 

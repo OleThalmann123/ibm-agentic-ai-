@@ -1,9 +1,9 @@
 // Export agents (LangChain + OpenRouter)
-export * from './agent/openrouter';
+export * from './agent/asklepios-extractor';
 export * from './agent/pdf-extractor';
 export * from './agent/pipeline';
 export * from './agent/types';
-export * from './agent/judge';
+export * from './agent/asklepios-control';
 export * from './agent/tools';
 export * from './agent/trace';
 export * from './agent/langsmith';

@@ -17,9 +17,9 @@ import {
   extractContractData,
   extractContractFromImages,
   mergeWithJudgeResult,
-} from './openrouter';
+} from './asklepios-extractor';
 import { readFileContent } from './pdf-extractor';
-import { runJudge } from './judge';
+import { runJudge } from './asklepios-control';
 import {
   startTrace,
   addTraceStep,
@@ -110,10 +110,18 @@ async function runDocumentPipelineImpl(
       toolsUsed: toolCalls,
     });
 
-    // Enforce tool usage: contract_data_submission MUST have been called so
-    // Swiss-specific validation (IBAN, AHV, canton, enums, hallucination
-    // guards) actually ran. Otherwise the extraction is untrusted and we
-    // refuse to accept it.
+    // Enforce tool usage: both tools MUST have been called.
+    // document_classification ensures the document was properly classified.
+    // contract_data_submission ensures Swiss-specific validation (IBAN, AHV,
+    // canton, enums, hallucination guards) actually ran.
+    // Without these tools, the extraction is untrusted and we refuse to accept it.
+    const classificationCalled = toolCalls.includes('document_classification');
+    if (!classificationCalled) {
+      throw new Error(
+        'Asklepios Extractor hat document_classification nicht aufgerufen – Dokumentklassifizierung fehlt, Ergebnis nicht akzeptiert.',
+      );
+    }
+
     const hadContracts =
       rawResult.contracts &&
       (rawResult.contracts.employer ||
@@ -122,7 +130,7 @@ async function runDocumentPipelineImpl(
     const submissionCalled = toolCalls.includes('contract_data_submission');
     if (hadContracts && !submissionCalled) {
       throw new Error(
-        'Agent hat contract_data_submission nicht aufgerufen – Validierung fehlt, Ergebnis nicht akzeptiert.',
+        'Asklepios Extractor hat contract_data_submission nicht aufgerufen – Validierung fehlt, Ergebnis nicht akzeptiert.',
       );
     }
 

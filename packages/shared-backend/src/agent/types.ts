@@ -10,6 +10,9 @@ export type ConfidenceLevel = 'high' | 'medium' | 'low';
 
 export type BinaryStatus = 'ok' | 'review_required';
 
+/** Human-in-the-Loop review type: verify = Prüfen, supplement = Ergänzen */
+export type ReviewType = 'verify' | 'supplement';
+
 export type DocumentClassification = 'contract' | 'invoice' | 'other';
 
 export interface IDPField<T = any> {
@@ -17,6 +20,8 @@ export interface IDPField<T = any> {
   confidence: ConfidenceLevel;
   confidence_score: number;
   status?: BinaryStatus;
+  /** 'verify' = Prüfen (Wert da, unsicher), 'supplement' = Ergänzen (Wert fehlt) */
+  review_type?: ReviewType;
   source_text: string;
   note: string;
   judge_justification?: string;
@@ -31,6 +36,10 @@ export interface IDPMetadata {
   fields_requiring_review?: number;
   warnings: string[];
   review_required_fields?: string[];
+  /** Fields where value exists but is uncertain → human verifies (Prüfen) */
+  review_verify_fields?: string[];
+  /** Fields where value is missing → human must add (Ergänzen) */
+  review_supplement_fields?: string[];
 }
 
 export interface ContractSchema {
