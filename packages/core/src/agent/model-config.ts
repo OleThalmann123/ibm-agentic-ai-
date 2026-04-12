@@ -48,7 +48,7 @@ export function getJudgeModelName(): string {
  * Asklepios Classifier — Dokumentklassifizierung (ja/nein).
  * Haiku 4.5: Schnell und günstig – einfache Ja/Nein-Entscheidung.
  */
-export const DEFAULT_CLASSIFIER_MODEL = 'anthropic/claude-haiku-4-5-20251001';
+export const DEFAULT_CLASSIFIER_MODEL = 'anthropic/claude-haiku-4.5';
 
 export function getClassifierModelName(): string {
   return (
