@@ -107,7 +107,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (session?.user) {
         fetchEmployerAccesses(session.user.id)
           .then((access) => {
-            if (access) fetchEmployer(access.employer_id);
+            if (access) return fetchEmployer(access.employer_id);
           })
           .catch((err) => console.error('Error fetching employer info:', err))
           .finally(() => setLoading(false));
