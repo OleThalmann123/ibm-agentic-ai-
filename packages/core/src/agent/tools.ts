@@ -538,10 +538,10 @@ export const contractDataSubmissionTool = tool(
         // EAN-13 / GS1 check digit validation (weighting 1-3-1-3-…, mod 10)
         let ean13sum = 0;
         for (let i = 0; i < 12; i++) {
-          ean13sum += parseInt(digits[i]) * (i % 2 === 0 ? 1 : 3);
+          ean13sum += parseInt(digits.charAt(i)) * (i % 2 === 0 ? 1 : 3);
         }
         const expectedCheck = (10 - (ean13sum % 10)) % 10;
-        const actualCheck = parseInt(digits[12]);
+        const actualCheck = parseInt(digits.charAt(12));
         if (expectedCheck !== actualCheck) {
           validationErrors.push(
             `AHV-Prüfziffer ungültig (EAN-13): erwartet ${expectedCheck}, gefunden ${actualCheck} – möglicherweise Tipp-/OCR-Fehler`,
@@ -689,9 +689,8 @@ export const contractDataSubmissionTool = tool(
       if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
       // Swiss format DD.MM.YYYY
       const match = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
-      if (match) {
-        const [, dd, mm, yyyy] = match;
-        return `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+      if (match && match[1] && match[2] && match[3]) {
+        return `${match[3]}-${match[2].padStart(2, '0')}-${match[1].padStart(2, '0')}`;
       }
       return null;
     };

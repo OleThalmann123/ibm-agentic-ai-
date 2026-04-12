@@ -130,7 +130,7 @@ async function runDocumentPipelineImpl(
     // ── Step 3: Asklepios Extractor – Extraktion mit Tools ──
     // Nutzt document_classification + contract_data_submission selbständig.
     // Tool-Output ist das autoritative Ergebnis (kein LLM-Fallback).
-    const step2 = addTraceStep('agent_extraction', 'Asklepios Extractor: Datenextraktion', {
+    const step3 = addTraceStep('agent_extraction', 'Asklepios Extractor: Datenextraktion', {
       mode: images?.length ? 'vision' : 'text',
     });
 
@@ -147,7 +147,7 @@ async function runDocumentPipelineImpl(
       toolCalls = extracted.toolCalls;
     }
 
-    completeTraceStep(step2, {
+    completeTraceStep(step3, {
       fieldsExtracted: rawResult.extraction_metadata.fields_extracted,
       fieldsMissing: rawResult.extraction_metadata.fields_missing,
       warnings: rawResult.extraction_metadata.warnings,
@@ -178,8 +178,8 @@ async function runDocumentPipelineImpl(
       );
     }
 
-    // ── Step 3: Safety-Check – Hat Agent 1 Vertragsdaten erkannt? ──
-    const step3 = addTraceStep('classification', 'Vertragserkennung (Safety-Check)');
+    // ── Step 4: Safety-Check – Hat Agent Vertragsdaten zurückgegeben? ──
+    const step4 = addTraceStep('classification', 'Vertragserkennung (Safety-Check)');
 
     const hasContracts =
       rawResult.contracts &&
@@ -188,7 +188,7 @@ async function runDocumentPipelineImpl(
         rawResult.contracts.contract_terms);
 
     if (!hasContracts) {
-      completeTraceStep(step3, { classification: 'other' });
+      completeTraceStep(step4, { classification: 'other' });
       const finalTrace = completeTrace({
         fieldsExtracted: 0,
         fieldsMissing: 0,
@@ -207,7 +207,7 @@ async function runDocumentPipelineImpl(
       };
     }
 
-    completeTraceStep(step3, { classification: 'contract' });
+    completeTraceStep(step4, { classification: 'contract' });
 
     // Stunden/Monat: weder extrahieren noch bewerten (nur Stunden/Woche).
     const ct = rawResult.contracts?.contract_terms as Record<string, unknown> | undefined;
@@ -215,8 +215,8 @@ async function runDocumentPipelineImpl(
       delete ct.hours_per_month;
     }
 
-    // ── Step 4: Asklepios Control – Qualitätsprüfung ──
-    const step4 = addTraceStep('agent_judge', 'Asklepios Control: Qualitätsprüfung', {
+    // ── Step 5: Asklepios Control – Qualitätsprüfung ──
+    const step5 = addTraceStep('agent_judge', 'Asklepios Control: Qualitätsprüfung', {
       inputFields: Object.keys(rawResult.contracts),
       mode: images?.length ? 'vision' : 'text',
     });
@@ -225,25 +225,25 @@ async function runDocumentPipelineImpl(
     // the extraction against the original document.
     const judgeResult = await runJudge(documentText, rawResult.contracts, images);
 
-    completeTraceStep(step4, {
+    completeTraceStep(step5, {
       overallConfidence: judgeResult.overall_confidence,
       overallStatus: judgeResult.overall_status,
       reviewRequiredFields: judgeResult.review_required_fields,
       summary: judgeResult.summary,
     });
 
-    // ── Step 5: Merge & Binary Mapping ──
-    const step5 = addTraceStep('binary_mapping', 'Binäre Statuszuordnung');
+    // ── Step 6: Merge & Binary Mapping ──
+    const step6 = addTraceStep('binary_mapping', 'Binäre Statuszuordnung');
 
     const finalExtraction = mergeWithJudgeResult(rawResult, judgeResult) as unknown as ContractExtractionResult;
 
-    completeTraceStep(step5, {
+    completeTraceStep(step6, {
       overallStatus: finalExtraction.extraction_metadata.overall_status,
       fieldsRequiringReview: finalExtraction.extraction_metadata.fields_requiring_review,
       reviewFields: finalExtraction.extraction_metadata.review_required_fields,
     });
 
-    // ── Step 6: Complete ──
+    // ── Step 7: Complete ──
     const requiresReview =
       finalExtraction.extraction_metadata.overall_status === 'review_required';
 
