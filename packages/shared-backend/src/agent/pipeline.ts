@@ -84,9 +84,10 @@ async function runDocumentPipelineImpl(
       isScanned: !!images?.length,
     });
 
-    // ── Step 2: Agent 1 – Extraktion mit Tools ──
-    // Agent 1 nutzt document_classification + contract_data_submission selbständig.
-    const step2 = addTraceStep('agent_extraction', 'Agent 1: Datenextraktion', {
+    // ── Step 2: Asklepios Extractor – Extraktion mit Tools ──
+    // Nutzt document_classification + contract_data_submission selbständig.
+    // Tool-Output ist das autoritative Ergebnis (kein LLM-Fallback).
+    const step2 = addTraceStep('agent_extraction', 'Asklepios Extractor: Datenextraktion', {
       mode: images?.length ? 'vision' : 'text',
     });
 

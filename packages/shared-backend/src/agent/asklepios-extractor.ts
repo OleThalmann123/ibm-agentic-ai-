@@ -192,7 +192,7 @@ function getModel(apiKey: string, modelName: string = DEFAULT_EXTRACTOR_MODEL): 
       dangerouslyAllowBrowser: true,
       defaultHeaders: {
         'HTTP-Referer': window.location.origin,
-        'X-Title': 'IV-Assistenzbeitrag Vertragsextraktion',
+        'X-Title': 'Asklepios Extractor – Vertragsextraktion',
       },
     },
     modelName,
