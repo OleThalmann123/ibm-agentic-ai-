@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@asklepios/backend';
 import type { Assistant } from '@asklepios/backend';
@@ -22,6 +22,17 @@ import { AsklepiosLogo } from '@/components/brand/AsklepiosLogo';
 
 /** Acht IV-Kategorien (Art. 39c IVG); gespeicherte Codes 2–9, Anzeige 1–8. */
 const ACTIVITY_OPTIONS = getIvAssistanceActivityOptions();
+
+const MONTH_NAMES_DE = [
+  'Januar','Februar','März','April','Mai','Juni',
+  'Juli','August','September','Oktober','November','Dezember',
+];
+
+/** Formatiert ein ISO-Datum (yyyy-mm-dd) als deutschen Monatslabel ("April 2026"). */
+const formatMonthLabel = (isoDate: string): string => {
+  const d = new Date(isoDate + 'T12:00:00');
+  return `${MONTH_NAMES_DE[d.getMonth()]} ${d.getFullYear()}`;
+};
 
 interface TimeEntry {
   id: string;
@@ -169,6 +180,10 @@ export function TokenLoginPage() {
     return () => { cancelled = true; };
   }, [assistant?.id, date, token]);
 
+  // Deutscher Monatslabel für den aktuell gewählten Erfassungs-Tag, z. B. "April 2026".
+  // Wird in Sperr-Hinweisen/Toasts verwendet, damit der Zeitraum sichtbar ist.
+  const lockedMonthLabel = useMemo(() => formatMonthLabel(date), [date]);
+
   const lookupAssistant = async (tkn: string) => {
     try {
       let { data, error: err } = await supabase
@@ -243,7 +258,7 @@ export function TokenLoginPage() {
 
   const handleSave = async () => {
     if (payrollConfirmed) {
-      toast.error('Abrechnung ist bereits bestätigt – Stunden können nicht mehr geändert werden.');
+      toast.error(`Gesperrt: Die Lohnabrechnung für ${lockedMonthLabel} wurde bereits freigegeben. Stunden in diesem Zeitraum können nicht mehr geändert werden.`);
       return;
     }
     if (!assistant) return;
@@ -350,13 +365,16 @@ export function TokenLoginPage() {
   };
 
   const handleDelete = async (id: string) => {
+    const entry = entries.find(e => e.id === id);
     if (payrollConfirmed) {
-      toast.error('Abrechnung ist bereits bestätigt – Stunden können nicht mehr geändert werden.');
+      // Sperr-Meldung auf den Monat des gelöschten Eintrags beziehen, da im
+      // Protokoll-Tab Einträge aus mehreren Monaten gelistet werden.
+      const label = entry ? formatMonthLabel(entry.date) : lockedMonthLabel;
+      toast.error(`Gesperrt: Die Lohnabrechnung für ${label} wurde bereits freigegeben. Stunden in diesem Zeitraum können nicht mehr gelöscht werden.`);
       return;
     }
     if (!assistant) return;
     if (!confirm('Möchten Sie diesen Zeiteintrag wirklich löschen?')) return;
-    const entry = entries.find(e => e.id === id);
     await supabase.from('time_entry').delete().eq('id', id);
     await loadEntries();
     if (entry) {
@@ -366,7 +384,8 @@ export function TokenLoginPage() {
 
   const startEdit = (e: TimeEntry) => {
     if (payrollConfirmed) {
-      toast.error('Abrechnung ist bereits bestätigt – Stunden können nicht mehr geändert werden.');
+      const label = formatMonthLabel(e.date);
+      toast.error(`Gesperrt: Die Lohnabrechnung für ${label} wurde bereits freigegeben. Stunden in diesem Zeitraum können nicht mehr bearbeitet werden.`);
       return;
     }
     setDate(e.date);
@@ -653,7 +672,7 @@ export function TokenLoginPage() {
             </button>
             {payrollConfirmed ? (
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-                <span className="font-semibold">Abrechnung bestätigt:</span> Die Stunden für diesen Monat sind gesperrt.
+                <span className="font-semibold">Gesperrt:</span> Die Lohnabrechnung für <span className="font-semibold">{lockedMonthLabel}</span> wurde bereits freigegeben. Stunden in diesem Zeitraum können nicht mehr erfasst, bearbeitet oder gelöscht werden.
               </div>
             ) : null}
             {saveError ? (
@@ -703,11 +722,13 @@ export function TokenLoginPage() {
                         {!e.confirmed && (
                           <div className="flex items-center gap-1">
                             <button onClick={() => startEdit(e)} disabled={payrollConfirmed}
-                              className="p-2 rounded-lg hover:bg-blue-50 text-blue-500 transition">
+                              title={payrollConfirmed ? `Gesperrt: Lohnabrechnung für ${formatMonthLabel(e.date)} wurde bereits freigegeben.` : undefined}
+                              className="p-2 rounded-lg hover:bg-blue-50 text-blue-500 transition disabled:cursor-not-allowed">
                               <Pencil className="w-4 h-4" />
                             </button>
                             <button onClick={() => handleDelete(e.id)} disabled={payrollConfirmed}
-                              className="p-2 rounded-lg hover:bg-red-50 text-red-400 transition">
+                              title={payrollConfirmed ? `Gesperrt: Lohnabrechnung für ${formatMonthLabel(e.date)} wurde bereits freigegeben.` : undefined}
+                              className="p-2 rounded-lg hover:bg-red-50 text-red-400 transition disabled:cursor-not-allowed">
                               <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
