@@ -1,14 +1,15 @@
 /**
  * IDP Pipeline – Agentic Workflow
- * 
+ *
  * Step 1: PDF/Document Extraction
- * Step 2: Agent 1 – Extraktion + Validierung (Tools: document_classification, contract_data_submission)
- * Step 3: Safety-Check – Hat Agent 1 Vertragsdaten zurückgegeben?
- * Step 4: Agent 2 – Konfidenz-Bewertung (LLM-as-a-Judge)
- * Step 5: Binary Mapping – confidence → ok / review_required
- * Step 6: Return result with full trace (observability)
- * 
- * Tools liegen beim Agent, nicht in der Pipeline.
+ * Step 2: Asklepios Classifier – Ist es ein Arbeitsvertrag? (ja/nein, LLM-basiert)
+ * Step 3: Asklepios Extractor – Datenextraktion + Validierung (Tools)
+ * Step 4: Safety-Check – Hat Agent Vertragsdaten zurückgegeben?
+ * Step 5: Asklepios Control – Konfidenz-Bewertung (LLM-as-a-Judge)
+ * Step 6: Binary Mapping – confidence → ok / review_required
+ * Step 7: Return result with full trace (observability)
+ *
+ * 3 Agents: Classifier (Haiku) → Extractor (Sonnet) → Control (Sonnet)
  * Everything runs in the browser – no separate backend needed.
  */
 
@@ -20,6 +21,10 @@ import {
 } from './asklepios-extractor';
 import { readFileContent } from './pdf-extractor';
 import { runJudge } from './asklepios-control';
+import {
+  classifyDocument,
+  classifyDocumentFromImages,
+} from './asklepios-classifier';
 import {
   startTrace,
   addTraceStep,
@@ -34,7 +39,7 @@ import {
   isLangSmithEnabled,
   setPipelineLangSmithRoot,
 } from './langsmith';
-import { getExtractorModelName, getJudgeModelName } from './model-config';
+import { getExtractorModelName, getJudgeModelName, getClassifierModelName } from './model-config';
 
 export interface PipelineResult {
   classification: DocumentClassification;
@@ -84,7 +89,45 @@ async function runDocumentPipelineImpl(
       isScanned: !!images?.length,
     });
 
-    // ── Step 2: Asklepios Extractor – Extraktion mit Tools ──
+    // ── Step 2: Asklepios Classifier – Ist es ein Arbeitsvertrag? ──
+    // LLM-basierte Klassifizierung: Schweizer IV-Assistenz-Arbeitsvertrag ja/nein.
+    // Bei "nein" → Pipeline bricht ab, Dokument wird abgelehnt.
+    const step2 = addTraceStep('classification', 'Asklepios Classifier: Dokumentklassifizierung', {
+      mode: images?.length ? 'vision' : 'text',
+      model: getClassifierModelName(),
+    });
+
+    const classificationResult = images?.length
+      ? await classifyDocumentFromImages(images)
+      : await classifyDocument(documentText);
+
+    completeTraceStep(step2, {
+      is_contract: classificationResult.is_contract,
+      document_type: classificationResult.document_type,
+      confidence: classificationResult.confidence,
+      justification: classificationResult.justification,
+    });
+
+    if (!classificationResult.is_contract) {
+      const finalTrace = completeTrace({
+        fieldsExtracted: 0,
+        fieldsMissing: 0,
+        fieldsRequiringReview: 0,
+        overallConfidence: 0,
+        modelUsed: getClassifierModelName(),
+        judgeModelUsed: 'n/a',
+        toolsCalled: [],
+      });
+
+      return {
+        classification: 'other',
+        requiresReview: false,
+        reviewFields: [],
+        trace: finalTrace,
+      };
+    }
+
+    // ── Step 3: Asklepios Extractor – Extraktion mit Tools ──
     // Nutzt document_classification + contract_data_submission selbständig.
     // Tool-Output ist das autoritative Ergebnis (kein LLM-Fallback).
     const step2 = addTraceStep('agent_extraction', 'Asklepios Extractor: Datenextraktion', {
