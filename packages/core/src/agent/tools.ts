@@ -267,6 +267,145 @@ export const contractDataSubmissionTool = tool(
       });
     }
 
+    // ═══════════════════════════════════════════════════════════
+    // Ebene 1: Basis-Normalisierung für ALLE Text-Felder
+    //   - Trim (Leerzeichen vorne/hinten)
+    //   - Doppelte Leerzeichen entfernen
+    //   - ß → ss (Schweiz verwendet kein Eszett)
+    // ═══════════════════════════════════════════════════════════
+    const cleanText = (val: unknown): string | null => {
+      if (val == null) return null;
+      const s = String(val);
+      if (!s.trim()) return null;
+      return s
+        .trim()
+        .replace(/\s{2,}/g, ' ')   // Doppelte Leerzeichen
+        .replace(/ß/g, 'ss');       // Eszett → ss (Schweiz)
+    };
+
+    for (const section of [employerData, assistantData, contractData, wageData, insuranceData]) {
+      for (const [key, field] of Object.entries(section)) {
+        if (field?.value != null && typeof field.value === 'string') {
+          const cleaned = cleanText(field.value);
+          if (cleaned !== null && cleaned !== field.value) {
+            field.value = cleaned;
+          }
+        }
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Ebene 2: Namen & Orte – Erster Buchstabe gross
+    //   Respektiert: Bindestriche (Meier-Müller), Partikel (von, de)
+    // ═══════════════════════════════════════════════════════════
+    const LOWERCASE_PARTICLES = new Set(['von', 'van', 'de', 'del', 'di', 'da', 'le', 'la', 'el', 'al']);
+
+    const capitalizeWord = (word: string): string => {
+      if (word.length === 0) return word;
+      // Bindestriche: "meier-müller" → "Meier-Müller"
+      if (word.includes('-')) {
+        return word.split('-').map(capitalizeWord).join('-');
+      }
+      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    };
+
+    const capitalizeName = (val: unknown): string | null => {
+      if (val == null) return null;
+      const s = String(val).trim();
+      if (!s) return null;
+      const words = s.split(' ');
+      return words.map((w, i) => {
+        // Partikel (von, de, etc.) bleiben klein, ausser am Anfang
+        if (i > 0 && LOWERCASE_PARTICLES.has(w.toLowerCase())) {
+          return w.toLowerCase();
+        }
+        return capitalizeWord(w);
+      }).join(' ');
+    };
+
+    const nameFields: Array<[Record<string, any>, string]> = [
+      [employerData, 'first_name'],
+      [employerData, 'last_name'],
+      [employerData, 'city'],
+      [assistantData, 'first_name'],
+      [assistantData, 'last_name'],
+      [assistantData, 'city'],
+    ];
+
+    for (const [section, field] of nameFields) {
+      if (section[field]?.value) {
+        const capitalized = capitalizeName(section[field].value);
+        if (capitalized && capitalized !== section[field].value) {
+          corrections.push(`${field} Gross-/Kleinschreibung: ${section[field].value} → ${capitalized}`);
+          section[field].value = capitalized;
+        }
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Ebene 3: Feld-spezifische Normalisierungen
+    // ═══════════════════════════════════════════════════════════
+
+    // ── Street: "Str." → "Strasse", Leerzeichen vor Hausnummer ──
+    for (const section of [employerData, assistantData]) {
+      if (section.street?.value) {
+        let street = String(section.street.value);
+        const original = street;
+
+        // "Str." / "str." → "Strasse" / "strasse"
+        street = street.replace(/\bStr\.\s*/gi, 'Strasse ');
+        street = street.replace(/\bstrasse\b/gi, 'strasse');
+        // Capitalize: "strasse" → "Strasse" (nur wenn es am Wortende steht)
+        street = street.replace(/strasse\b/g, 'strasse');
+        street = street.replace(/(?:^|\s)([a-zäöü])/g, (_m, c) => _m.replace(c, c.toUpperCase()));
+
+        // Leerzeichen vor Hausnummer sicherstellen: "Lindenweg5" → "Lindenweg 5"
+        street = street.replace(/([a-zäöüA-ZÄÖÜ])(\d)/, '$1 $2');
+
+        // Doppelte Leerzeichen aufräumen
+        street = street.replace(/\s{2,}/g, ' ').trim();
+
+        if (street !== original) {
+          corrections.push(`Strasse normalisiert: ${original} → ${street}`);
+          section.street.value = street;
+        }
+      }
+    }
+
+    // ── Email: lowercase ──
+    if (assistantData.email?.value) {
+      const lower = String(assistantData.email.value).trim().toLowerCase();
+      if (lower !== assistantData.email.value) {
+        corrections.push(`E-Mail lowercase: ${assistantData.email.value} → ${lower}`);
+        assistantData.email.value = lower;
+      }
+    }
+
+    // ── Phone: Internationale Normalisierung (E.164-kompatibel) ──
+    // Akzeptiert CH (+41), DE (+49), AT (+43), IT (+39), FR (+33), etc.
+    if (assistantData.phone?.value) {
+      let phone = String(assistantData.phone.value).trim();
+      const original = phone;
+
+      // Doppelte Null am Anfang (00xx) → +xx (internationale Vorwahl)
+      phone = phone.replace(/^00(\d)/, '+$1');
+
+      // Schweizer Lokalnummern ohne Vorwahl: "079 123 45 67" → "+41 79 123 45 67"
+      phone = phone.replace(/^0(\d{2})\s?/, '+41 $1 ');
+
+      // Trennzeichen vereinheitlichen: Punkte, Bindestriche, Klammern → Leerzeichen
+      phone = phone.replace(/[()]/g, '');
+      phone = phone.replace(/[\s.\-/]+/g, ' ').trim();
+
+      if (phone !== original) {
+        corrections.push(`Telefon normalisiert: ${original} → ${phone}`);
+        assistantData.phone.value = phone;
+      }
+    }
+
+    // ── NBU insurer name & policy number: Trim (Ebene 1 hat es schon gemacht, hier Sicherheit) ──
+    // (already handled by Ebene 1 cleanText)
+
     // Map country names / ISO-3 codes to ISO-2. Must stay in sync with the
     // COUNTRY_OPTIONS list in AssistantOnboarding.tsx, otherwise the frontend
     // dropdown falls back to "OTHER" and the user loses the value.
@@ -293,11 +432,12 @@ export const contractDataSubmissionTool = tool(
       return toIso2Country(countryValue) === 'CH';
     };
 
-    // Validate assistant phone (soft)
+    // Validate assistant phone (soft) – accepts international formats
+    // Valid: +41 79 123 45 67, +49 170 1234567, +33 6 12 34 56 78, etc.
     if (assistantData.phone?.value) {
       const phone = String(assistantData.phone.value).trim();
-      if (!/^\+\d[\d\s().-]{5,}$/.test(phone)) {
-        validationErrors.push('Telefonnummer-Format auffällig (erwartet: +CC …)');
+      if (!/^\+\d{1,3}\s?\d[\d\s]{5,}$/.test(phone)) {
+        validationErrors.push('Telefonnummer-Format auffällig (erwartet: +Ländervorwahl gefolgt von Nummer, z.B. +41 79 123 45 67 oder +49 170 1234567)');
       }
     }
 
@@ -385,14 +525,28 @@ export const contractDataSubmissionTool = tool(
       }
     }
 
-    // Validate AHV number
+    // Validate AHV number (format + EAN-13 check digit per AHVG Art. 50c)
     if (assistantData.ahv_number?.value) {
-      const { formatted } = normalizeAhv(assistantData.ahv_number.value);
+      const { digits, formatted } = normalizeAhv(assistantData.ahv_number.value);
       if (!formatted) {
         validationErrors.push('AHV-Nummer ungültig (erwartet 13 Ziffern, beginnt mit 756; z.B. 756.XXXX.XXXX.XX)');
-      } else if (assistantData.ahv_number.value !== formatted) {
-        corrections.push(`AHV-Nummer normalisiert: ${assistantData.ahv_number.value} → ${formatted}`);
-        assistantData.ahv_number.value = formatted;
+      } else {
+        if (assistantData.ahv_number.value !== formatted) {
+          corrections.push(`AHV-Nummer normalisiert: ${assistantData.ahv_number.value} → ${formatted}`);
+          assistantData.ahv_number.value = formatted;
+        }
+        // EAN-13 / GS1 check digit validation (weighting 1-3-1-3-…, mod 10)
+        let ean13sum = 0;
+        for (let i = 0; i < 12; i++) {
+          ean13sum += parseInt(digits.charAt(i)) * (i % 2 === 0 ? 1 : 3);
+        }
+        const expectedCheck = (10 - (ean13sum % 10)) % 10;
+        const actualCheck = parseInt(digits.charAt(12));
+        if (expectedCheck !== actualCheck) {
+          validationErrors.push(
+            `AHV-Prüfziffer ungültig (EAN-13): erwartet ${expectedCheck}, gefunden ${actualCheck} – möglicherweise Tipp-/OCR-Fehler`,
+          );
+        }
       }
     }
 
@@ -457,10 +611,17 @@ export const contractDataSubmissionTool = tool(
       const prefix1 = zip.substring(0, 1);
       const derivedCanton = ZIP_TO_CANTON[prefix2] || ZIP_TO_CANTON[prefix1];
       if (derivedCanton) {
-        corrections.push(`Canton derived from ZIP ${zip}: ${derivedCanton} (${SWISS_CANTONS[derivedCanton]})`);
+        corrections.push(
+          `Wohnsitzkanton abgeleitet aus PLZ ${zip} → ${derivedCanton} (${SWISS_CANTONS[derivedCanton]}). ` +
+          `Hinweis: Ableitung basiert auf PLZ-Prefix – bitte prüfen, ob Kanton korrekt ist.`,
+        );
         if (!insuranceData.canton) insuranceData.canton = {};
         insuranceData.canton.value = derivedCanton;
-        insuranceData.canton.note = `Abgeleitet aus PLZ ${zip}`;
+        insuranceData.canton.note = `Abgeleitet aus PLZ ${zip} (Prefix-basiert, bitte prüfen)`;
+      } else {
+        validationErrors.push(
+          `Kanton konnte nicht aus PLZ ${zip} abgeleitet werden – bitte manuell eingeben.`,
+        );
       }
     }
 
@@ -520,7 +681,60 @@ export const contractDataSubmissionTool = tool(
       }
     }
 
-    // ── Date normalization: CH (DD.MM.YYYY) → ISO (YYYY-MM-DD) ──
+    // ── Date normalization: CH (DD.MM.YYYY) → ISO 8601 (YYYY-MM-DD) ──
+    const normalizeDateToISO = (val: unknown): string | null => {
+      if (val == null) return null;
+      const s = String(val).trim();
+      // Already ISO 8601?
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+      // Swiss format DD.MM.YYYY
+      const match = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+      if (match && match[1] && match[2] && match[3]) {
+        return `${match[3]}-${match[2].padStart(2, '0')}-${match[1].padStart(2, '0')}`;
+      }
+      return null;
+    };
+
+    for (const [label, section, field] of [
+      ['Geburtsdatum', assistantData, 'birth_date'],
+      ['Vertragsbeginn', contractData, 'start_date'],
+      ['Vertragsende', contractData, 'end_date'],
+    ] as const) {
+      if (section[field]?.value) {
+        const iso = normalizeDateToISO(section[field].value);
+        if (iso && section[field].value !== iso) {
+          corrections.push(`${label} normalisiert (ISO 8601): ${section[field].value} → ${iso}`);
+          section[field].value = iso;
+        } else if (!iso) {
+          validationErrors.push(`${label}: Datumsformat nicht erkannt: ${section[field].value} (erwartet: DD.MM.YYYY oder YYYY-MM-DD)`);
+        }
+      }
+    }
+
+    // ── Birth date plausibility ──
+    if (assistantData.birth_date?.value) {
+      const bd = new Date(assistantData.birth_date.value);
+      const now = new Date();
+      if (!isNaN(bd.getTime())) {
+        if (bd > now) {
+          validationErrors.push(`Geburtsdatum liegt in der Zukunft: ${assistantData.birth_date.value}`);
+        } else if (bd.getFullYear() < 1900) {
+          validationErrors.push(`Geburtsdatum vor 1900 – wahrscheinlich fehlerhaft: ${assistantData.birth_date.value}`);
+        }
+      }
+    }
+
+    // ── Cross-check: end_date > start_date ──
+    if (contractData.start_date?.value && contractData.end_date?.value) {
+      const start = new Date(contractData.start_date.value);
+      const end = new Date(contractData.end_date.value);
+      if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && end <= start) {
+        validationErrors.push(
+          `Vertragsende (${contractData.end_date.value}) liegt vor oder auf dem Vertragsbeginn (${contractData.start_date.value})`,
+        );
+      }
+    }
+
     // ── Value range checks ──
     if (contractData.hours_per_week?.value != null) {
       const hours = Number(contractData.hours_per_week.value);

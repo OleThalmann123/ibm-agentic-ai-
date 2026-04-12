@@ -1,4 +1,5 @@
 // Export agents (LangChain + OpenRouter)
+export * from './agent/asklepios-classifier';
 export * from './agent/asklepios-extractor';
 export * from './agent/pdf-extractor';
 export * from './agent/pipeline';

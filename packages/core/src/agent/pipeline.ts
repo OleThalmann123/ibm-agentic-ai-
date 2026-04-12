@@ -1,14 +1,15 @@
 /**
  * IDP Pipeline – Agentic Workflow
- * 
+ *
  * Step 1: PDF/Document Extraction
- * Step 2: Agent 1 – Extraktion + Validierung (Tools: document_classification, contract_data_submission)
- * Step 3: Safety-Check – Hat Agent 1 Vertragsdaten zurückgegeben?
- * Step 4: Agent 2 – Konfidenz-Bewertung (LLM-as-a-Judge)
- * Step 5: Binary Mapping – confidence → ok / review_required
- * Step 6: Return result with full trace (observability)
- * 
- * Tools liegen beim Agent, nicht in der Pipeline.
+ * Step 2: Asklepios Classifier – Ist es ein Arbeitsvertrag? (ja/nein, LLM-basiert)
+ * Step 3: Asklepios Extractor – Datenextraktion + Validierung (Tools)
+ * Step 4: Safety-Check – Hat Agent Vertragsdaten zurückgegeben?
+ * Step 5: Asklepios Control – Konfidenz-Bewertung (LLM-as-a-Judge)
+ * Step 6: Binary Mapping – confidence → ok / review_required
+ * Step 7: Return result with full trace (observability)
+ *
+ * 3 Agents: Classifier (Haiku) → Extractor (Sonnet) → Control (Sonnet)
  * Everything runs in the browser – no separate backend needed.
  */
 
@@ -20,6 +21,10 @@ import {
 } from './asklepios-extractor';
 import { readFileContent } from './pdf-extractor';
 import { runJudge } from './asklepios-control';
+import {
+  classifyDocument,
+  classifyDocumentFromImages,
+} from './asklepios-classifier';
 import {
   startTrace,
   addTraceStep,
@@ -34,7 +39,7 @@ import {
   isLangSmithEnabled,
   setPipelineLangSmithRoot,
 } from './langsmith';
-import { getExtractorModelName, getJudgeModelName } from './model-config';
+import { getExtractorModelName, getJudgeModelName, getClassifierModelName } from './model-config';
 
 export interface PipelineResult {
   classification: DocumentClassification;
@@ -84,10 +89,48 @@ async function runDocumentPipelineImpl(
       isScanned: !!images?.length,
     });
 
-    // ── Step 2: Asklepios Extractor – Extraktion mit Tools ──
+    // ── Step 2: Asklepios Classifier – Ist es ein Arbeitsvertrag? ──
+    // LLM-basierte Klassifizierung: Schweizer IV-Assistenz-Arbeitsvertrag ja/nein.
+    // Bei "nein" → Pipeline bricht ab, Dokument wird abgelehnt.
+    const step2 = addTraceStep('classification', 'Asklepios Classifier: Dokumentklassifizierung', {
+      mode: images?.length ? 'vision' : 'text',
+      model: getClassifierModelName(),
+    });
+
+    const classificationResult = images?.length
+      ? await classifyDocumentFromImages(images)
+      : await classifyDocument(documentText);
+
+    completeTraceStep(step2, {
+      is_contract: classificationResult.is_contract,
+      document_type: classificationResult.document_type,
+      confidence: classificationResult.confidence,
+      justification: classificationResult.justification,
+    });
+
+    if (!classificationResult.is_contract) {
+      const finalTrace = completeTrace({
+        fieldsExtracted: 0,
+        fieldsMissing: 0,
+        fieldsRequiringReview: 0,
+        overallConfidence: 0,
+        modelUsed: getClassifierModelName(),
+        judgeModelUsed: 'n/a',
+        toolsCalled: [],
+      });
+
+      return {
+        classification: 'other',
+        requiresReview: false,
+        reviewFields: [],
+        trace: finalTrace,
+      };
+    }
+
+    // ── Step 3: Asklepios Extractor – Extraktion mit Tools ──
     // Nutzt document_classification + contract_data_submission selbständig.
     // Tool-Output ist das autoritative Ergebnis (kein LLM-Fallback).
-    const step2 = addTraceStep('agent_extraction', 'Asklepios Extractor: Datenextraktion', {
+    const step3 = addTraceStep('agent_extraction', 'Asklepios Extractor: Datenextraktion', {
       mode: images?.length ? 'vision' : 'text',
     });
 
@@ -104,7 +147,7 @@ async function runDocumentPipelineImpl(
       toolCalls = extracted.toolCalls;
     }
 
-    completeTraceStep(step2, {
+    completeTraceStep(step3, {
       fieldsExtracted: rawResult.extraction_metadata.fields_extracted,
       fieldsMissing: rawResult.extraction_metadata.fields_missing,
       warnings: rawResult.extraction_metadata.warnings,
@@ -135,8 +178,8 @@ async function runDocumentPipelineImpl(
       );
     }
 
-    // ── Step 3: Safety-Check – Hat Agent 1 Vertragsdaten erkannt? ──
-    const step3 = addTraceStep('classification', 'Vertragserkennung (Safety-Check)');
+    // ── Step 4: Safety-Check – Hat Agent Vertragsdaten zurückgegeben? ──
+    const step4 = addTraceStep('classification', 'Vertragserkennung (Safety-Check)');
 
     const hasContracts =
       rawResult.contracts &&
@@ -145,7 +188,7 @@ async function runDocumentPipelineImpl(
         rawResult.contracts.contract_terms);
 
     if (!hasContracts) {
-      completeTraceStep(step3, { classification: 'other' });
+      completeTraceStep(step4, { classification: 'other' });
       const finalTrace = completeTrace({
         fieldsExtracted: 0,
         fieldsMissing: 0,
@@ -164,7 +207,7 @@ async function runDocumentPipelineImpl(
       };
     }
 
-    completeTraceStep(step3, { classification: 'contract' });
+    completeTraceStep(step4, { classification: 'contract' });
 
     // Stunden/Monat: weder extrahieren noch bewerten (nur Stunden/Woche).
     const ct = rawResult.contracts?.contract_terms as Record<string, unknown> | undefined;
@@ -172,8 +215,8 @@ async function runDocumentPipelineImpl(
       delete ct.hours_per_month;
     }
 
-    // ── Step 4: Asklepios Control – Qualitätsprüfung ──
-    const step4 = addTraceStep('agent_judge', 'Asklepios Control: Qualitätsprüfung', {
+    // ── Step 5: Asklepios Control – Qualitätsprüfung ──
+    const step5 = addTraceStep('agent_judge', 'Asklepios Control: Qualitätsprüfung', {
       inputFields: Object.keys(rawResult.contracts),
       mode: images?.length ? 'vision' : 'text',
     });
@@ -182,25 +225,25 @@ async function runDocumentPipelineImpl(
     // the extraction against the original document.
     const judgeResult = await runJudge(documentText, rawResult.contracts, images);
 
-    completeTraceStep(step4, {
+    completeTraceStep(step5, {
       overallConfidence: judgeResult.overall_confidence,
       overallStatus: judgeResult.overall_status,
       reviewRequiredFields: judgeResult.review_required_fields,
       summary: judgeResult.summary,
     });
 
-    // ── Step 5: Merge & Binary Mapping ──
-    const step5 = addTraceStep('binary_mapping', 'Binäre Statuszuordnung');
+    // ── Step 6: Merge & Binary Mapping ──
+    const step6 = addTraceStep('binary_mapping', 'Binäre Statuszuordnung');
 
     const finalExtraction = mergeWithJudgeResult(rawResult, judgeResult) as unknown as ContractExtractionResult;
 
-    completeTraceStep(step5, {
+    completeTraceStep(step6, {
       overallStatus: finalExtraction.extraction_metadata.overall_status,
       fieldsRequiringReview: finalExtraction.extraction_metadata.fields_requiring_review,
       reviewFields: finalExtraction.extraction_metadata.review_required_fields,
     });
 
-    // ── Step 6: Complete ──
+    // ── Step 7: Complete ──
     const requiresReview =
       finalExtraction.extraction_metadata.overall_status === 'review_required';
 
