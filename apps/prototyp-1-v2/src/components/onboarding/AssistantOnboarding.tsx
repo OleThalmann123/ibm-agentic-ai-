@@ -96,7 +96,7 @@ const FIELD_LABELS: Record<string, string> = {
   'assistant.zip': 'PLZ',
   'assistant.city': 'Ort',
   'assistant.country': 'Nationalität',
-  'assistant.phone': 'Telefon',
+  'assistant.phone': 'Telefon (optional)',
   'assistant.email': 'E-Mail',
   'assistant.birth_date': 'Geburtsdatum',
   'assistant.ahv_number': 'AHV-Nummer',
@@ -1764,7 +1764,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
                       <option value="diverse">Divers</option>
                     </select>
                   </MiniField>
-                  <MiniField title="Telefon" {...fieldProps('phone')} hasValue={!!phone}>
+                  <MiniField title="Telefon (optional)" {...fieldProps('phone')} hasValue={!!phone}>
                     <input type="text" placeholder="+41 ..." value={phone} onChange={e => setPhone(e.target.value)} className={inputStyle} />
                   </MiniField>
                   <MiniField title="E-Mail" {...fieldProps('email')} hasValue={!!email}>
