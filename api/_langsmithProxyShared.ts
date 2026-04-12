@@ -75,8 +75,20 @@ export async function proxyToLangSmith(
 
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       if (req.body !== undefined && req.body !== '') {
-        fetchOptions.body =
-          typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+        const ctLower = (ct as string | undefined)?.toLowerCase() ?? '';
+        if (ctLower.includes('multipart/form-data')) {
+          if (Buffer.isBuffer(req.body)) {
+            fetchOptions.body = req.body;
+          } else if (typeof req.body === 'string') {
+            fetchOptions.body = req.body;
+          } else {
+            fetchOptions.body = JSON.stringify(req.body);
+          }
+        } else if (typeof req.body === 'string' || Buffer.isBuffer(req.body)) {
+          fetchOptions.body = req.body as string | Buffer;
+        } else {
+          fetchOptions.body = JSON.stringify(req.body);
+        }
       }
     }
 

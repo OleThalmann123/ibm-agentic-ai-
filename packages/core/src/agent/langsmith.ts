@@ -168,6 +168,13 @@ export function getLangSmithClient(): Client | null {
     ...(workspaceId ? { workspaceId } : {}),
   });
 
+  // Browser → Vercel-Proxy: multipart/form-data wird von @vercel/node oft als Objekt geparst und
+  // im Proxy fälschlich JSON-stringifiziert → LangSmith 422. JSON-basiertes runs/batch funktioniert.
+  if (isTruthyEnv(import.meta.env.VITE_LANGSMITH_PROXY as string | undefined)) {
+    const c = _client as unknown as { _multipartDisabled?: boolean };
+    c._multipartDisabled = true;
+  }
+
   return _client;
 }
 
