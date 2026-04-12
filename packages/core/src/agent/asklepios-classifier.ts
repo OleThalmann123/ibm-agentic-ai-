@@ -128,7 +128,7 @@ export async function classifyDocument(
       new SystemMessage(CLASSIFIER_SYSTEM_PROMPT),
       new HumanMessage(CLASSIFIER_USER_PROMPT(documentText)),
     ],
-    await getLangSmithInvokeConfig('asklepios-classifier'),
+    await getLangSmithInvokeConfig('asklepios-classifier', { mode: 'text' }),
   );
 
   const content = typeof response.content === 'string'

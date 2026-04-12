@@ -276,7 +276,7 @@ export async function runDocumentPipeline(
 
   if (client) {
     const project =
-      import.meta.env.VITE_LANGSMITH_PROJECT || 'asklepios-agent';
+      import.meta.env.VITE_LANGSMITH_PROJECT || 'Asklepios_agent';
     rootRun = new RunTree({
       name: 'Asklepios_extract: Dokument-Pipeline',
       client,

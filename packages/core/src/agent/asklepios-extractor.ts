@@ -350,6 +350,7 @@ function extractFirstJsonObject(text: string): string | null {
 async function runAgentWithTools(
   model: ChatOpenAI,
   messages: Array<SystemMessage | HumanMessage>,
+  documentMode: 'text' | 'vision' = 'text',
 ): Promise<{ raw: RawExtractionResult; toolCalls: string[] }> {
   const toolCalls: string[] = [];
   const MAX_TOOL_ROUNDS = 3;
@@ -361,7 +362,9 @@ async function runAgentWithTools(
 
   let response = await modelWithTools.invoke(
     messages,
-    await getLangSmithInvokeConfig('asklepios-extractor', { mode: 'text-with-tools' }),
+    await getLangSmithInvokeConfig('asklepios-extractor', {
+      mode: `${documentMode}-with-tools`,
+    }),
   );
   const allMessages = [...messages, response];
   let round = 0;
@@ -400,7 +403,9 @@ async function runAgentWithTools(
 
     response = await modelWithTools.invoke(
       allMessages,
-      await getLangSmithInvokeConfig('asklepios-extractor', { mode: `tool-round-${round}` }),
+      await getLangSmithInvokeConfig('asklepios-extractor', {
+        mode: `${documentMode}-tool-round-${round}`,
+      }),
     );
     allMessages.push(response);
   }
@@ -413,7 +418,9 @@ async function runAgentWithTools(
     );
     response = await forceModel.invoke(
       allMessages,
-      await getLangSmithInvokeConfig('asklepios-extractor', { mode: 'forced-final' }),
+      await getLangSmithInvokeConfig('asklepios-extractor', {
+        mode: `${documentMode}-forced-final`,
+      }),
     );
   }
 
@@ -519,10 +526,14 @@ export async function extractContractData(
 
   const model = getModel(apiKey, getExtractorModelName());
 
-  return runAgentWithTools(model, [
-    new SystemMessage(SYSTEM_PROMPT),
-    new HumanMessage(USER_PROMPT_TEMPLATE(contractText)),
-  ]);
+  return runAgentWithTools(
+    model,
+    [
+      new SystemMessage(SYSTEM_PROMPT),
+      new HumanMessage(USER_PROMPT_TEMPLATE(contractText)),
+    ],
+    'text',
+  );
 }
 
 /**
@@ -552,10 +563,14 @@ export async function extractContractFromImages(
 
   const model = getModel(apiKey, getExtractorModelName());
 
-  return runAgentWithTools(model, [
-    new SystemMessage(SYSTEM_PROMPT),
-    new HumanMessage({ content: userContent }),
-  ]);
+  return runAgentWithTools(
+    model,
+    [
+      new SystemMessage(SYSTEM_PROMPT),
+      new HumanMessage({ content: userContent }),
+    ],
+    'vision',
+  );
 }
 
 // ─── Binary Status Helpers ──────────────────────────────

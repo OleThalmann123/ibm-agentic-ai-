@@ -7,7 +7,7 @@
  *
  * Configure via Vite env vars (safe to expose – no secrets):
  *   VITE_LANGSMITH_PROXY       – "true" to enable proxy mode (recommended)
- *   VITE_LANGSMITH_PROJECT     – Project name (default: "asklepios-agent")
+ *   VITE_LANGSMITH_PROJECT     – Project name (default: "Asklepios_agent")
  *
  * Server-side env vars (set in Vercel dashboard / .env, never VITE_-prefixed):
  *   LANGSMITH_API_KEY           – LangSmith API key
@@ -108,7 +108,7 @@ function getLangSmithConfig() {
     ? '/api/langsmith'
     : (import.meta.env.VITE_LANGSMITH_ENDPOINT || 'https://eu.api.smith.langchain.com');
 
-  const project = import.meta.env.VITE_LANGSMITH_PROJECT || 'asklepios-agent';
+  const project = import.meta.env.VITE_LANGSMITH_PROJECT || 'Asklepios_agent';
 
   return { apiKey, endpoint, project };
 }
@@ -155,26 +155,32 @@ export function getLangSmithTracer(): LangChainTracer | null {
 
 /**
  * Get callbacks config for LLM invocations.
- * Includes tracer + run metadata so Agent 1 and Agent 2 appear
- * as distinct, labeled runs in LangSmith.
+ * Includes tracer + run metadata so alle drei Pipeline-Agenten in LangSmith
+ * filterbar sind (tags agent-1/2/3, metadata pipeline_step, agent_role).
  */
 export type LangSmithAgentLabel = 'asklepios-classifier' | 'asklepios-extractor' | 'asklepios-control';
 
 const AGENT_LABELS: Record<
   LangSmithAgentLabel,
-  { name: string; tags: string[] }
+  { name: string; tags: string[]; pipeline_step: 1 | 2 | 3; agent_role: string }
 > = {
   'asklepios-classifier': {
     name: 'Asklepios Classifier: Dokumentklassifizierung',
-    tags: ['asklepios', 'classifier', 'classification'],
+    tags: ['asklepios', 'classifier', 'classification', 'agent-1'],
+    pipeline_step: 1,
+    agent_role: 'classifier',
   },
   'asklepios-extractor': {
     name: 'Asklepios Extractor: Datenextraktion',
-    tags: ['asklepios', 'extractor', 'tools'],
+    tags: ['asklepios', 'extractor', 'tools', 'agent-2'],
+    pipeline_step: 2,
+    agent_role: 'extractor',
   },
   'asklepios-control': {
     name: 'Asklepios Control: Qualitätsprüfung',
-    tags: ['asklepios', 'control', 'judge', 'quality-check'],
+    tags: ['asklepios', 'control', 'judge', 'quality-check', 'agent-3'],
+    pipeline_step: 3,
+    agent_role: 'judge',
   },
 };
 
@@ -185,15 +191,17 @@ export function getLangSmithCallbacks(
   const tracer = getLangSmithTracer();
   if (!tracer) return undefined;
 
-  const label = AGENT_LABELS[agentName] ?? { name: agentName, tags: [agentName] };
+  const label = AGENT_LABELS[agentName];
 
   return {
     callbacks: [tracer],
     runName: label.name,
     tags: label.tags,
     metadata: {
-      agent: agentName,
       ...metadata,
+      agent: agentName,
+      pipeline_step: label.pipeline_step,
+      agent_role: label.agent_role,
     },
   };
 }
@@ -206,8 +214,13 @@ export async function getLangSmithInvokeConfig(
   agentName: LangSmithAgentLabel,
   metadata?: Record<string, unknown>,
 ): Promise<Record<string, unknown> | undefined> {
-  const label = AGENT_LABELS[agentName] ?? { name: agentName, tags: [agentName] };
-  const meta = { agent: agentName, ...metadata };
+  const label = AGENT_LABELS[agentName];
+  const meta = {
+    ...metadata,
+    agent: agentName,
+    pipeline_step: label.pipeline_step,
+    agent_role: label.agent_role,
+  };
 
   if (!isLangSmithEnabled()) {
     return undefined;
