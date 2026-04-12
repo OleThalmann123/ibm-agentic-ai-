@@ -381,13 +381,24 @@ export const contractDataSubmissionTool = tool(
       }
     }
 
-    // ── Phone: Leerzeichen normalisieren ──
+    // ── Phone: Internationale Normalisierung (E.164-kompatibel) ──
+    // Akzeptiert CH (+41), DE (+49), AT (+43), IT (+39), FR (+33), etc.
     if (assistantData.phone?.value) {
       let phone = String(assistantData.phone.value).trim();
-      // Mehrfache Leerzeichen/Trennzeichen vereinheitlichen
-      phone = phone.replace(/[\s.-]+/g, ' ').trim();
-      if (phone !== assistantData.phone.value) {
-        corrections.push(`Telefon normalisiert: ${assistantData.phone.value} → ${phone}`);
+      const original = phone;
+
+      // Doppelte Null am Anfang (00xx) → +xx (internationale Vorwahl)
+      phone = phone.replace(/^00(\d)/, '+$1');
+
+      // Schweizer Lokalnummern ohne Vorwahl: "079 123 45 67" → "+41 79 123 45 67"
+      phone = phone.replace(/^0(\d{2})\s?/, '+41 $1 ');
+
+      // Trennzeichen vereinheitlichen: Punkte, Bindestriche, Klammern → Leerzeichen
+      phone = phone.replace(/[()]/g, '');
+      phone = phone.replace(/[\s.\-/]+/g, ' ').trim();
+
+      if (phone !== original) {
+        corrections.push(`Telefon normalisiert: ${original} → ${phone}`);
         assistantData.phone.value = phone;
       }
     }
@@ -421,11 +432,12 @@ export const contractDataSubmissionTool = tool(
       return toIso2Country(countryValue) === 'CH';
     };
 
-    // Validate assistant phone (soft)
+    // Validate assistant phone (soft) – accepts international formats
+    // Valid: +41 79 123 45 67, +49 170 1234567, +33 6 12 34 56 78, etc.
     if (assistantData.phone?.value) {
       const phone = String(assistantData.phone.value).trim();
-      if (!/^\+\d[\d\s().-]{5,}$/.test(phone)) {
-        validationErrors.push('Telefonnummer-Format auffällig (erwartet: +CC …)');
+      if (!/^\+\d{1,3}\s?\d[\d\s]{5,}$/.test(phone)) {
+        validationErrors.push('Telefonnummer-Format auffällig (erwartet: +Ländervorwahl gefolgt von Nummer, z.B. +41 79 123 45 67 oder +49 170 1234567)');
       }
     }
 
