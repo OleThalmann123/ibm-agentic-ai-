@@ -36,6 +36,7 @@ import {
 import { RunTree } from 'langsmith/run_trees';
 import {
   getLangSmithClient,
+  getLangSmithProjectName,
   isLangSmithEnabled,
   setPipelineLangSmithRoot,
   setPipelineLangSmithSessionId,
@@ -275,7 +276,7 @@ export async function runDocumentPipeline(
   const client = isLangSmithEnabled() ? getLangSmithClient() : null;
   if (import.meta.env.DEV && !client) {
     console.warn(
-      '[LangSmith] Aus — es werden keine Runs gesendet. Setze VITE_LANGSMITH_PROXY=true und LANGSMITH_API_KEY in ibm-agentic-ai-/.env, dann Dev-Server neu starten. Hinweis: npm run preview hat keinen Proxy; Production braucht VITE_* beim Build + /api/langsmith (Vercel).',
+      '[LangSmith] Aus — keine Runs. Wie Doku: LANGSMITH_TRACING=true, LANGSMITH_API_KEY, LANGSMITH_PROJECT in ibm-agentic-ai-/.env; optional VITE_LANGSMITH_PROXY=true für expliziten Proxy. Dev-Server neu starten. npm run preview ohne Proxy; Production: gleiche Variablen auf Vercel + /api/langsmith + Redeploy nach Env-Änderungen.',
     );
   }
   let rootRun: RunTree | undefined;
@@ -285,8 +286,7 @@ export async function runDocumentPipeline(
       : `session-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
   if (client) {
-    const project =
-      import.meta.env.VITE_LANGSMITH_PROJECT || 'HSG Agentic';
+    const project = getLangSmithProjectName();
     rootRun = new RunTree({
       name: 'Asklepios_extract: Dokument-Pipeline',
       client,

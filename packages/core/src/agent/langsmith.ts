@@ -1,21 +1,23 @@
 /**
  * LangSmith Integration – Browser-compatible tracing via server-side proxy
  *
- * The API key never reaches the browser. Instead, a Vercel serverless function
- * at /api/langsmith/... proxies requests to the LangSmith API and injects
- * the key server-side.
+ * Wie in der [LangSmith-Doku](https://docs.langchain.com/langsmith) üblich, kannst du setzen:
+ *   LANGSMITH_TRACING=true
+ *   LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+ *   LANGSMITH_API_KEY=…        (nur .env / Vercel – nie mit VITE_-Prefix)
+ *   LANGSMITH_PROJECT="HSG Agentic"
  *
- * Configure via Vite env vars (safe to expose – no secrets):
- *   VITE_LANGSMITH_PROXY       – "true" to enable proxy mode (recommended)
- *   VITE_LANGSMITH_PROJECT     – Project name (default: "HSG Agentic")
+ * Vite injiziert LANGSMITH_TRACING / LANGSMITH_PROJECT / LANGSMITH_ENDPOINT sicher ins Bundle
+ * (siehe apps/prototyp-1-v2/vite.config.ts `define`). API-Keys gehen nicht ins Frontend.
  *
- * Server-side env vars (set in Vercel dashboard / .env, never VITE_-prefixed):
- *   LANGSMITH_API_KEY           – LangSmith API key
- *   LANGSMITH_ENDPOINT          – API endpoint (default: https://api.smith.langchain.com, US)
- *   LANGSMITH_WORKSPACE_ID      – optional x-tenant-id (mehrere Workspaces am Key)
+ * Zusätzlich (empfohlen für Proxy-Modus ohne Key im Browser):
+ *   VITE_LANGSMITH_PROXY=true
  *
- * Optional im Browser (nur wenn Workspace im Client gesetzt werden soll):
- *   VITE_LANGSMITH_WORKSPACE_ID – gleiche ID, sonst reicht LANGSMITH_WORKSPACE_ID am Proxy
+ * Hinweis: `import { traceable } from "langsmith/traceable"` aus der Doku ist **Node-only**
+ * (async_hooks) und wird in dieser Browser-App nicht verwendet. Stattdessen: LangChainTracer +
+ * RunTree + getLangSmithInvokeConfig (gleiche Runs in LangSmith, anderes Instrumentierungs-API).
+ *
+ * Server-side (Vercel): /api/langsmith/… injiziert LANGSMITH_API_KEY.
  */
 
 import { CallbackManager } from '@langchain/core/callbacks/manager';
@@ -26,7 +28,7 @@ import type { RunTree } from 'langsmith/run_trees';
 let _tracer: LangChainTracer | null = null;
 let _client: Client | null = null;
 
-/** Parent-Run der Pipeline — gesetzt in pipeline.ts, damit LLM-Calls darunter hängen (ohne Node-`traceable`). */
+/** Parent-Run der Pipeline — gesetzt in pipeline.ts, damit LLM-Calls darunter hängen. */
 let _pipelineLangSmithRoot: RunTree | null = null;
 
 /** Eine Session pro Pipeline-Lauf — gleiche ID auf Root + Kind-Runs (Filter/Threads in LangSmith). */
@@ -60,6 +62,35 @@ function proxyBaseUrl(): string {
     return `${window.location.origin}/api/langsmith`;
   }
   return '/api/langsmith';
+}
+
+/** LangSmith-Doku: LANGSMITH_TRACING (per Vite define → process.env im Bundle). */
+function langSmithTracingFromDocsEnv(): boolean {
+  try {
+    const p = typeof process !== 'undefined' ? process.env?.LANGSMITH_TRACING : undefined;
+    return isTruthyEnv(p);
+  } catch {
+    return false;
+  }
+}
+
+function langSmithProjectFromDocsEnv(): string | undefined {
+  try {
+    const p = typeof process !== 'undefined' ? process.env?.LANGSMITH_PROJECT : undefined;
+    if (p != null && String(p).trim() !== '') return String(p).trim();
+  } catch {
+    /* ignore */
+  }
+  return undefined;
+}
+
+/** Projektname wie in der LangSmith-Doku (LANGSMITH_PROJECT) bzw. VITE_LANGSMITH_PROJECT. */
+export function getLangSmithProjectName(): string {
+  return (
+    langSmithProjectFromDocsEnv() ||
+    (import.meta.env.VITE_LANGSMITH_PROJECT as string | undefined) ||
+    'HSG Agentic'
+  );
 }
 
 /**
@@ -132,24 +163,36 @@ async function getLangchainCallbacksForParentRun(
 }
 
 function getLangSmithConfig() {
-  const proxyEnabled = isTruthyEnv(import.meta.env.VITE_LANGSMITH_PROXY as string | undefined);
+  const hasBrowserApiKey = !!import.meta.env.VITE_LANGSMITH_API_KEY;
+  const proxyFlag = isTruthyEnv(import.meta.env.VITE_LANGSMITH_PROXY as string | undefined);
+  const docsTracingOn = langSmithTracingFromDocsEnv();
+  const proxyEnabled = !hasBrowserApiKey && (proxyFlag || docsTracingOn);
 
   const apiKey = proxyEnabled
     ? 'proxy' // placeholder – the serverless function injects the real key
     : import.meta.env.VITE_LANGSMITH_API_KEY;
 
-  const endpoint = proxyEnabled
-    ? proxyBaseUrl()
-    : (import.meta.env.VITE_LANGSMITH_ENDPOINT || 'https://api.smith.langchain.com');
+  let endpoint: string;
+  if (proxyEnabled) {
+    endpoint = proxyBaseUrl();
+  } else {
+    endpoint =
+      (import.meta.env.VITE_LANGSMITH_ENDPOINT as string | undefined) ||
+      (typeof process !== 'undefined' ? process.env?.LANGSMITH_ENDPOINT : undefined) ||
+      'https://api.smith.langchain.com';
+  }
 
-  const project = import.meta.env.VITE_LANGSMITH_PROJECT || 'HSG Agentic';
+  const project = getLangSmithProjectName();
 
   return { apiKey, endpoint, project };
 }
 
 export function isLangSmithEnabled(): boolean {
-  return isTruthyEnv(import.meta.env.VITE_LANGSMITH_PROXY as string | undefined)
-    || !!import.meta.env.VITE_LANGSMITH_API_KEY;
+  return (
+    langSmithTracingFromDocsEnv() ||
+    isTruthyEnv(import.meta.env.VITE_LANGSMITH_PROXY as string | undefined) ||
+    !!import.meta.env.VITE_LANGSMITH_API_KEY
+  );
 }
 
 export function getLangSmithClient(): Client | null {
@@ -170,7 +213,10 @@ export function getLangSmithClient(): Client | null {
 
   // Browser → Vercel-Proxy: multipart/form-data wird von @vercel/node oft als Objekt geparst und
   // im Proxy fälschlich JSON-stringifiziert → LangSmith 422. JSON-basiertes runs/batch funktioniert.
-  if (isTruthyEnv(import.meta.env.VITE_LANGSMITH_PROXY as string | undefined)) {
+  const hasBrowserApiKey = !!import.meta.env.VITE_LANGSMITH_API_KEY;
+  const proxyFlag = isTruthyEnv(import.meta.env.VITE_LANGSMITH_PROXY as string | undefined);
+  const useProxy = !hasBrowserApiKey && (proxyFlag || langSmithTracingFromDocsEnv());
+  if (useProxy) {
     const c = _client as unknown as { _multipartDisabled?: boolean };
     c._multipartDisabled = true;
   }
@@ -183,7 +229,9 @@ export function getLangSmithTracer(): LangChainTracer | null {
 
   const config = getLangSmithConfig();
   if (!config.apiKey) {
-    console.log('[LangSmith] Tracing disabled – set VITE_LANGSMITH_PROXY=true to enable');
+    console.log(
+      '[LangSmith] Tracing disabled – set LANGSMITH_TRACING=true and LANGSMITH_API_KEY (wie Doku), oder VITE_LANGSMITH_PROXY=true; Dev-Server neu starten.',
+    );
     return null;
   }
 
