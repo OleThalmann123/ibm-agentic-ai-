@@ -418,27 +418,84 @@ async function runAgentWithTools(
   // extraction_metadata comes from LLM (not part of tool output)
   const llmParsed = parseResponse(response.content as string);
 
-  // ── DEBUG: Log what we captured from the tool ──
-  console.log('[Asklepios Extractor] toolValidatedData:', JSON.stringify(toolValidatedData, null, 2)?.slice(0, 2000));
-  console.log('[Asklepios Extractor] llmParsed contracts keys:', toolValidatedData ? Object.keys(toolValidatedData) : 'NULL');
-  if (toolValidatedData?.assistant) {
-    console.log('[Asklepios Extractor] assistant fields:', Object.entries(toolValidatedData.assistant).map(([k, v]: [string, any]) => `${k}: ${JSON.stringify(v?.value)}`).join(', '));
-  }
-
-  // MANDATORY: Use tool-validated data. No fallback to LLM text.
-  if (!toolValidatedData) {
+  // MANDATORY: Tool must have been called for validation to run.
+  if (!toolCalls.includes('contract_data_submission')) {
     throw new Error(
-      'Asklepios Extractor: contract_data_submission Tool wurde nicht aufgerufen oder lieferte keine Daten. Extraktion abgelehnt.',
+      'Asklepios Extractor: contract_data_submission Tool wurde nicht aufgerufen – Validierung fehlt.',
     );
   }
+
+  // Merge strategy: LLM data as BASE (has correct {value, source_text, note}
+  // format for ALL fields), tool corrections OVERLAY (normalized AHV, IBAN,
+  // canton, hallucination guards, enum values).
+  // The tool is authoritative for every field it validated/modified.
+  const mergedContracts = mergeToolCorrections(llmParsed.contracts, toolValidatedData);
 
   return {
     raw: {
       extraction_metadata: llmParsed.extraction_metadata,
-      contracts: toolValidatedData as RawExtractionResult['contracts'],
+      contracts: mergedContracts,
     },
     toolCalls,
   };
+}
+
+/**
+ * Merge tool corrections into LLM-extracted data.
+ * LLM data = base (all fields, correct {value, source_text, note} format).
+ * Tool data = overlay (only fields the tool validated/modified).
+ * Tool corrections are authoritative and override LLM values.
+ */
+function mergeToolCorrections(
+  llmContracts: RawExtractionResult['contracts'],
+  toolData: Record<string, any> | null,
+): RawExtractionResult['contracts'] {
+  if (!toolData) return llmContracts;
+
+  const result: any = {};
+  const allSections = new Set([
+    ...Object.keys(llmContracts),
+    ...Object.keys(toolData),
+  ]);
+
+  for (const section of allSections) {
+    const llmSection = (llmContracts as any)[section] || {};
+    const toolSection = toolData[section] || {};
+    result[section] = {};
+
+    const allFields = new Set([
+      ...Object.keys(llmSection),
+      ...Object.keys(toolSection),
+    ]);
+
+    for (const field of allFields) {
+      const toolField = toolSection[field];
+      const llmField = llmSection[field];
+
+      // Tool field with {value} structure → tool is authoritative
+      if (toolField && typeof toolField === 'object' && 'value' in toolField) {
+        result[section][field] = toolField;
+      }
+      // LLM field exists → use as base
+      else if (llmField && typeof llmField === 'object' && 'value' in llmField) {
+        result[section][field] = llmField;
+      }
+      // Flat tool value → wrap and use
+      else if (toolField !== undefined && toolField !== null) {
+        result[section][field] = { value: toolField, source_text: '', note: '' };
+      }
+      // Flat LLM value → wrap and use
+      else if (llmField !== undefined && llmField !== null) {
+        result[section][field] = { value: llmField, source_text: '', note: '' };
+      }
+      // Neither → null
+      else {
+        result[section][field] = { value: null, source_text: '', note: '' };
+      }
+    }
+  }
+
+  return result as RawExtractionResult['contracts'];
 }
 
 /**
