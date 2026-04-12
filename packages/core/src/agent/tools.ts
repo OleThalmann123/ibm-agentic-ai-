@@ -168,6 +168,48 @@ export const contractDataSubmissionTool = tool(
     const validationErrors: string[] = [];
     const corrections: string[] = [];
 
+    // ── Normalize fields: ensure every field is {value, source_text, note} ──
+    // The LLM may pass flat values ("first_name": "Sara") instead of objects
+    // ("first_name": {"value": "Sara", "source_text": "...", "note": ""}).
+    // Without normalization, flat values are invisible to mergeWithJudgeResult.
+    const normalizeField = (field: unknown): { value: any; source_text: string; note: string } => {
+      if (field && typeof field === 'object' && 'value' in (field as any)) {
+        const f = field as any;
+        return {
+          value: f.value ?? null,
+          source_text: String(f.source_text ?? ''),
+          note: String(f.note ?? ''),
+        };
+      }
+      return { value: field ?? null, source_text: '', note: '' };
+    };
+
+    const normalizeSection = (data: Record<string, any>): Record<string, any> => {
+      const result: Record<string, any> = {};
+      for (const [key, val] of Object.entries(data)) {
+        result[key] = normalizeField(val);
+      }
+      return result;
+    };
+
+    // ── Normalize dates: CH format (DD.MM.YYYY) → ISO (YYYY-MM-DD) ──
+    const normalizeDateField = (field: { value: any; source_text: string; note: string }): void => {
+      if (!field.value) return;
+      const raw = String(field.value).trim();
+      // DD.MM.YYYY → YYYY-MM-DD
+      const chMatch = raw.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+      if (chMatch) {
+        const dd = chMatch[1]!;
+        const mm = chMatch[2]!;
+        const yyyy = chMatch[3]!;
+        const iso = `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+        if (field.value !== iso) {
+          corrections.push(`Datum normalisiert: ${field.value} → ${iso}`);
+          field.value = iso;
+        }
+      }
+    };
+
     const ibanMod97 = (iban: string): number => {
       // ISO 13616: move first 4 chars to end, letters -> numbers (A=10..Z=35), mod 97 iteratively
       const rearranged = `${iban.slice(4)}${iban.slice(0, 4)}`;
@@ -230,12 +272,12 @@ export const contractDataSubmissionTool = tool(
     let insuranceData: Record<string, any>;
 
     try {
-      employerData = JSON.parse(employer);
-      assistantData = JSON.parse(assistant);
-      contractData = JSON.parse(contract_terms);
+      employerData = normalizeSection(JSON.parse(employer));
+      assistantData = normalizeSection(JSON.parse(assistant));
+      contractData = normalizeSection(JSON.parse(contract_terms));
       delete contractData.hours_per_month;
-      wageData = JSON.parse(wage);
-      insuranceData = JSON.parse(social_insurance);
+      wageData = normalizeSection(JSON.parse(wage));
+      insuranceData = normalizeSection(JSON.parse(social_insurance));
     } catch {
       return JSON.stringify({
         status: 'error',
@@ -493,6 +535,67 @@ export const contractDataSubmissionTool = tool(
         if (plz.length !== 4 || isNaN(num) || num < 1000 || num > 9699) {
           validationErrors.push(`${label} PLZ invalid: ${plz} (expected: 4 digits, 1000-9699)`);
         }
+      }
+    }
+
+    // ── Date normalization: CH (DD.MM.YYYY) → ISO (YYYY-MM-DD) ──
+    if (assistantData.birth_date) normalizeDateField(assistantData.birth_date);
+    if (contractData.start_date) normalizeDateField(contractData.start_date);
+    if (contractData.end_date) normalizeDateField(contractData.end_date);
+
+    // ── Value range checks ──
+    if (contractData.hours_per_week?.value != null) {
+      const hours = Number(contractData.hours_per_week.value);
+      if (isNaN(hours) || hours <= 0) {
+        validationErrors.push(`hours_per_week ungültig: ${contractData.hours_per_week.value} (muss > 0 sein)`);
+      } else if (hours > 50) {
+        validationErrors.push(`hours_per_week = ${hours} übersteigt gesetzliches Maximum (50h/Woche)`);
+      }
+    }
+
+    if (wageData.hourly_rate?.value != null) {
+      const rate = Number(wageData.hourly_rate.value);
+      if (isNaN(rate) || rate <= 0) {
+        validationErrors.push(`hourly_rate ungültig: ${wageData.hourly_rate.value} (muss > 0 sein)`);
+      } else if (rate < 15) {
+        validationErrors.push(`hourly_rate = ${rate} CHF liegt unter üblichem Minimum (15 CHF)`);
+      } else if (rate > 150) {
+        validationErrors.push(`hourly_rate = ${rate} CHF ungewöhnlich hoch (> 150 CHF)`);
+      }
+    }
+
+    if (contractData.notice_period_days?.value != null) {
+      const days = Number(contractData.notice_period_days.value);
+      if (isNaN(days) || days <= 0) {
+        validationErrors.push(`notice_period_days ungültig: ${contractData.notice_period_days.value}`);
+      } else if (days > 180) {
+        validationErrors.push(`notice_period_days = ${days} ungewöhnlich lang (> 180 Tage)`);
+      }
+    }
+
+    // ── Required field checks ──
+    const requiredFields: Array<[string, Record<string, any>, string]> = [
+      ['Arbeitgeber Vorname', employerData, 'first_name'],
+      ['Arbeitgeber Nachname', employerData, 'last_name'],
+      ['Assistenzperson Vorname', assistantData, 'first_name'],
+      ['Assistenzperson Nachname', assistantData, 'last_name'],
+      ['Vertragsbeginn', contractData, 'start_date'],
+      ['Stundenlohn', wageData, 'hourly_rate'],
+    ];
+    for (const [label, section, field] of requiredFields) {
+      if (!section[field]?.value) {
+        validationErrors.push(`Pflichtfeld fehlt: ${label}`);
+      }
+    }
+
+    // ── Enum validation: wage_type ──
+    if (wageData.wage_type?.value) {
+      const wt = String(wageData.wage_type.value).trim().toLowerCase();
+      if (wt !== 'hourly') {
+        validationErrors.push(`wage_type '${wageData.wage_type.value}' nicht unterstützt (erwartet: hourly)`);
+      } else if (wageData.wage_type.value !== wt) {
+        corrections.push(`wage_type normalisiert: ${wageData.wage_type.value} → ${wt}`);
+        wageData.wage_type.value = wt;
       }
     }
 
