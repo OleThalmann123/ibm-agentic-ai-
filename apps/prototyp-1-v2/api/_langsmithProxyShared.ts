@@ -10,7 +10,7 @@ export const LANGSMITH_WORKSPACE_ID = process.env.LANGSMITH_WORKSPACE_ID;
 export function buildUpstreamQuery(req: VercelRequest): string {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(req.query)) {
-    if (key === 'path' || key === 'segments') continue;
+    if (key === 'path' || key === 'segments' || key === 'slug') continue;
     if (value === undefined) continue;
     const parts = Array.isArray(value) ? value : [value];
     for (const part of parts) {
