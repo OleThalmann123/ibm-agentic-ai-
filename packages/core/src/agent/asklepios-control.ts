@@ -1,15 +1,19 @@
 /**
- * LLM-as-a-Judge (Agent 2)
- * 
- * A separate model that evaluates the output of Agent 1 (the extractor).
- * It reviews each extracted field against the original contract text and
+ * Asklepios Control – Quality Control Agent (LLM-as-a-Judge)
+ *
+ * Evaluates the TOOL-VALIDATED output of Asklepios Extractor.
+ * Reviews each extracted field against the original contract text and
  * assigns confidence scores with justification.
- * 
- * Architecture (from Meeting Decision #4):
- *   Agent 1 extracts data as JSON →
- *   Agent 2 reviews extraction against original contract →
- *   Agent 2 assigns confidence scores + justification per field →
+ *
+ * Architecture:
+ *   Asklepios Extractor extracts + validates data via Tools →
+ *   Asklepios Control reviews the Tool output against original contract →
+ *   Assigns confidence scores + justification per field →
  *   Binary mapping: score >= 0.8 → "ok" (HOOTL), < 0.8 → "review_required" (HOTL/HITL)
+ *
+ * Human-in-the-Loop:
+ *   "verify" (Prüfen) – value extracted but uncertain, human checks
+ *   "supplement" (Ergänzen) – value missing, human must add
  */
 
 import { ChatOpenAI } from '@langchain/openai';
@@ -116,7 +120,7 @@ function getJudgeModel(apiKey: string): ChatOpenAI {
       dangerouslyAllowBrowser: true,
       defaultHeaders: {
         'HTTP-Referer': window.location.origin,
-        'X-Title': 'IV-Assistenzbeitrag Judge',
+        'X-Title': 'Asklepios Control – Qualitätsprüfung',
       },
     },
     modelName: getJudgeModelName(),
@@ -255,11 +259,14 @@ function extractFirstJsonObject(text: string): string | null {
 
 /**
  * Run the LLM-as-a-Judge evaluation.
- * Agent 2 reviews Agent 1's extraction against the original contract.
+ * Asklepios Control reviews the Tool-validated extraction against the
+ * original contract. When images are provided (vision pipeline), the Judge
+ * receives them directly so it can visually verify extracted values.
  */
 export async function runJudge(
   originalText: string,
   extractedContracts: Record<string, unknown>,
+  images?: string[],
 ): Promise<JudgeResult> {
   const apiKey = getApiKey();
   if (!apiKey) {
@@ -268,13 +275,37 @@ export async function runJudge(
 
   const model = getJudgeModel(apiKey);
 
+  // Build the user message – with images when available (vision pipeline)
+  let userMessage: HumanMessage;
+
+  if (images && images.length > 0) {
+    // Vision mode: send images + extraction data so the Judge can verify visually
+    const userContent: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
+      {
+        type: 'text',
+        text: JUDGE_USER_PROMPT(
+          '[Siehe beigefügte Bilder des Arbeitsvertrags – prüfe die Extraktion visuell gegen das Originaldokument]',
+          extractedContracts,
+        ),
+      },
+    ];
+    for (const img of images) {
+      userContent.push({ type: 'image_url', image_url: { url: img } });
+    }
+    userMessage = new HumanMessage({ content: userContent });
+  } else {
+    // Text mode: send original text
+    userMessage = new HumanMessage(JUDGE_USER_PROMPT(originalText, extractedContracts));
+  }
+
   const response = await model.invoke(
     [
       new SystemMessage(JUDGE_SYSTEM_PROMPT),
-      new HumanMessage(JUDGE_USER_PROMPT(originalText, extractedContracts)),
+      userMessage,
     ],
-    await getLangSmithInvokeConfig('agent-2-judge', {
+    await getLangSmithInvokeConfig('asklepios-control', {
       fieldsToReview: Object.keys(extractedContracts),
+      mode: images?.length ? 'vision' : 'text',
     }),
   );
 
@@ -308,11 +339,11 @@ export async function runJudge(
 
 /**
  * Run the Judge on vision-based extractions (scanned PDFs).
- * Uses a description of the images instead of raw text.
+ * Passes images directly to the Judge for visual verification.
  */
 export async function runJudgeForImages(
-  imageDescriptions: string,
+  images: string[],
   extractedContracts: Record<string, unknown>,
 ): Promise<JudgeResult> {
-  return runJudge(imageDescriptions, extractedContracts);
+  return runJudge('', extractedContracts, images);
 }

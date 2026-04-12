@@ -17,9 +17,9 @@ import {
   extractContractData,
   extractContractFromImages,
   mergeWithJudgeResult,
-} from './openrouter';
+} from './asklepios-extractor';
 import { readFileContent } from './pdf-extractor';
-import { runJudge } from './judge';
+import { runJudge } from './asklepios-control';
 import {
   startTrace,
   addTraceStep,
@@ -84,9 +84,10 @@ async function runDocumentPipelineImpl(
       isScanned: !!images?.length,
     });
 
-    // ── Step 2: Agent 1 – Extraktion mit Tools ──
-    // Agent 1 nutzt document_classification + contract_data_submission selbständig.
-    const step2 = addTraceStep('agent_extraction', 'Agent 1: Datenextraktion', {
+    // ── Step 2: Asklepios Extractor – Extraktion mit Tools ──
+    // Nutzt document_classification + contract_data_submission selbständig.
+    // Tool-Output ist das autoritative Ergebnis (kein LLM-Fallback).
+    const step2 = addTraceStep('agent_extraction', 'Asklepios Extractor: Datenextraktion', {
       mode: images?.length ? 'vision' : 'text',
     });
 
@@ -110,10 +111,18 @@ async function runDocumentPipelineImpl(
       toolsUsed: toolCalls,
     });
 
-    // Enforce tool usage: contract_data_submission MUST have been called so
-    // Swiss-specific validation (IBAN, AHV, canton, enums, hallucination
-    // guards) actually ran. Otherwise the extraction is untrusted and we
-    // refuse to accept it.
+    // Enforce tool usage: both tools MUST have been called.
+    // document_classification ensures the document was properly classified.
+    // contract_data_submission ensures Swiss-specific validation (IBAN, AHV,
+    // canton, enums, hallucination guards) actually ran.
+    // Without these tools, the extraction is untrusted and we refuse to accept it.
+    const classificationCalled = toolCalls.includes('document_classification');
+    if (!classificationCalled) {
+      throw new Error(
+        'Asklepios Extractor hat document_classification nicht aufgerufen – Dokumentklassifizierung fehlt, Ergebnis nicht akzeptiert.',
+      );
+    }
+
     const hadContracts =
       rawResult.contracts &&
       (rawResult.contracts.employer ||
@@ -122,7 +131,7 @@ async function runDocumentPipelineImpl(
     const submissionCalled = toolCalls.includes('contract_data_submission');
     if (hadContracts && !submissionCalled) {
       throw new Error(
-        'Agent hat contract_data_submission nicht aufgerufen – Validierung fehlt, Ergebnis nicht akzeptiert.',
+        'Asklepios Extractor hat contract_data_submission nicht aufgerufen – Validierung fehlt, Ergebnis nicht akzeptiert.',
       );
     }
 
@@ -163,16 +172,15 @@ async function runDocumentPipelineImpl(
       delete ct.hours_per_month;
     }
 
-    // ── Step 4: Agent 2 – LLM-as-a-Judge ──
-    const step4 = addTraceStep('agent_judge', 'Agent 2: Qualitätsprüfung (LLM-as-a-Judge)', {
+    // ── Step 4: Asklepios Control – Qualitätsprüfung ──
+    const step4 = addTraceStep('agent_judge', 'Asklepios Control: Qualitätsprüfung', {
       inputFields: Object.keys(rawResult.contracts),
+      mode: images?.length ? 'vision' : 'text',
     });
 
-    const sourceText = images?.length
-      ? '[Vision-basierte Extraktion aus gescanntem Dokument]'
-      : documentText;
-
-    const judgeResult = await runJudge(sourceText, rawResult.contracts);
+    // Pass images to the Judge when available so it can visually verify
+    // the extraction against the original document.
+    const judgeResult = await runJudge(documentText, rawResult.contracts, images);
 
     completeTraceStep(step4, {
       overallConfidence: judgeResult.overall_confidence,

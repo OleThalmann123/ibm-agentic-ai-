@@ -1,24 +1,28 @@
 /**
- * Agent 1 – Contract Data Extractor (with Tools)
- * 
+ * Asklepios Extractor – Contract Data Extraction Agent (with Tools)
+ *
  * Extracts structured data from Swiss employment contracts using LangChain
- * with tool-calling capabilities. This qualifies the system as a proper agent.
- * 
+ * with tool-calling capabilities. Uses two LangChain tools:
+ *   1. document_classification – validates document type
+ *   2. contract_data_submission – validates & normalizes extracted data
+ *
+ * The TOOL OUTPUT from contract_data_submission is the authoritative result.
+ * The LLM's final text response is only used for extraction_metadata.
+ *
  * Architecture:
- *   Agent 1 (this) → extracts raw data as JSON
- *   Agent 2 (judge.ts) → reviews extraction, assigns confidence scores
- *   
- * Binary confidence display (Meeting Decision #2):
- *   Internal scores 0.0–1.0 remain, but UI maps to:
- *   ✅ "ok" (>= 0.8) – field is correct, auto-stored (HOOTL)
- *   ⚠️ "review_required" (< 0.8) – flagged or empty, human must check (HOTL/HITL)
+ *   Asklepios Extractor (this) → extracts + validates via Tools
+ *   Asklepios Control (asklepios-control.ts) → reviews Tool output, assigns confidence
+ *
+ * Human-in-the-Loop:
+ *   "verify" (Prüfen) – value extracted but uncertain, human checks
+ *   "supplement" (Ergänzen) – value missing, human must add
  */
 
 import { ChatOpenAI } from '@langchain/openai';
 import { SystemMessage, HumanMessage } from '@langchain/core/messages';
 import { agentTools } from './tools';
 import { getLangSmithInvokeConfig } from './langsmith';
-import type { JudgeFieldResult } from './judge';
+import type { JudgeFieldResult } from './asklepios-control';
 import {
   DEFAULT_EXTRACTOR_MODEL,
   getExtractorModelName,
@@ -33,6 +37,8 @@ export interface ExtractionField {
   confidence: 'high' | 'medium' | 'low';
   confidence_score: number;
   status: 'ok' | 'review_required';
+  /** 'verify' = Prüfen (Wert da, unsicher), 'supplement' = Ergänzen (Wert fehlt) */
+  review_type?: 'verify' | 'supplement';
   source_text: string;
   note: string;
   judge_justification?: string;
@@ -48,6 +54,10 @@ export interface ExtractionResult {
     fields_requiring_review: number;
     warnings: string[];
     review_required_fields: string[];
+    /** Fields where value exists but is uncertain → human verifies (Prüfen) */
+    review_verify_fields: string[];
+    /** Fields where value is missing → human must add (Ergänzen) */
+    review_supplement_fields: string[];
   };
   contracts: {
     employer: Record<string, ExtractionField>;
@@ -182,7 +192,7 @@ function getModel(apiKey: string, modelName: string = DEFAULT_EXTRACTOR_MODEL): 
       dangerouslyAllowBrowser: true,
       defaultHeaders: {
         'HTTP-Referer': window.location.origin,
-        'X-Title': 'IV-Assistenzbeitrag Vertragsextraktion',
+        'X-Title': 'Asklepios Extractor – Vertragsextraktion',
       },
     },
     modelName,
@@ -328,7 +338,12 @@ function extractFirstJsonObject(text: string): string | null {
 }
 
 /**
- * Run tool calls if the model requests them, then collect the final text response.
+ * Run tool calls if the model requests them, then return the TOOL-VALIDATED result.
+ *
+ * CRITICAL: The final extraction data comes from the contract_data_submission
+ * tool output — NOT from the LLM's final text response. The LLM text is only
+ * used for extraction_metadata (language, field counts, warnings).
+ * If the tool was not called or returned no data → Error (no fallback).
  */
 async function runAgentWithTools(
   model: ChatOpenAI,
@@ -337,11 +352,14 @@ async function runAgentWithTools(
   const toolCalls: string[] = [];
   const MAX_TOOL_ROUNDS = 3;
 
+  // Capture the tool-validated data from contract_data_submission
+  let toolValidatedData: RawExtractionResult['contracts'] | null = null;
+
   const modelWithTools = model.bindTools(agentTools);
 
   let response = await modelWithTools.invoke(
     messages,
-    await getLangSmithInvokeConfig('agent-1-extractor', { mode: 'text-with-tools' }),
+    await getLangSmithInvokeConfig('asklepios-extractor', { mode: 'text-with-tools' }),
   );
   const allMessages = [...messages, response];
   let round = 0;
@@ -355,33 +373,65 @@ async function runAgentWithTools(
         throw new Error(`Unknown tool: ${call.name}`);
       }
       const toolResult = await (selectedTool as any).invoke(call.args);
+      const toolResultString = typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult);
+
+      // Capture validated data from contract_data_submission tool
+      if (call.name === 'contract_data_submission') {
+        try {
+          const parsed = JSON.parse(toolResultString);
+          if (parsed.data && (parsed.status === 'success' || parsed.status === 'warning')) {
+            toolValidatedData = parsed.data;
+          }
+        } catch {
+          throw new Error(
+            'Asklepios Extractor: contract_data_submission Tool-Ergebnis konnte nicht geparst werden.',
+          );
+        }
+      }
+
       allMessages.push({
         role: 'tool',
-        content: typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult),
+        content: toolResultString,
         tool_call_id: call.id!,
       } as any);
     }
 
     response = await modelWithTools.invoke(
       allMessages,
-      await getLangSmithInvokeConfig('agent-1-extractor', { mode: `tool-round-${round}` }),
+      await getLangSmithInvokeConfig('asklepios-extractor', { mode: `tool-round-${round}` }),
     );
     allMessages.push(response);
   }
 
   if (round >= MAX_TOOL_ROUNDS && response.tool_calls && response.tool_calls.length > 0) {
-    console.warn(`[Agent 1] Tool-calling limit reached (${MAX_TOOL_ROUNDS} rounds). Forcing final response.`);
+    console.warn(`[Asklepios Extractor] Tool-calling limit reached (${MAX_TOOL_ROUNDS} rounds). Forcing final response.`);
     const forceModel = getModel(
       import.meta.env.VITE_OPENROUTER_API_KEY!,
       getExtractorModelName(),
     );
     response = await forceModel.invoke(
       allMessages,
-      await getLangSmithInvokeConfig('agent-1-extractor', { mode: 'forced-final' }),
+      await getLangSmithInvokeConfig('asklepios-extractor', { mode: 'forced-final' }),
     );
   }
 
-  return { raw: parseResponse(response.content as string), toolCalls };
+  // extraction_metadata comes from LLM (not part of tool output)
+  const llmParsed = parseResponse(response.content as string);
+
+  // MANDATORY: Use tool-validated data. No fallback to LLM text.
+  if (!toolValidatedData) {
+    throw new Error(
+      'Asklepios Extractor: contract_data_submission Tool wurde nicht aufgerufen oder lieferte keine Daten. Extraktion abgelehnt.',
+    );
+  }
+
+  return {
+    raw: {
+      extraction_metadata: llmParsed.extraction_metadata,
+      contracts: toolValidatedData as RawExtractionResult['contracts'],
+    },
+    toolCalls,
+  };
 }
 
 /**
@@ -445,17 +495,19 @@ export function confidenceToStatus(
   return confidenceScore >= 0.8 ? 'ok' : 'review_required';
 }
 
-/** Get human-readable message for review fields */
+/**
+ * Get human-readable message for review fields.
+ * Uses review_type to distinguish between:
+ *   - 'verify' (Prüfen): value exists but uncertain → human verifies
+ *   - 'supplement' (Ergänzen): value missing → human must add
+ */
 export function reviewMessage(field: ExtractionField): string | undefined {
   if (field.status === 'ok' && field.value !== null) return undefined;
-  if (field.status === 'review_required') {
-    if (field.value === null) {
-      const hasSource = typeof field.source_text === 'string' && field.source_text.trim().length > 0;
-      return hasSource
-        ? 'Im Vertrag vorhanden, aber nicht automatisch extrahierbar. Bitte manuell eintragen.'
-        : 'Nicht im Vertrag gefunden – bitte ergänzen.';
-    }
+  if (field.review_type === 'verify') {
     return 'Unsicherer Wert – bitte prüfen.';
+  }
+  if (field.review_type === 'supplement') {
+    return 'Nicht im Vertrag gefunden – bitte ergänzen.';
   }
   if (field.value === null) return 'Nicht im Vertrag gefunden';
   return undefined;
@@ -470,13 +522,24 @@ export function fieldSourceTooltip(field: ExtractionField): string | undefined {
 /**
  * Merge raw extraction with judge results into final ExtractionResult.
  */
+/**
+ * Merge Tool-validated extraction with Asklepios Control judge results.
+ *
+ * The raw extraction data comes from the contract_data_submission TOOL output
+ * (not the LLM text). Asklepios Control assigns confidence scores per field.
+ * This function merges both and determines review_type:
+ *   - 'verify': value exists but confidence < 0.8 → human verifies (Prüfen)
+ *   - 'supplement': value is null/empty → human must add (Ergänzen)
+ */
 export function mergeWithJudgeResult(
   raw: RawExtractionResult,
-  judgeResult: import('./judge').JudgeResult,
+  judgeResult: import('./asklepios-control').JudgeResult,
 ): ExtractionResult {
   const contracts: ExtractionResult['contracts'] = {} as any;
   let fieldsRequiringReview = 0;
   const reviewRequiredFields: string[] = [];
+  const reviewVerifyFields: string[] = [];
+  const reviewSupplementFields: string[] = [];
 
   for (const [sectionName, sectionFields] of Object.entries(raw.contracts)) {
     const judgeSection = judgeResult.fields?.[sectionName] || {};
@@ -491,21 +554,33 @@ export function mergeWithJudgeResult(
       const confidenceScore = judgeField?.confidence_score ?? 0.5;
       const status = confidenceScore >= 0.8 ? 'ok' : 'review_required';
 
-      if (status === 'review_required') {
-        fieldsRequiringReview++;
-        reviewRequiredFields.push(`${sectionName}.${fieldName}`);
-      }
-
       const safeRawField: RawExtractionField =
         rawField && typeof rawField === 'object'
           ? (rawField as RawExtractionField)
           : ({ value: null, source_text: '', note: '' } as RawExtractionField);
+
+      // Determine review_type: verify (Prüfen) vs. supplement (Ergänzen)
+      let reviewType: 'verify' | 'supplement' | undefined;
+      if (status === 'review_required') {
+        const fullPath = `${sectionName}.${fieldName}`;
+        fieldsRequiringReview++;
+        reviewRequiredFields.push(fullPath);
+
+        if (safeRawField.value !== null && safeRawField.value !== undefined && safeRawField.value !== '') {
+          reviewType = 'verify';  // Prüfen: Wert vorhanden aber unsicher
+          reviewVerifyFields.push(fullPath);
+        } else {
+          reviewType = 'supplement';  // Ergänzen: Wert fehlt
+          reviewSupplementFields.push(fullPath);
+        }
+      }
 
       mergedSection[fieldName] = {
         value: safeRawField.value,
         confidence: judgeField?.confidence ?? 'medium',
         confidence_score: confidenceScore,
         status,
+        review_type: reviewType,
         source_text: judgeField?.source_quote || safeRawField.source_text || '',
         note: safeRawField.note,
         judge_justification: judgeField?.justification,
@@ -525,6 +600,8 @@ export function mergeWithJudgeResult(
       fields_requiring_review: fieldsRequiringReview,
       warnings: raw.extraction_metadata.warnings,
       review_required_fields: reviewRequiredFields,
+      review_verify_fields: reviewVerifyFields,
+      review_supplement_fields: reviewSupplementFields,
     },
     contracts,
   };
