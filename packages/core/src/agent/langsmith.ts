@@ -1,14 +1,17 @@
 /**
- * LangSmith Integration – Browser-compatible tracing
- * 
- * Since the app runs in the browser, we can't use shell environment variables.
- * Instead, we configure the LangChainTracer programmatically and pass it
- * as a callback to all LLM invocations.
- * 
- * Configure via Vite env vars:
- *   VITE_LANGSMITH_API_KEY     – LangSmith API key (lsv2_pt_...)
- *   VITE_LANGSMITH_ENDPOINT    – API endpoint (https://eu.api.smith.langchain.com for EU)
+ * LangSmith Integration – Browser-compatible tracing via server-side proxy
+ *
+ * The API key never reaches the browser. Instead, a Vercel serverless function
+ * at /api/langsmith/... proxies requests to the LangSmith API and injects
+ * the key server-side.
+ *
+ * Configure via Vite env vars (safe to expose – no secrets):
+ *   VITE_LANGSMITH_PROXY       – "true" to enable proxy mode (recommended)
  *   VITE_LANGSMITH_PROJECT     – Project name (default: "asklepios-agent")
+ *
+ * Server-side env vars (set in Vercel dashboard / .env, never VITE_-prefixed):
+ *   LANGSMITH_API_KEY           – LangSmith API key
+ *   LANGSMITH_ENDPOINT          – API endpoint (default: https://eu.api.smith.langchain.com)
  */
 
 import { CallbackManager } from '@langchain/core/callbacks/manager';
@@ -95,15 +98,24 @@ async function getLangchainCallbacksForParentRun(
 }
 
 function getLangSmithConfig() {
-  const apiKey = import.meta.env.VITE_LANGSMITH_API_KEY;
-  const endpoint = import.meta.env.VITE_LANGSMITH_ENDPOINT || 'https://eu.api.smith.langchain.com';
+  const proxyEnabled = import.meta.env.VITE_LANGSMITH_PROXY === 'true';
+
+  const apiKey = proxyEnabled
+    ? 'proxy' // placeholder – the serverless function injects the real key
+    : import.meta.env.VITE_LANGSMITH_API_KEY;
+
+  const endpoint = proxyEnabled
+    ? '/api/langsmith'
+    : (import.meta.env.VITE_LANGSMITH_ENDPOINT || 'https://eu.api.smith.langchain.com');
+
   const project = import.meta.env.VITE_LANGSMITH_PROJECT || 'asklepios-agent';
 
   return { apiKey, endpoint, project };
 }
 
 export function isLangSmithEnabled(): boolean {
-  return !!import.meta.env.VITE_LANGSMITH_API_KEY;
+  return import.meta.env.VITE_LANGSMITH_PROXY === 'true'
+    || !!import.meta.env.VITE_LANGSMITH_API_KEY;
 }
 
 export function getLangSmithClient(): Client | null {
@@ -125,7 +137,7 @@ export function getLangSmithTracer(): LangChainTracer | null {
 
   const config = getLangSmithConfig();
   if (!config.apiKey) {
-    console.log('[LangSmith] Tracing disabled – no VITE_LANGSMITH_API_KEY set');
+    console.log('[LangSmith] Tracing disabled – set VITE_LANGSMITH_PROXY=true to enable');
     return null;
   }
 
@@ -137,7 +149,7 @@ export function getLangSmithTracer(): LangChainTracer | null {
     client,
   });
 
-  console.log(`[LangSmith] Tracing enabled → project "${config.project}" at ${config.endpoint}`);
+  console.log(`[LangSmith] Tracing enabled → project "${config.project}" via ${config.endpoint}`);
   return _tracer;
 }
 
