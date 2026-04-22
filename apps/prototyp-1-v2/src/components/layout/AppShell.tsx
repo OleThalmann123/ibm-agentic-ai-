@@ -9,7 +9,7 @@ import { AsklepiosLogo } from '@/components/brand/AsklepiosLogo';
 const navItems = [
   { to: '/assistants', label: 'Assistenzpersonen', icon: Users },
   { to: '/payroll', label: 'Lohnabrechnung', icon: Calculator },
-  { to: '/settings', label: 'Einstellungen', icon: Settings },
+  { to: '/settings', label: 'Einstellungen & Profil', icon: Settings },
 ];
 
 export function AppShell() {

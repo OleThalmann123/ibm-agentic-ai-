@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import {
   ArrowRight, ArrowLeft, HeartHandshake, User, CheckCircle2,
-  ClipboardList, ShieldCheck, UserX, MapPin, AlertCircle
+  ClipboardList, ShieldCheck, UserX, MapPin, AlertCircle, FileText
 } from 'lucide-react';
 import { getCantonFromPLZ, getCityFromChPlz, normalizeChPlz } from '@/utils/chPlz';
 
@@ -284,123 +284,145 @@ export function EmployerOnboarding({ onComplete }: Props) {
 
     // 1: Your data
     if (step === 1) return (
-      <div className="space-y-4">
-        <h3 className="text-xl font-bold flex items-center gap-2"><MapPin className="w-6 h-6 text-primary" />{role === 'affected' ? 'Ihre Angaben' : 'Ihre Kontaktdaten'}</h3>
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <Field label="Vorname" value={cFirst} onChange={setCFirst} />
-          </div>
-          <div>
-            <Field label="Nachname" value={cLast} onChange={setCLast} />
-          </div>
-        </div>
-        <Field label="Strasse & Nr." value={cStreet} onChange={setCStreet} />
-        <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-4 py-3 text-sm text-amber-900 flex items-start gap-2.5">
-          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0 text-amber-600" />
-          <span>Asklepios ist derzeit nur in den Kantonen <strong>Bern</strong>, <strong>Luzern</strong> und <strong>Zürich</strong> verfügbar. Bitte geben Sie eine Postleitzahl aus einem dieser Kantone ein.</span>
-        </div>
+      <div className="space-y-6">
+        <h3 className="text-xl font-bold flex items-center gap-2">
+          <MapPin className="w-6 h-6 text-primary" />
+          {role === 'affected' ? 'Ihre Angaben' : 'Ihre Kontaktdaten'}
+        </h3>
 
-        <div className="grid grid-cols-[120px_1fr] gap-4">
-          <div className="space-y-1">
-            <label className="text-sm font-medium text-muted-foreground">PLZ</label>
-            <div className="relative">
+        {/* ── Abschnitt 1: Persönliche Angaben ── */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <User className="w-4 h-4 text-muted-foreground" />
+            <h4 className="text-sm font-semibold text-foreground">Persönliche Angaben</h4>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Vorname *" value={cFirst} onChange={setCFirst} />
+            <Field label="Nachname *" value={cLast} onChange={setCLast} />
+          </div>
+          <Field label="Strasse & Nr." value={cStreet} onChange={setCStreet} />
+
+          <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-4 py-3 text-sm text-amber-900 flex items-start gap-2.5">
+            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0 text-amber-600" />
+            <span>Asklepios ist derzeit nur in den Kantonen <strong>Bern</strong>, <strong>Luzern</strong> und <strong>Zürich</strong> verfügbar. Bitte geben Sie eine Postleitzahl aus einem dieser Kantone ein.</span>
+          </div>
+
+          <div className="grid grid-cols-[120px_1fr] gap-4">
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-muted-foreground">PLZ *</label>
               <input type="text" value={cZip} onChange={e => handleZipChange(e.target.value)}
                 placeholder="z.B. 8000" maxLength={4}
                 className={`${inputCls} ${cZip.length === 4 && !isPlzInAllowedCanton(cZip) ? 'border-red-400 focus:ring-red-200 focus:border-red-400' : ''}`} />
+              {cZip.length === 4 && !isPlzInAllowedCanton(cZip) && (
+                <p className="text-xs text-red-600 mt-1">PLZ liegt nicht in BE, LU oder ZH.</p>
+              )}
             </div>
-            {cZip.length === 4 && !isPlzInAllowedCanton(cZip) && (
-              <p className="text-xs text-red-600 mt-1">PLZ liegt nicht in BE, LU oder ZH.</p>
-            )}
+            <Field
+              label="Ort *"
+              value={cCity}
+              onChange={(v) => { setCCity(v); setCCityAutofill(false); }}
+            />
           </div>
-          <Field
-            label="Ort"
-            value={cCity}
-            onChange={(v) => {
-              setCCity(v);
-              setCCityAutofill(false);
-            }}
-          />
-        </div>
-        {detectedCanton && isPlzInAllowedCanton(cZip) && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/5 border border-primary/10">
-            <MapPin className="w-4 h-4 text-primary" />
-            <span className="text-sm"><span className="font-semibold">{detectedCanton.code}</span> – {detectedCanton.name}</span>
-          </div>
-        )}
-        <div className="grid grid-cols-2 gap-4">
-          <Field label="E-Mail" value={user?.email ?? ''} disabled />
-          <div>
-            <Field label="Telefon (optional)" value={cPhone} onChange={setCPhone} placeholder="+41 ..." />
-            {!isValidPhone(cPhone) && (
-              <p className="text-xs text-red-600 mt-1">Ungültiges Telefonformat.</p>
-            )}
-          </div>
-        </div>
 
-        <div>
-          <Field label="AHV-Nummer (versicherte Person)" value={insuredAhvNumber} onChange={setInsuredAhvNumber} placeholder="756.xxxx.xxxx.xx" />
-          {!isValidAhvNumber(insuredAhvNumber) && (
-            <p className="text-xs text-red-600 mt-1">Format: 756.xxxx.xxxx.xx</p>
+          {detectedCanton && isPlzInAllowedCanton(cZip) && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/5 border border-primary/10">
+              <MapPin className="w-4 h-4 text-primary" />
+              <span className="text-sm"><span className="font-semibold">{detectedCanton.code}</span> – {detectedCanton.name}</span>
+            </div>
           )}
+
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="E-Mail" value={user?.email ?? ''} disabled />
+            <div>
+              <Field label="Telefon (optional)" value={cPhone} onChange={setCPhone} placeholder="+41 ..." />
+              {!isValidPhone(cPhone) && (
+                <p className="text-xs text-red-600 mt-1">Ungültiges Telefonformat.</p>
+              )}
+            </div>
+          </div>
         </div>
 
-        <div className="rounded-xl border bg-muted/20 p-4 space-y-3">
-          <p className="text-sm font-semibold">IV-Abrechnung (Ansatz & Auszahlung)</p>
-          <Field label="IV-Ansatz (CHF/Std)" value="35.30" disabled />
+        {/* ── Abschnitt 2: Fallbezogene Angaben (optional / später) ── */}
+        <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/60 p-5 space-y-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-slate-500 shrink-0" />
+              <h4 className="text-sm font-semibold text-slate-700">Fallbezogene Angaben</h4>
+            </div>
+            <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500 border border-slate-200 whitespace-nowrap">
+              Kann später ergänzt werden
+            </span>
+          </div>
+          <p className="text-xs text-slate-500 -mt-1">
+            Diese Angaben werden für die IV-Abrechnung benötigt und können auch nach der Einrichtung noch hinzugefügt werden.
+          </p>
+
           <div>
-            <Field label="IBAN (Auszahlung IV Rechnung für Assistenzbeitrag)" value={billingIban} onChange={setBillingIban} placeholder="CH.." />
-            {!isValidIban(billingIban) && (
-              <p className="text-xs text-red-600 mt-1">Ungültiges IBAN-Format. Erwartet: Ländercode + 2 Prüfziffern + 11–30 Zeichen.</p>
+            <Field label="AHV-Nummer (versicherte Person)" value={insuredAhvNumber} onChange={setInsuredAhvNumber} placeholder="756.xxxx.xxxx.xx" />
+            {!isValidAhvNumber(insuredAhvNumber) && (
+              <p className="text-xs text-red-600 mt-1">Format: 756.xxxx.xxxx.xx</p>
             )}
           </div>
-          <Field label="Mitteilungs-/Verfügungsnummer (optional)" value={billingReferenceNumber} onChange={setBillingReferenceNumber} placeholder="…" />
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg border bg-background/70 px-3 py-2">
-            <span className="text-sm font-medium">Kontoinhaber:in</span>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={accountHolderIsAffected}
-                onChange={(e) => setAccountHolderIsAffected(e.target.checked)}
-                className="h-4 w-4"
+
+          <div className="rounded-xl border border-slate-200 bg-white/80 p-4 space-y-3">
+            <p className="text-sm font-semibold text-slate-700">IV-Abrechnung (Ansatz & Auszahlung)</p>
+            <Field label="IV-Ansatz (CHF/Std)" value="35.30" disabled />
+            <div>
+              <Field label="IBAN (Auszahlung IV Rechnung für Assistenzbeitrag)" value={billingIban} onChange={setBillingIban} placeholder="CH.." />
+              {!isValidIban(billingIban) && (
+                <p className="text-xs text-red-600 mt-1">Ungültiges IBAN-Format. Erwartet: Ländercode + 2 Prüfziffern + 11–30 Zeichen.</p>
+              )}
+            </div>
+            <Field label="Mitteilungs-/Verfügungsnummer (optional)" value={billingReferenceNumber} onChange={setBillingReferenceNumber} placeholder="…" />
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg border bg-background/70 px-3 py-2">
+              <span className="text-sm font-medium">Kontoinhaber:in</span>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={accountHolderIsAffected}
+                  onChange={(e) => setAccountHolderIsAffected(e.target.checked)}
+                  className="h-4 w-4"
+                />
+                = betroffene Person
+              </label>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Field
+                label="Name Kontoinhaber:in"
+                value={accountHolderIsAffected ? `${cFirst} ${cLast}`.trim() : billingAccountHolderName}
+                onChange={setBillingAccountHolderName}
+                placeholder="Vorname Name"
+                disabled={accountHolderIsAffected}
               />
-              = betroffene Person
-            </label>
+              <Field
+                label="Adresse Kontoinhaber:in"
+                value={accountHolderIsAffected ? cStreet : billingAccountHolderStreet}
+                onChange={setBillingAccountHolderStreet}
+                placeholder="Strasse Nr."
+                disabled={accountHolderIsAffected}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <Field
+                label="PLZ"
+                value={accountHolderIsAffected ? cZip : billingAccountHolderPlz}
+                onChange={setBillingAccountHolderPlz}
+                placeholder="8000"
+                disabled={accountHolderIsAffected}
+              />
+              <Field
+                label="Ort"
+                value={accountHolderIsAffected ? cCity : billingAccountHolderCity}
+                onChange={setBillingAccountHolderCity}
+                placeholder="Zürich"
+                disabled={accountHolderIsAffected}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Diese Angaben werden für das IV-Deckblatt / die monatliche Rechnung verwendet.
+            </p>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <Field
-              label="Name Kontoinhaber:in"
-              value={accountHolderIsAffected ? `${cFirst} ${cLast}`.trim() : billingAccountHolderName}
-              onChange={setBillingAccountHolderName}
-              placeholder="Vorname Name"
-              disabled={accountHolderIsAffected}
-            />
-            <Field
-              label="Adresse Kontoinhaber:in"
-              value={accountHolderIsAffected ? cStreet : billingAccountHolderStreet}
-              onChange={setBillingAccountHolderStreet}
-              placeholder="Strasse Nr."
-              disabled={accountHolderIsAffected}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <Field
-              label="PLZ"
-              value={accountHolderIsAffected ? cZip : billingAccountHolderPlz}
-              onChange={setBillingAccountHolderPlz}
-              placeholder="8000"
-              disabled={accountHolderIsAffected}
-            />
-            <Field
-              label="Ort"
-              value={accountHolderIsAffected ? cCity : billingAccountHolderCity}
-              onChange={setBillingAccountHolderCity}
-              placeholder="Zürich"
-              disabled={accountHolderIsAffected}
-            />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Diese Angaben werden für das IV-Deckblatt / die monatliche Rechnung verwendet.
-          </p>
         </div>
       </div>
     );

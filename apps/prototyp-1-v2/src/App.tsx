@@ -4,6 +4,7 @@ import { AppShell } from '@/components/layout/AppShell';
 import { AsklepiosLogo } from '@/components/brand/AsklepiosLogo';
 import { LoginPage } from '@/components/auth/LoginPage';
 import { RegisterPage } from '@/components/auth/RegisterPage';
+import { ForgotPasswordPage } from '@/components/auth/ForgotPasswordPage';
 import { DashboardPage } from '@/components/dashboard/DashboardPage';
 import { AssistantsPage } from '@/components/assistants/AssistantsPage';
 import { SettingsPage } from '@/components/settings/SettingsPage';
@@ -55,6 +56,9 @@ export default function App() {
       } />
       <Route path="/register" element={
         user ? <Navigate to="/assistants" replace /> : <RegisterPage />
+      } />
+      <Route path="/forgot-password" element={
+        user ? <Navigate to="/assistants" replace /> : <ForgotPasswordPage />
       } />
       <Route path="/t/:token" element={<TokenLoginPage />} />
 
