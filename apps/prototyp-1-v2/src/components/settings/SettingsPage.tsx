@@ -17,6 +17,12 @@ export function SettingsPage() {
   const { user, employer, employerAccess, refreshProfile, signOut } = useAuth();
   const [activeTab, setActiveTab] = useState<'profil' | 'einstellungen'>('profil');
   const [insuredName, setInsuredName] = useState(employer?.name ?? '');
+  const splitName = (full: string) => {
+    const parts = full.trim().split(' ');
+    return { first: parts[0] ?? '', last: parts.slice(1).join(' ') };
+  };
+  const [insuredFirstName, setInsuredFirstName] = useState(() => splitName(employer?.name ?? '').first);
+  const [insuredLastName, setInsuredLastName] = useState(() => splitName(employer?.name ?? '').last);
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
 
@@ -124,6 +130,9 @@ export function SettingsPage() {
   useEffect(() => {
     if (employer) {
       setInsuredName(employer.name ?? '');
+      const { first, last } = splitName(employer.name ?? '');
+      setInsuredFirstName(first);
+      setInsuredLastName(last);
       setRepresentation(employer.representation ?? 'self');
       const c = (employer.contact_data as Record<string, string>) || {};
       setIssuerFirstName(c.first_name ?? '');
@@ -213,7 +222,7 @@ export function SettingsPage() {
     const nextInsuredName =
       representation === 'guardian'
         ? `${affectedFirstName} ${affectedLastName}`.trim() || insuredName
-        : insuredName;
+        : `${insuredFirstName} ${insuredLastName}`.trim() || insuredName;
 
     const { error } = await supabase
       .from('employer')
@@ -464,24 +473,7 @@ export function SettingsPage() {
       {activeTab === 'profil' && (
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
 
-        {/* Left Column: Konto */}
-        <div className="lg:col-span-5 space-y-6">
-          <SettingsCard
-            icon={Shield}
-            iconColor="text-blue-600"
-            iconBg="bg-blue-500/10"
-            title="Konto"
-            description="Ihre Anmeldedaten und Zugriffsrechte"
-          >
-            <ReadOnlyField label="E-Mail" value={user?.email ?? ''} />
-            <ReadOnlyField
-              label="Rolle"
-              value={employerAccess?.role === 'admin_full' ? 'Administrator (Vollzugriff)' : 'Administrator (Eingeschränkt)'}
-            />
-          </SettingsCard>
-        </div>
-
-        {/* Right Column: Profil-Daten */}
+        {/* Left Column: Betroffene Person & Rechnungssteller */}
         <div className="lg:col-span-7 space-y-6">
           {employer && (
             <SettingsCard
@@ -531,7 +523,10 @@ export function SettingsPage() {
                     </>
                   ) : (
                     <>
-                      <EditableField label="Name" value={insuredName} onChange={setInsuredName} placeholder="Vorname Nachname" />
+                      <div className="grid grid-cols-2 gap-3">
+                        <EditableField label="Vorname" value={insuredFirstName} onChange={setInsuredFirstName} placeholder="Vorname" />
+                        <EditableField label="Nachname" value={insuredLastName} onChange={setInsuredLastName} placeholder="Nachname" />
+                      </div>
                       <EditableField label="Strasse & Nr." value={insuredStreet} onChange={setInsuredStreet} placeholder="z.B. Bahnhofstrasse 12" />
                       <div className="grid grid-cols-[120px_1fr] gap-3">
                         <EditableField label="PLZ" value={insuredPlz} onChange={setInsuredPlz} placeholder="8000" />
@@ -715,6 +710,23 @@ export function SettingsPage() {
               </div>
             </SettingsCard>
           )}
+        </div>
+
+        {/* Right Column: Konto */}
+        <div className="lg:col-span-5 space-y-6">
+          <SettingsCard
+            icon={Shield}
+            iconColor="text-blue-600"
+            iconBg="bg-blue-500/10"
+            title="Konto"
+            description="Ihre Anmeldedaten und Zugriffsrechte"
+          >
+            <ReadOnlyField label="E-Mail" value={user?.email ?? ''} />
+            <ReadOnlyField
+              label="Rolle"
+              value={employerAccess?.role === 'admin_full' ? 'Administrator (Vollzugriff)' : 'Administrator (Eingeschränkt)'}
+            />
+          </SettingsCard>
         </div>
       </div>
       )}
