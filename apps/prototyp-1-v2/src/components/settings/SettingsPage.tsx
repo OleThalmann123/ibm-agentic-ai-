@@ -332,13 +332,27 @@ export function SettingsPage() {
     </div>
   );
 
-  const EditableField = ({ label, value, onChange, placeholder, type = 'text' }: {
-    label: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string;
+  const EditableField = ({ label, value, onChange, placeholder, type = 'text', tooltip }: {
+    label: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string; tooltip?: string;
   }) => (
     <div>
-      <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
-        {label}
-      </label>
+      <div className="flex items-center gap-1.5 mb-1.5">
+        <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          {label}
+        </label>
+        {tooltip && (
+          <div className="relative group">
+            <div className="w-3.5 h-3.5 rounded-full bg-muted-foreground/20 text-muted-foreground flex items-center justify-center cursor-help text-[9px] font-bold leading-none select-none">
+              i
+            </div>
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 bg-popover border text-popover-foreground text-xs rounded-lg px-3 py-2 shadow-lg
+              opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150 z-50 leading-relaxed">
+              {tooltip}
+              <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-popover" />
+            </div>
+          </div>
+        )}
+      </div>
       <input
         type={type}
         value={value}
@@ -512,29 +526,29 @@ export function SettingsPage() {
                   {representation === 'guardian' ? (
                     <>
                       <div className="grid grid-cols-2 gap-3">
-                        <EditableField label="Vorname" value={affectedFirstName} onChange={setAffectedFirstName} placeholder="Vorname" />
-                        <EditableField label="Nachname" value={affectedLastName} onChange={setAffectedLastName} placeholder="Nachname" />
+                        <EditableField label="Vorname" value={affectedFirstName} onChange={setAffectedFirstName} placeholder="Vorname" tooltip="Erscheint auf dem IV-Deckblatt und der monatlichen Rechnung als Name der versicherten Person." />
+                        <EditableField label="Nachname" value={affectedLastName} onChange={setAffectedLastName} placeholder="Nachname" tooltip="Erscheint auf dem IV-Deckblatt und der monatlichen Rechnung als Name der versicherten Person." />
                       </div>
-                      <EditableField label="Strasse & Nr." value={affectedStreet} onChange={setAffectedStreet} placeholder="z.B. Bahnhofstrasse 12" />
+                      <EditableField label="Strasse & Nr." value={affectedStreet} onChange={setAffectedStreet} placeholder="z.B. Bahnhofstrasse 12" tooltip="Wohnadresse der versicherten Person — Pflichtangabe auf dem IV-Deckblatt." />
                       <div className="grid grid-cols-[120px_1fr] gap-3">
-                        <EditableField label="PLZ" value={affectedPlz} onChange={setAffectedPlz} placeholder="8000" />
+                        <EditableField label="PLZ" value={affectedPlz} onChange={setAffectedPlz} placeholder="8000" tooltip="Bestimmt den Kanton und damit den kantonalen FAK-Satz für die Lohnberechnung." />
                         <EditableField label="Ort" value={affectedCity} onChange={setAffectedCity} placeholder="Zürich" />
                       </div>
                     </>
                   ) : (
                     <>
                       <div className="grid grid-cols-2 gap-3">
-                        <EditableField label="Vorname" value={insuredFirstName} onChange={setInsuredFirstName} placeholder="Vorname" />
-                        <EditableField label="Nachname" value={insuredLastName} onChange={setInsuredLastName} placeholder="Nachname" />
+                        <EditableField label="Vorname" value={insuredFirstName} onChange={setInsuredFirstName} placeholder="Vorname" tooltip="Erscheint auf dem IV-Deckblatt und der monatlichen Rechnung als Name der versicherten Person." />
+                        <EditableField label="Nachname" value={insuredLastName} onChange={setInsuredLastName} placeholder="Nachname" tooltip="Erscheint auf dem IV-Deckblatt und der monatlichen Rechnung als Name der versicherten Person." />
                       </div>
-                      <EditableField label="Strasse & Nr." value={insuredStreet} onChange={setInsuredStreet} placeholder="z.B. Bahnhofstrasse 12" />
+                      <EditableField label="Strasse & Nr." value={insuredStreet} onChange={setInsuredStreet} placeholder="z.B. Bahnhofstrasse 12" tooltip="Wohnadresse der versicherten Person — Pflichtangabe auf dem IV-Deckblatt." />
                       <div className="grid grid-cols-[120px_1fr] gap-3">
-                        <EditableField label="PLZ" value={insuredPlz} onChange={setInsuredPlz} placeholder="8000" />
+                        <EditableField label="PLZ" value={insuredPlz} onChange={setInsuredPlz} placeholder="8000" tooltip="Bestimmt den Kanton und damit den kantonalen FAK-Satz für die Lohnberechnung." />
                         <EditableField label="Ort" value={insuredCity} onChange={setInsuredCity} placeholder="Zürich" />
                       </div>
                     </>
                   )}
-                  <EditableField label="AHV-Nummer" value={insuredAhvNumber} onChange={setInsuredAhvNumber} placeholder="756.xxxx.xxxx.xx" />
+                  <EditableField label="AHV-Nummer" value={insuredAhvNumber} onChange={setInsuredAhvNumber} placeholder="756.xxxx.xxxx.xx" tooltip="Pflichtangabe auf der IV-Rechnung zur eindeutigen Identifikation bei der Ausgleichskasse. Format: 756.xxxx.xxxx.xx" />
                 </Section>
 
                 {/* Rechnungssteller / Kontaktperson */}
@@ -544,16 +558,16 @@ export function SettingsPage() {
                   icon={Mail}
                 >
                   <div className="grid grid-cols-2 gap-3">
-                    <EditableField label="Vorname" value={issuerFirstName} onChange={setIssuerFirstName} />
-                    <EditableField label="Nachname" value={issuerLastName} onChange={setIssuerLastName} />
+                    <EditableField label="Vorname" value={issuerFirstName} onChange={setIssuerFirstName} tooltip="Person, die bei Rückfragen der IV-Stelle kontaktiert wird und als Rechnungssteller auftritt." />
+                    <EditableField label="Nachname" value={issuerLastName} onChange={setIssuerLastName} tooltip="Person, die bei Rückfragen der IV-Stelle kontaktiert wird und als Rechnungssteller auftritt." />
                   </div>
-                  <EditableField label="Strasse & Nr." value={issuerStreet} onChange={setIssuerStreet} placeholder="z.B. Bahnhofstrasse 12" />
+                  <EditableField label="Strasse & Nr." value={issuerStreet} onChange={setIssuerStreet} placeholder="z.B. Bahnhofstrasse 12" tooltip="Adresse des Rechnungsstellers — erscheint im Absenderblock des IV-Deckblatts." />
                   <div className="grid grid-cols-[120px_1fr] gap-3">
-                    <EditableField label="PLZ" value={issuerPlz} onChange={setIssuerPlz} placeholder="8000" />
+                    <EditableField label="PLZ" value={issuerPlz} onChange={setIssuerPlz} placeholder="8000" tooltip="Adresse des Rechnungsstellers — erscheint im Absenderblock des IV-Deckblatts." />
                     <EditableField label="Ort" value={issuerCity} onChange={setIssuerCity} placeholder="Zürich" />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    <EditableField label="Telefon (für Rückfragen)" value={issuerPhone} onChange={setIssuerPhone} placeholder="+41 ..." />
+                    <EditableField label="Telefon (für Rückfragen)" value={issuerPhone} onChange={setIssuerPhone} placeholder="+41 ..." tooltip="Kontaktnummer für Rückfragen der IV-Stelle zur Abrechnung." />
                     <ReadOnlyField label="E-Mail" value={user?.email ?? ''} />
                   </div>
                 </Section>
@@ -566,8 +580,8 @@ export function SettingsPage() {
               >
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
                   <ReadOnlyField label="IV-Ansatz (CHF/Std)" value="35.30" />
-                  <EditableField label="IBAN (Auszahlung)" value={billingIban} onChange={setBillingIban} placeholder="CH.." />
-                  <EditableField label="Verfügungsnummer (optional)" value={billingReferenceNumber} onChange={setBillingReferenceNumber} placeholder="…" />
+                  <EditableField label="IBAN (Auszahlung)" value={billingIban} onChange={setBillingIban} placeholder="CH.." tooltip="Bankkonto, auf das die IV-Auszahlung überwiesen wird. Muss auf den Namen des Kontoinhabers lauten." />
+                  <EditableField label="Verfügungsnummer (optional)" value={billingReferenceNumber} onChange={setBillingReferenceNumber} placeholder="…" tooltip="Referenznummer aus der IV-Verfügung — ermöglicht der IV-Stelle die korrekte Zuordnung der Zahlung." />
                 </div>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                   <div className="lg:col-span-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-xl border bg-muted/20 px-3.5 py-2.5">
@@ -587,12 +601,14 @@ export function SettingsPage() {
                     value={accountHolderIsInsured ? insuredPersonForInvoice().name : billingAccountHolderName}
                     onChange={setBillingAccountHolderName}
                     placeholder="Vorname Name"
+                    tooltip="Muss mit dem beim Bankinstitut hinterlegten Namen übereinstimmen. Kann von der versicherten Person abweichen."
                   />
                   <EditableField
                     label="Adresse Kontoinhaber:in"
                     value={accountHolderIsInsured ? insuredPersonForInvoice().street : billingAccountHolderStreet}
                     onChange={setBillingAccountHolderStreet}
                     placeholder="Strasse Nr."
+                    tooltip="Wird auf der Banküberweisung und dem IV-Deckblatt als Zahlungsempfängeradresse verwendet."
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
@@ -672,7 +688,7 @@ export function SettingsPage() {
                     />
                   </div>
                   <div className="grid grid-cols-[120px_1fr] gap-3">
-                    <EditableField label="PLZ" value={ivInvoiceAuthorityPlz} onChange={setIvInvoiceAuthorityPlz} placeholder="8000" />
+                    <EditableField label="PLZ" value={ivInvoiceAuthorityPlz} onChange={setIvInvoiceAuthorityPlz} placeholder="8000" tooltip="Adresse der zuständigen IV-Stelle für den Versand des monatlichen Deckblatts." />
                     <EditableField label="Ort" value={ivInvoiceAuthorityCity} onChange={setIvInvoiceAuthorityCity} placeholder="Zürich" />
                   </div>
                 </div>
@@ -680,9 +696,9 @@ export function SettingsPage() {
                 <div className="mt-6 pt-4 border-t border-border/60 space-y-3">
                   <p className="text-sm font-medium text-foreground">Rückfragen (Fusszeile Rechnung)</p>
                   <p className="text-xs text-muted-foreground">Optional, falls abweichend vom Rechnungssteller.</p>
-                  <EditableField label="Name" value={ivInvoiceInquiriesName} onChange={setIvInvoiceInquiriesName} placeholder="Kontaktperson" />
-                  <EditableField label="E-Mail" value={ivInvoiceInquiriesEmail} onChange={setIvInvoiceInquiriesEmail} placeholder="mail@…" />
-                  <EditableField label="Telefon" value={ivInvoiceInquiriesPhone} onChange={setIvInvoiceInquiriesPhone} placeholder="+41 …" />
+                  <EditableField label="Name" value={ivInvoiceInquiriesName} onChange={setIvInvoiceInquiriesName} placeholder="Kontaktperson" tooltip="Ansprechperson bei der IV-Stelle für Rückfragen — erscheint als Fussnote auf dem Deckblatt." />
+                  <EditableField label="E-Mail" value={ivInvoiceInquiriesEmail} onChange={setIvInvoiceInquiriesEmail} placeholder="mail@…" tooltip="Ansprechperson bei der IV-Stelle für Rückfragen — erscheint als Fussnote auf dem Deckblatt." />
+                  <EditableField label="Telefon" value={ivInvoiceInquiriesPhone} onChange={setIvInvoiceInquiriesPhone} placeholder="+41 …" tooltip="Ansprechperson bei der IV-Stelle für Rückfragen — erscheint als Fussnote auf dem Deckblatt." />
                 </div>
               </Section>
 
