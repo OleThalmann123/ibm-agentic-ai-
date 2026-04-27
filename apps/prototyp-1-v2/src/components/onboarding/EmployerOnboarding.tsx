@@ -459,7 +459,7 @@ export function EmployerOnboarding({ onComplete }: Props) {
         <Radio
           active={tracker === 'employer'}
           onClick={() => { setTracker('employer'); setApprovalNeeded(''); setActivitiesInDayShifts(''); }}
-          label={role === 'affected' ? 'Ich selbst (Betroffene Person) – MVP 1: out of scope' : 'Ich selbst (Arbeitgeber)'}
+          label={role === 'affected' ? 'Ich selbst (Betroffene Person) – MVP 1: out of scope' : role === 'supporter' ? 'Ich selbst (Unterstützende Person)' : 'Ich selbst (Arbeitgeber)'}
           icon={User}
           disabled={role === 'affected'}
         />
