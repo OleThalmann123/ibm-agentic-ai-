@@ -181,7 +181,7 @@ export function SettingsPage() {
       };
     }
     return {
-      name: insuredName,
+      name: `${insuredFirstName} ${insuredLastName}`.trim() || insuredName,
       street: insuredStreet,
       plz: insuredPlz,
       city: insuredCity,
@@ -199,7 +199,8 @@ export function SettingsPage() {
   }, [
     accountHolderIsInsured,
     representation,
-    insuredName,
+    insuredFirstName,
+    insuredLastName,
     insuredStreet,
     insuredPlz,
     insuredCity,

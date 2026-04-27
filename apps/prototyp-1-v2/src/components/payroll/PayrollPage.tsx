@@ -16,6 +16,7 @@ import {
   getIvStelleInvoiceRecipientSuggestion,
 } from '@asklepios/core';
 import { PDFDocument } from 'pdf-lib';
+import { Link } from 'react-router-dom';
 import {
   Calculator, FileText, ChevronLeft, ChevronRight, Users,
   ShieldCheck, Clock, Eye, Download, Pencil, Save, X,
@@ -158,6 +159,8 @@ export function PayrollPage() {
   useEffect(() => {
     if (employerAccess?.employer_id) {
       loadData();
+    } else {
+      setLoading(false);
     }
   }, [employerAccess, currentMonth]);
 
@@ -192,90 +195,100 @@ export function PayrollPage() {
 
   const loadData = async () => {
     setLoading(true);
-    const eid = employerAccess!.employer_id;
+    try {
+      const eid = employerAccess!.employer_id;
 
-    const { data: aData } = await supabase
-      .from('assistant')
-      .select('*')
-      .eq('employer_id', eid)
-      .eq('is_active', true);
+      const { data: aData, error: aErr } = await supabase
+        .from('assistant')
+        .select('*')
+        .eq('employer_id', eid)
+        .eq('is_active', true);
 
-    if (aData) setAssistants(aData);
-
-    const parts = currentMonth.split('-').map(Number);
-    // Bug B4: Fallback auf "jetzt" statt hartkodiertes Jahr 2026.
-    const _now = new Date();
-    const year = Number.isFinite(parts[0]) ? (parts[0] as number) : _now.getFullYear();
-    const month = Number.isFinite(parts[1]) ? (parts[1] as number) : _now.getMonth() + 1;
-    const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-    const endDate = month === 12
-      ? `${year + 1}-01-01`
-      : `${year}-${String(month + 1).padStart(2, '0')}-01`;
-
-    const assistantIds = (aData || []).map(a => a.id);
-    const { data: entries } = assistantIds.length > 0
-      ? await supabase
-          .from('time_entry')
-          .select('*')
-          .gte('date', startDate)
-          .lt('date', endDate)
-          .in('assistant_id', assistantIds)
-      : { data: [] as any[] };
-
-    const grouped: Record<string, MonthlyHours> = {};
-    for (const a of (aData || [])) {
-      grouped[a.id] = { totalHours: 0, nightHours: 0, entryCount: 0, entries: [] };
-    }
-
-    for (const e of (entries || [])) {
-      if (!grouped[e.assistant_id]) continue;
-      const hours = parseHours(e.start_time || '00:00', e.end_time || '00:00');
-      const g = grouped[e.assistant_id];
-      if (!g) continue;
-      g.totalHours += hours;
-      if (e.is_night) g.nightHours += hours;
-      g.entryCount++;
-      g.entries.push({
-        id: e.id, date: e.date, start_time: e.start_time,
-        end_time: e.end_time, is_night: e.is_night,
-        category: e.category, hours,
-      });
-    }
-
-    setTimeEntries(grouped);
-
-    if (assistantIds.length > 0) {
-      const monthFirst = `${year}-${String(month).padStart(2, '0')}-01`;
-      const { data: confRows } = await supabase
-        .from('payroll_confirmation')
-        .select('assistant_id, month, confirmed')
-        .in('assistant_id', assistantIds)
-        .eq('month', monthFirst);
-      const nextConfirmed: Record<string, boolean> = {};
-      for (const row of confRows || []) {
-        if (!row.confirmed || !row.assistant_id) continue;
-        // Bug B3: statt blindem slice(0,7) die gespeicherte Monats-Info
-        // korrekt parsen. Supabase kann je nach Client Date oder String
-        // liefern – beide Pfade robust behandeln.
-        let mk: string | null = null;
-        if (typeof row.month === 'string' && /^\d{4}-\d{2}/.test(row.month)) {
-          mk = row.month.slice(0, 7);
-        } else if (row.month != null) {
-          const parsed = new Date(row.month as string | number | Date);
-          if (!Number.isNaN(parsed.getTime())) {
-            mk = `${parsed.getUTCFullYear()}-${String(parsed.getUTCMonth() + 1).padStart(2, '0')}`;
-          }
-        }
-        if (!mk) continue;
-        nextConfirmed[`${row.assistant_id}-${mk}`] = true;
-        void mirrorPayrollFreigabeToAssistant(row.assistant_id, monthFirst);
+      if (aErr) {
+        toast.error('Fehler beim Laden der Assistenzpersonen', { description: aErr.message });
+        return;
       }
-      setConfirmedMap(nextConfirmed);
-    } else {
-      setConfirmedMap({});
-    }
 
-    setLoading(false);
+      if (aData) setAssistants(aData);
+
+      const parts = currentMonth.split('-').map(Number);
+      // Bug B4: Fallback auf "jetzt" statt hartkodiertes Jahr 2026.
+      const _now = new Date();
+      const year = Number.isFinite(parts[0]) ? (parts[0] as number) : _now.getFullYear();
+      const month = Number.isFinite(parts[1]) ? (parts[1] as number) : _now.getMonth() + 1;
+      const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+      const endDate = month === 12
+        ? `${year + 1}-01-01`
+        : `${year}-${String(month + 1).padStart(2, '0')}-01`;
+
+      const assistantIds = (aData || []).map(a => a.id);
+      const { data: entries } = assistantIds.length > 0
+        ? await supabase
+            .from('time_entry')
+            .select('*')
+            .gte('date', startDate)
+            .lt('date', endDate)
+            .in('assistant_id', assistantIds)
+        : { data: [] as any[] };
+
+      const grouped: Record<string, MonthlyHours> = {};
+      for (const a of (aData || [])) {
+        grouped[a.id] = { totalHours: 0, nightHours: 0, entryCount: 0, entries: [] };
+      }
+
+      for (const e of (entries || [])) {
+        if (!grouped[e.assistant_id]) continue;
+        const hours = parseHours(e.start_time || '00:00', e.end_time || '00:00');
+        const g = grouped[e.assistant_id];
+        if (!g) continue;
+        g.totalHours += hours;
+        if (e.is_night) g.nightHours += hours;
+        g.entryCount++;
+        g.entries.push({
+          id: e.id, date: e.date, start_time: e.start_time,
+          end_time: e.end_time, is_night: e.is_night,
+          category: e.category, hours,
+        });
+      }
+
+      setTimeEntries(grouped);
+
+      if (assistantIds.length > 0) {
+        const monthFirst = `${year}-${String(month).padStart(2, '0')}-01`;
+        const { data: confRows } = await supabase
+          .from('payroll_confirmation')
+          .select('assistant_id, month, confirmed')
+          .in('assistant_id', assistantIds)
+          .eq('month', monthFirst);
+        const nextConfirmed: Record<string, boolean> = {};
+        for (const row of confRows || []) {
+          if (!row.confirmed || !row.assistant_id) continue;
+          // Bug B3: statt blindem slice(0,7) die gespeicherte Monats-Info
+          // korrekt parsen. Supabase kann je nach Client Date oder String
+          // liefern – beide Pfade robust behandeln.
+          let mk: string | null = null;
+          if (typeof row.month === 'string' && /^\d{4}-\d{2}/.test(row.month)) {
+            mk = row.month.slice(0, 7);
+          } else if (row.month != null) {
+            const parsed = new Date(row.month as string | number | Date);
+            if (!Number.isNaN(parsed.getTime())) {
+              mk = `${parsed.getUTCFullYear()}-${String(parsed.getUTCMonth() + 1).padStart(2, '0')}`;
+            }
+          }
+          if (!mk) continue;
+          nextConfirmed[`${row.assistant_id}-${mk}`] = true;
+          void mirrorPayrollFreigabeToAssistant(row.assistant_id, monthFirst);
+        }
+        setConfirmedMap(nextConfirmed);
+      } else {
+        setConfirmedMap({});
+      }
+    } catch (e) {
+      console.error('[PayrollPage] loadData', e);
+      toast.error('Unerwarteter Fehler beim Laden der Daten');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const shiftMonth = (dir: number) => {
@@ -688,7 +701,7 @@ export function PayrollPage() {
       }
 
       const bytes = await merged.save();
-      const blob = new Blob([bytes], { type: 'application/pdf' });
+      const blob = new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       const aEl = document.createElement('a');
       aEl.href = url;
@@ -793,7 +806,7 @@ export function PayrollPage() {
       }
 
       const bytes = await merged.save();
-      const blob = new Blob([bytes], { type: 'application/pdf' });
+      const blob = new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       const aEl = document.createElement('a');
       aEl.href = url;
@@ -875,35 +888,6 @@ export function PayrollPage() {
     toast.success('Lohnabrechnung PDF heruntergeladen');
   };
 
-  const downloadEinsatzrapportPdf = async (assistant: Assistant, hours: MonthlyHours, includeActivities: boolean) => {
-    const cd = (assistant.contract_data as any) || {};
-    // persist preference for assistant time entry UI
-    await supabase
-      .from('assistant')
-      .update({ contract_data: { ...cd, time_entry_requires_activity_breakdown: includeActivities } })
-      .eq('id', assistant.id);
-
-    const doc = generateTimesheetPdf({
-      title: 'Arbeits- und Einsatzrapport',
-      month: monthLabel(currentMonth),
-      employer: getEmployerAddress(),
-      employee: getEmployeeAddress(assistant),
-      entries: hours.entries.map((e) => ({
-        date: e.date,
-        start_time: (e.start_time || '').slice(0, 5),
-        end_time: (e.end_time || '').slice(0, 5),
-        hours: Number((e.hours || 0).toFixed(2)),
-        is_night: Boolean(e.is_night),
-        category: e.category || '',
-      })),
-      totalHours: Number(hours.totalHours.toFixed(2)),
-      nightHours: Number(hours.nightHours.toFixed(2)),
-      includeActivities,
-    });
-    doc.save(buildPersonPdfName(currentMonth, includeActivities ? 'Arbeits-_und_Einsatzrapport_mit_Taetigkeiten' : 'Arbeits-_und_Einsatzrapport', assistant.name));
-    toast.success('Arbeits- und Einsatzrapport PDF heruntergeladen');
-  };
-
   // Stats
   const totalHoursAll = Object.values(timeEntries).reduce((s, h) => s + h.totalHours, 0);
   const confirmedCount = assistants.filter(a => confirmedMap[`${a.id}-${currentMonth}`]).length;
@@ -920,10 +904,6 @@ export function PayrollPage() {
     }
     return results;
   }, [assistants, timeEntries, currentMonth, employer]);
-
-  const totalNettoAll = assistants.reduce((s, a) => {
-    return s + (payrollResults[a.id]?.nettolohn.perYear || 0);
-  }, 0);
 
   const assistantsWithHoursList = assistants.filter(
     (a) => (timeEntries[a.id]?.totalHours || 0) > 0,
@@ -1078,9 +1058,9 @@ export function PayrollPage() {
                       Sobald alle Lohnabrechnungen bestätigt sind oder Personen ohne Stunden als «Keine Arbeit» markiert wurden,
                       können Sie hier das komplette Paket für die IV erzeugen: Deckblatt plus alle relevanten PDFs.{' '}
                       Stellen Sie sicher, dass alle Angaben unter{' '}
-                      <a href="/settings" className="font-medium text-primary underline underline-offset-2 hover:text-primary/80">
+                      <Link to="/settings" className="font-medium text-primary underline underline-offset-2 hover:text-primary/80">
                         Einstellungen &amp; Profil
-                      </a>{' '}
+                      </Link>{' '}
                       vollständig ausgefüllt sind.
                     </p>
                     <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -1569,7 +1549,6 @@ export function PayrollPage() {
                                 const kantonName = FAK_RATES[kanton]?.name || kanton;
                                 const stundenlohn = a.hourly_rate || 0;
                                 const ferienzuschlagRate = getFerienzuschlagRate(a.vacation_weeks) ?? 0.0833;
-                                const ferienzuschlagLabel = getFerienzuschlagLabel(a.vacation_weeks ?? 4);
 
                                 const bm = String(cd?.billing_method || 'ordinary').toLowerCase();
                                 const accountingMethod: PayslipAccountingMethod =
@@ -1909,41 +1888,6 @@ function PayrollFlowStepChrome({
   );
 }
 
-function FlowTab({ active, onClick, icon, label }: {
-  active: boolean; onClick: () => void; icon: React.ReactNode; label: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 6,
-        padding: '7px 14px', borderRadius: 8,
-        border: 'none', cursor: 'pointer',
-        fontSize: 12, fontWeight: active ? 600 : 500,
-        background: active ? '#fff' : 'transparent',
-        color: active ? '#1e293b' : '#94a3b8',
-        boxShadow: active ? '0 1px 4px rgba(0,0,0,0.06)' : 'none',
-        transition: 'all 0.2s',
-      }}
-    >
-      {icon} {label}
-    </button>
-  );
-}
-
-function SummaryBox({ label, value, sublabel, color, bg }: {
-  label: string; value: string; sublabel: string; color: string; bg: string;
-}) {
-  return (
-    <div style={{
-      background: bg, borderRadius: 12, padding: '14px 16px',
-    }}>
-      <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color, margin: '0 0 4px', opacity: 0.7 }}>{label}</p>
-      <p style={{ fontSize: 18, fontWeight: 800, color, margin: 0, fontVariantNumeric: 'tabular-nums' }}>{value}</p>
-      <p style={{ fontSize: 11, color, margin: '2px 0 0', opacity: 0.6 }}>{sublabel}</p>
-    </div>
-  );
-}
 
 function ActionButton({ onClick, icon, label, variant, disabled }: {
   onClick: () => void; icon: React.ReactNode; label: string;

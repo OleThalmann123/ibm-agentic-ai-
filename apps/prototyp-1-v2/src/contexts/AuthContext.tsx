@@ -12,8 +12,11 @@ const ACTIVE_EMPLOYER_ACCESS_KEY = 'asklepios_active_employer_access_id';
 
 const DEV_EMAIL = 'dev@asklepios.local';
 const DEV_PASSWORD = 'dev1234';
+const DEV_USER_ID     = '00000000-0000-0000-0000-000000000001';
+const DEV_EMPLOYER_ID = '00000000-0000-0000-0000-000000000002';
+const DEV_ACCESS_ID   = '00000000-0000-0000-0000-000000000003';
 const DEV_USER = {
-  id: 'dev-user-local',
+  id: DEV_USER_ID,
   email: DEV_EMAIL,
   app_metadata: {},
   user_metadata: { full_name: 'Dev User' },
@@ -21,10 +24,17 @@ const DEV_USER = {
   created_at: new Date().toISOString(),
 } as unknown as import('@supabase/supabase-js').User;
 const DEV_EMPLOYER: import('@asklepios/core').Employer = {
-  id: 'dev-employer-local',
+  id: DEV_EMPLOYER_ID,
   name: 'Dev Arbeitgeber',
   canton: 'ZH',
 } as unknown as import('@asklepios/core').Employer;
+const DEV_EMPLOYER_ACCESS: import('@asklepios/core').EmployerAccess = {
+  id: DEV_ACCESS_ID,
+  employer_id: DEV_EMPLOYER_ID,
+  user_id: DEV_USER_ID,
+  role: 'admin_full',
+  invited_email: DEV_EMAIL,
+} as unknown as import('@asklepios/core').EmployerAccess;
 
 interface AuthContextType {
   session: Session | null;
@@ -153,6 +163,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (email === DEV_EMAIL && password === DEV_PASSWORD) {
       setUser(DEV_USER);
       setEmployer(DEV_EMPLOYER);
+      setEmployerAccess(DEV_EMPLOYER_ACCESS);
+      setEmployerAccessList([{ ...DEV_EMPLOYER_ACCESS, employer: { id: DEV_EMPLOYER.id, name: DEV_EMPLOYER.name } }]);
       setLoading(false);
       return { error: null };
     }

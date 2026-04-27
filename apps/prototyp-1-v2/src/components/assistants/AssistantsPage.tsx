@@ -206,7 +206,7 @@ export function AssistantsPage() {
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-1">
                       <button
-                        onClick={(e) => handleWhatsAppShare(a.id, e)}
+                        onClick={(e) => handleWhatsAppShare(a.access_token ?? a.id, e)}
                         title="Per WhatsApp teilen"
                         className="p-2 rounded-lg bg-[#25D366] hover:bg-[#128C7E] transition-colors flex items-center gap-1.5 text-white text-xs font-bold"
                       >
@@ -214,12 +214,12 @@ export function AssistantsPage() {
                         <span className="hidden sm:inline">WhatsApp</span>
                       </button>
                       <button
-                        onClick={(e) => handleCopyLink(a.id, e)}
+                        onClick={(e) => handleCopyLink(a.access_token ?? a.id, e)}
                         title="Login-Link kopieren"
                         className="p-2 rounded-lg bg-muted hover:bg-muted/80 border text-xs font-medium transition-colors flex items-center gap-1.5"
                       >
-                        {copiedLinkFor === a.id ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-muted-foreground" />}
-                        <span className="hidden sm:inline">{copiedLinkFor === a.id ? 'Kopiert!' : 'Link'}</span>
+                        {copiedLinkFor === (a.access_token ?? a.id) ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-muted-foreground" />}
+                        <span className="hidden sm:inline">{copiedLinkFor === (a.access_token ?? a.id) ? 'Kopiert!' : 'Link'}</span>
                       </button>
                       <button onClick={() => openEdit(a)} className="p-2 rounded-lg hover:bg-muted transition-colors" title="Bearbeiten">
                         <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
