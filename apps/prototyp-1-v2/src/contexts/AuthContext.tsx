@@ -10,6 +10,22 @@ export type EmployerAccessRow = EmployerAccess & {
 
 const ACTIVE_EMPLOYER_ACCESS_KEY = 'asklepios_active_employer_access_id';
 
+const DEV_EMAIL = 'dev@asklepios.local';
+const DEV_PASSWORD = 'dev1234';
+const DEV_USER = {
+  id: 'dev-user-local',
+  email: DEV_EMAIL,
+  app_metadata: {},
+  user_metadata: { full_name: 'Dev User' },
+  aud: 'authenticated',
+  created_at: new Date().toISOString(),
+} as unknown as import('@supabase/supabase-js').User;
+const DEV_EMPLOYER: import('@asklepios/core').Employer = {
+  id: 'dev-employer-local',
+  name: 'Dev Arbeitgeber',
+  canton: 'ZH',
+} as unknown as import('@asklepios/core').Employer;
+
 interface AuthContextType {
   session: Session | null;
   user: User | null;
@@ -134,6 +150,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
+    if (email === DEV_EMAIL && password === DEV_PASSWORD) {
+      setUser(DEV_USER);
+      setEmployer(DEV_EMPLOYER);
+      setLoading(false);
+      return { error: null };
+    }
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     return { error: error as Error | null };
   };
@@ -148,6 +170,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
+    if (user?.id === DEV_USER.id) {
+      setUser(null);
+      setSession(null);
+      setEmployer(null);
+      setEmployerAccess(null);
+      setEmployerAccessList([]);
+      return;
+    }
     await supabase.auth.signOut();
     setEmployer(null);
     setEmployerAccess(null);
