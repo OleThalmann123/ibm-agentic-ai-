@@ -268,16 +268,13 @@ export function EmployerOnboarding({ onComplete }: Props) {
             <p className="text-base font-semibold">Betroffene Person</p>
             <p className="text-sm text-muted-foreground">Ich selbst</p>
           </button>
-          {/* Unterstützende Person – out of scope */}
-          <div className="relative p-6 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50/60 text-center opacity-60 cursor-not-allowed select-none">
-            <span className="absolute top-2 right-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-gray-200 text-gray-500">
-              Bald verfügbar
-            </span>
-            <HeartHandshake className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-            <p className="text-base font-semibold text-gray-400">Unterstützende Person</p>
-            <p className="text-sm text-gray-400">Für jemand anderen</p>
-            <p className="text-[10px] text-gray-400 mt-2">Noch nicht verfügbar</p>
-          </div>
+          {/* Unterstützende Person */}
+          <button type="button" onClick={() => { setRole('supporter'); next(); }}
+            className="p-6 rounded-xl border-2 border-transparent bg-muted/40 hover:border-primary/20 transition-all text-center">
+            <HeartHandshake className="w-8 h-8 text-primary mx-auto mb-2" />
+            <p className="text-base font-semibold">Unterstützende Person</p>
+            <p className="text-sm text-muted-foreground">Für jemand anderen</p>
+          </button>
         </div>
       </div>
     );
