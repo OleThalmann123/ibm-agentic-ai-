@@ -1076,7 +1076,12 @@ export function PayrollPage() {
                     </div>
                     <p className="max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-[0.9375rem]">
                       Sobald alle Lohnabrechnungen bestätigt sind oder Personen ohne Stunden als «Keine Arbeit» markiert wurden,
-                      können Sie hier das komplette Paket für die IV erzeugen: Deckblatt plus alle relevanten PDFs.
+                      können Sie hier das komplette Paket für die IV erzeugen: Deckblatt plus alle relevanten PDFs.{' '}
+                      Stellen Sie sicher, dass alle Angaben unter{' '}
+                      <a href="/settings" className="font-medium text-primary underline underline-offset-2 hover:text-primary/80">
+                        Einstellungen &amp; Profil
+                      </a>{' '}
+                      vollständig ausgefüllt sind.
                     </p>
                     <div className="flex flex-wrap items-center gap-2 pt-1">
                       <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Status</span>
