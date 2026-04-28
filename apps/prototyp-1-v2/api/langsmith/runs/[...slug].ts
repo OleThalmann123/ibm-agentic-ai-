@@ -1,6 +1,6 @@
 /** Spiegel von ../../../../../api/langsmith/runs/[...slug].ts */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { proxyToLangSmith } from '../../_langsmithProxyShared';
+import { proxyToLangSmith } from '../../_langsmithProxyShared.js';
 
 function slugList(req: VercelRequest): string[] {
   const s = req.query.slug;

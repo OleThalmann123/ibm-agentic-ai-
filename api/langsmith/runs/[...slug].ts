@@ -5,7 +5,7 @@
  * Spiegel: apps/prototyp-1-v2/api/langsmith/runs/[...slug].ts
  */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { proxyToLangSmith } from '../../_langsmithProxyShared';
+import { proxyToLangSmith } from '../../_langsmithProxyShared.js';
 
 function slugList(req: VercelRequest): string[] {
   const s = req.query.slug;

@@ -1,6 +1,6 @@
 /** Spiegel von ../../../../api/langsmith/[...path].ts — synchron halten. */
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { proxyToLangSmith } from '../_langsmithProxyShared';
+import { proxyToLangSmith } from '../_langsmithProxyShared.js';
 
 function pathList(req: VercelRequest): string[] {
   const s = req.query.path;
