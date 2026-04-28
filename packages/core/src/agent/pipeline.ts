@@ -274,6 +274,13 @@ export async function runDocumentPipeline(
   text?: string | null,
 ): Promise<PipelineResult> {
   const client = isLangSmithEnabled() ? getLangSmithClient() : null;
+  console.info('[LangSmith][diag]', {
+    enabled: isLangSmithEnabled(),
+    hasClient: !!client,
+    project: getLangSmithProjectName(),
+    proxyUrl:
+      typeof window !== 'undefined' ? `${window.location.origin}/api/langsmith` : null,
+  });
   if (import.meta.env.DEV && !client) {
     console.warn(
       '[LangSmith] Aus — keine Runs. Wie Doku: LANGSMITH_TRACING=true, LANGSMITH_API_KEY, LANGSMITH_PROJECT in ibm-agentic-ai-/.env; optional VITE_LANGSMITH_PROXY=true für expliziten Proxy. Dev-Server neu starten. npm run preview ohne Proxy; Production: gleiche Variablen auf Vercel + /api/langsmith + Redeploy nach Env-Änderungen.',
