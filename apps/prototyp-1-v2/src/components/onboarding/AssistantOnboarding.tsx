@@ -16,7 +16,7 @@ import { AsklepiosExtractLogo } from '@/components/brand/AsklepiosExtractLogo';
 import { UploadCloud, CheckCircle2, FileText, AlertCircle, HelpCircle, User, ArrowLeft, Loader2, Share2, Copy, Check, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { ExtractingScreen } from './ExtractingScreen';
-import { runDocumentPipeline } from '@asklepios/core';
+import { runDocumentPipeline, readFileAsArrayBuffer } from '@asklepios/core';
 import { ContractExtractionResult, IDPField, ConfidenceLevel, BinaryStatus } from '@asklepios/core';
 import type { PipelineTrace } from '@asklepios/core';
 
@@ -942,7 +942,7 @@ export function AssistantOnboarding({ onComplete, onClose, initialUploadFile, ed
       if (isDocx) {
         try {
           const mammoth = await import('mammoth');
-          const arrayBuffer = await file.arrayBuffer();
+          const arrayBuffer = await readFileAsArrayBuffer(file);
           const result = await mammoth.convertToHtml({ arrayBuffer });
           setDocxHtml(result.value);
         } catch (e) {
