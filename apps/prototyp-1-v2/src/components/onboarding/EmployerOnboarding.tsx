@@ -189,11 +189,20 @@ export function EmployerOnboarding({ onComplete }: Props) {
 
     const isSupporter = role === 'supporter';
     const name = isSupporter ? `${aFirst} ${aLast}`.trim() : `${cFirst} ${cLast}`.trim();
-    const timeEntryRequiresActivityBreakdown = tracker === 'assistant' ? activitiesInDayShifts === 'yes' : false;
 
-    const { data: emp, error: e1 } = await supabase
+    // Generate the employer ID client-side so we can reference it in employer_access
+    // without needing .select().single() after the INSERT. The SELECT policy on employer
+    // requires an employer_access row to exist, which creates a chicken-and-egg problem
+    // if we rely on the chained select to get the ID back.
+    const employerId = crypto.randomUUID();
+
+    console.log('[onboarding] auth user:', { id: user.id, email: user.email });
+    console.log('[onboarding] employer insert payload:', { id: employerId, name, canton: detectedCanton?.code || 'ZH' });
+
+    const { error: e1 } = await supabase
       .from('employer')
       .insert({
+        id: employerId,
         name,
         canton: detectedCanton?.code || 'ZH',
         representation: isSupporter ? 'guardian' : 'self',
@@ -237,14 +246,14 @@ export function EmployerOnboarding({ onComplete }: Props) {
             affected_city: aCity,
           } : {})
         }
-      })
-      .select().single();
+      });
 
     if (e1) { toast.error('Fehler: ' + e1.message); setLoading(false); return; }
 
+    console.log('[onboarding] employer_access insert payload:', { employer_id: employerId, user_id: user.id });
     const { error: e2 } = await supabase
       .from('employer_access')
-      .insert({ employer_id: emp.id, user_id: user.id, role: 'admin_full', invited_email: user.email || '' });
+      .insert({ employer_id: employerId, user_id: user.id, role: 'admin_full', invited_email: user.email || '' });
 
     if (e2) { toast.error('Fehler: ' + e2.message); setLoading(false); return; }
 
@@ -459,16 +468,9 @@ export function EmployerOnboarding({ onComplete }: Props) {
         <Radio
           active={tracker === 'employer'}
           onClick={() => { setTracker('employer'); setApprovalNeeded(''); setActivitiesInDayShifts(''); }}
-          label={role === 'affected' ? 'Ich selbst (Betroffene Person) – MVP 1: out of scope' : role === 'supporter' ? 'Ich selbst (Unterstützende Person)' : 'Ich selbst (Arbeitgeber)'}
+          label={role === 'affected' ? 'Ich selbst (Betroffene Person)' : role === 'supporter' ? 'Ich selbst (Unterstützende Person)' : 'Ich selbst (Arbeitgeber)'}
           icon={User}
-          disabled={role === 'affected'}
         />
-        {role === 'affected' && (
-          <p className="text-sm text-muted-foreground -mt-2">
-            In <span className="font-medium">MVP 1</span> wird die Zeiterfassung durch die betroffene Person selbst noch nicht unterstützt.
-            Bitte wählen Sie dafür „Die Assistenzperson“.
-          </p>
-        )}
         <Radio active={tracker === 'assistant'} onClick={() => setTracker('assistant')} label="Die Assistenzperson" icon={UserX} />
 
         {tracker === 'assistant' && (

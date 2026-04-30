@@ -323,11 +323,11 @@ export function SettingsPage() {
   );
 
   const ReadOnlyField = ({ label, value }: { label: string; value: string }) => (
-    <div>
+    <div className="flex flex-col">
       <label className="block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
         {label}
       </label>
-      <div className="px-3.5 py-2.5 rounded-xl border bg-muted/40 text-sm text-muted-foreground font-medium">
+      <div className="flex-1 flex items-center px-3.5 py-2.5 rounded-xl border bg-muted/40 text-sm text-muted-foreground font-medium">
         {value || '–'}
       </div>
     </div>
