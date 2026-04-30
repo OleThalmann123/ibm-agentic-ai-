@@ -15,6 +15,58 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   import.meta.url,
 ).toString();
 
+/**
+ * Read a File as ArrayBuffer with robust fallback.
+ *
+ * The browser File API can throw `DOMException: NotReadableError` ("The requested
+ * file could not be read, typically due to permission problems that have occurred
+ * after a reference to a file was acquired") when the OS cannot read the underlying
+ * file. Common causes: iCloud / OneDrive / Dropbox placeholders that were not yet
+ * downloaded locally, files moved or deleted between picking and reading, or
+ * sandbox permission changes.
+ *
+ * We try `Blob.arrayBuffer()` first, fall back to FileReader (which sometimes
+ * succeeds where the streaming API fails), and rethrow a German-language error
+ * with actionable guidance if both fail.
+ */
+export async function readFileAsArrayBuffer(file: File): Promise<ArrayBuffer> {
+  const friendlyMessage = `Die Datei „${file.name}“ konnte nicht gelesen werden. Mögliche Ursachen: Die Datei liegt in iCloud/OneDrive/Dropbox und ist nicht lokal verfügbar, sie wurde nach der Auswahl verschoben oder gelöscht, oder der Browser hat keinen Zugriff mehr. Bitte stellen Sie sicher, dass die Datei lokal verfügbar ist (ggf. herunterladen) und wählen Sie sie erneut aus.`;
+
+  const isNotReadableError = (err: unknown): boolean => {
+    if (err instanceof DOMException) {
+      return (
+        err.name === 'NotReadableError' ||
+        err.name === 'NotFoundError' ||
+        err.name === 'SecurityError'
+      );
+    }
+    const msg = err instanceof Error ? err.message : String(err ?? '');
+    return /could not be read|permission problems|not.{0,5}readable|notreadable/i.test(msg);
+  };
+
+  try {
+    return await file.arrayBuffer();
+  } catch (primaryErr) {
+    if (!isNotReadableError(primaryErr)) {
+      throw primaryErr;
+    }
+    try {
+      return await new Promise<ArrayBuffer>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result;
+          if (result instanceof ArrayBuffer) resolve(result);
+          else reject(new Error(friendlyMessage));
+        };
+        reader.onerror = () => reject(reader.error ?? new Error(friendlyMessage));
+        reader.readAsArrayBuffer(file);
+      });
+    } catch {
+      throw new Error(friendlyMessage);
+    }
+  }
+}
+
 export interface PdfExtractionResult {
   text: string;
   pageCount: number;
@@ -29,7 +81,7 @@ export interface PdfExtractionResult {
  * causes the LLM to confuse employer/employee data. Vision preserves the layout.
  */
 export async function extractPdfContent(file: File): Promise<PdfExtractionResult> {
-  const arrayBuffer = await file.arrayBuffer();
+  const arrayBuffer = await readFileAsArrayBuffer(file);
   const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
   const pageCount = pdf.numPages;
@@ -135,7 +187,7 @@ export async function readFileContent(file: File): Promise<{ text: string; image
     type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
     name.endsWith('.docx')
   ) {
-    const arrayBuffer = await file.arrayBuffer();
+    const arrayBuffer = await readFileAsArrayBuffer(file);
     const { value } = await mammoth.extractRawText({ arrayBuffer });
     const text = (value ?? '').trim();
     if (!text) throw new Error('DOCX-Datei enthält keinen Text.');
@@ -157,7 +209,12 @@ function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(new Error('Datei konnte nicht gelesen werden'));
+    reader.onerror = () =>
+      reject(
+        new Error(
+          `Die Datei „${file.name}“ konnte nicht gelesen werden. Mögliche Ursachen: Die Datei liegt in iCloud/OneDrive/Dropbox und ist nicht lokal verfügbar, sie wurde nach der Auswahl verschoben oder gelöscht, oder der Browser hat keinen Zugriff mehr. Bitte stellen Sie sicher, dass die Datei lokal verfügbar ist (ggf. herunterladen) und wählen Sie sie erneut aus.`,
+        ),
+      );
     reader.readAsDataURL(file);
   });
 }
